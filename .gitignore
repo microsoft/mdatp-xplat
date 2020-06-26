@@ -1,0 +1,5 @@
+# Editor backup files
+**/*~
+
+# Python precompiled files
+**/*.pyc
