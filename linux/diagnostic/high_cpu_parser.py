@@ -8,7 +8,7 @@ parser.add_argument("--top", type=int, help="Limits the number of results")
 
 args = parser.parse_args()
 group = args.group
-top = args.top or sys.maxint
+top = args.top or sys.maxsize
 
 vals = json.load(sys.stdin)["counters"]
 
@@ -30,5 +30,5 @@ if group:
 else:
     lines = sorted(vals, key=lambda k: int(k['total_files_scanned']), reverse=True)
     for v in lines[:top]:
-        if v["total_files_scanned"] <> "0":
+        if int(v["total_files_scanned"]) != 0:
             print("%s\t%s\t%s" % (v["id"], v["name"], v["total_files_scanned"]))
