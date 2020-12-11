@@ -159,12 +159,12 @@ def get_payloads(payload_type, content):
                 yield PayloadSysExt(payload_type, team_id, bundle_id)
     elif payload_type == 'com.apple.webcontent-filter':
         yield PayloadWebContentFilter(payload_type, {
-            'FilterType': content['FilterType'],
-            'PluginBundleID': content['PluginBundleID'],
-            'FilterSockets': content['FilterSockets'],
-            'FilterDataProviderBundleIdentifier': content['FilterDataProviderBundleIdentifier'],
-            'FilterDataProviderDesignatedRequirement': content['FilterDataProviderDesignatedRequirement'],
-            'FilterGrade': content['FilterGrade'],
+            'FilterType': content.get('FilterType'),
+            'PluginBundleID': content.get('PluginBundleID'),
+            'FilterSockets': content.get('FilterSockets'),
+            'FilterDataProviderBundleIdentifier': content.get('FilterDataProviderBundleIdentifier'),
+            'FilterDataProviderDesignatedRequirement': content.get('FilterDataProviderDesignatedRequirement'),
+            'FilterGrade': content.get('FilterGrade'),
         })
     elif payload_type == 'com.apple.notificationsettings':
         for definition in content['NotificationSettings']:
@@ -198,7 +198,8 @@ def parse_profiles(path):
                         'payload': payload,
                         'path': path,
                         'level': level,
-                        'name': profile['ProfileDisplayName']
+                        'name': profile['ProfileDisplayName'],
+                        'time': profile['ProfileInstallDate']
                     })
 
                     result[payload] = result_payloads
@@ -247,7 +248,7 @@ def parse_tcc(path):
     return result
 
 def format_location(profile_data):
-    return '{}, profile: "{}"'.format(profile_data['path'], profile_data['name'])
+    return '{}, profile: "{}", deployed: {}'.format(profile_data['path'], profile_data['name'], profile_data['time'])
 
 def report(path_profiles, path_expected, path_tcc):
     map_profiles = parse_profiles(path_profiles)
