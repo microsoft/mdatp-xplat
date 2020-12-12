@@ -325,6 +325,21 @@ args = parser.parse_args()
 if not args.template:
     args.template = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'mdatp.mobileconfig')
 
+    if not os.path.exists(args.template):
+        url = 'https://raw.githubusercontent.com/microsoft/mdatp-xplat/master/macos/mobileconfig/combined/mdatp.mobileconfig'
+        args.template = '/tmp/mdatp.mobileconfig'
+        print_debug("Downloading template from {}".format(url))
+
+        try:
+            import urllib.request
+            with urllib.request.urlopen(url) as response, open(args.template, 'wb') as out_file:
+                shutil.copyfileobj(response, out_file)
+        except:
+            import urllib2
+            response = urllib2.urlopen(url)
+            with open(args.template, 'wb') as out_file:
+                out_file.write(response.read())
+
 args.template = os.path.abspath(os.path.expanduser(args.template))
 
 in_file = getattr(args, 'in')
