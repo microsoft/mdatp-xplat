@@ -21,6 +21,7 @@ Options:
 -t|--tag          set a tag by declaring <name> and <value>. ex: -t GROUP Coders
 -m|--min_req      enforce minimum requirements
 -w|--clean        remove repo from package manager for a specific channel
+-v|--version      print out script version
 -h|--help         display help
 ```
 
