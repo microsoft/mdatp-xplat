@@ -26,7 +26,7 @@ Options:
 
 ## Sample use case
 ```bash
-sudo ~/mdatp_installer.sh --install --channel prod --onboard ~/linux_onboarding_script.py --tag GROUP Coders --min_req -y
+sudo ~/mde_installer.sh --install --channel prod --onboard ~/linux_onboarding_script.py --tag GROUP Coders --min_req -y
 ```
 
 This one-liner would:
