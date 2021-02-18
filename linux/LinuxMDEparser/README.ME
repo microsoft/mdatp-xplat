@@ -1,0 +1,23 @@
+# LinuxMDEparser
+Microsoft Defender Endpoint Log Parser for Linux and MacOS.
+
+Compiled sources (with pyinstaller) can be found on dist folder.
+
+# About
+The LinuxMDEparser is a tool to export multiple log files from MDE for Linux and Mac to Excel, making it easier to filter and search the logs.
+
+# Help
+You can always check the available options by running: LinuxMDEparser.exe -h
+
+LogFile     Type the filename to convert. Available options:
+
+                 real_time_protection - Troubleshoot performance issues
+                 wdavhistory - Troubleshoot AV acvtivity. You can find this file in var\opt\microsoft\mdatp log folder
+                 real_time_protection_json - Troubleshoot performance issues for Microsoft Defender (https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/linux-support-perf)
+
+To get the real_time_statiscs log file, you can open bash or terminal (MacOS) and just do - mdatp --diagnostic --real-time-protection-statistics > real_time_protection
+
+# Usage
+LinuxMDEparser {log filename}
+
+Make sure you run it from the folder where the log file is located. Excel file will be created in the same folder.
