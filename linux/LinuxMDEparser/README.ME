@@ -1,7 +1,7 @@
 # LinuxMDEparser
 Microsoft Defender Endpoint Log Parser for Linux and MacOS.
 
-Compiled sources (with pyinstaller) can be found on dist folder.
+Compiled sources (with pyinstaller --onefile) can be found on Releases.
 
 # About
 The LinuxMDEparser is a tool to export multiple log files from MDE for Linux and Mac to Excel, making it easier to filter and search the logs.
@@ -13,11 +13,26 @@ LogFile     Type the filename to convert. Available options:
 
                  real_time_protection - Troubleshoot performance issues
                  wdavhistory - Troubleshoot AV acvtivity. You can find this file in var\opt\microsoft\mdatp log folder
-                 real_time_protection_json - Troubleshoot performance issues for Microsoft Defender (https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/linux-support-perf)
+                 real_time_protection.json - Troubleshoot performance issues for Microsoft Defender (https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/linux-support-perf)
 
 To get the real_time_statiscs log file, you can open bash or terminal (MacOS) and just do - mdatp --diagnostic --real-time-protection-statistics > real_time_protection
 
 # Usage
-LinuxMDEparser {log filename}
+LinuxMDEparser.exe {log filename}
 
-Make sure you run it from the folder where the log file is located. Excel file will be created in the same folder.
+Make sure you run it from the folder where the log file is located. Excel file will also be created in the same folder.
+
+# Dependecies
+LinuxMDEparser will require you to install the following dependecies:
+Argparse - https://pypi.org/project/argparse/
+
+XlsxWriter - https://pypi.org/project/XlsxWriter/
+
+# Usage
+Most of the files are included when you collect the Linux/MacOS MDE logs - mdatp diagnostic create, except for the real_time_protection and real_time_protection.json - this ones need to be collected locally in a terminal:
+
+mdatp --diagnostics --real-time-protection-statiscs > real_time_protection
+
+mdatp diagnostic real-time-protection-statistics --output json > real_time_protection.json
+
+More details https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/linux-support-perf
