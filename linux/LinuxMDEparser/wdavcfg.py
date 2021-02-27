@@ -53,7 +53,37 @@ class Wdavcfg:
         navigationTarget = log1_content['deviceControl']['navigationTarget']
         removableMediaPolicy = log1_content['deviceControl']['removableMediaPolicy']
 
+        earlyPreview = log1_content['edr']['earlyPreview']
+        groupIds = log1_content['edr']['groupIds']
+        latencyMode = log1_content['edr']['latencyMode']
+        proxyAddress = log1_content['edr']['proxyAddress']
+        tags = log1_content['edr']['tags']
+
+        behaviorMonitoring = log1_content['features']['behaviorMonitoring']
+        behaviorMonitoringStatistics = log1_content['features']['behaviorMonitoringStatistics']
+        crashReporting = log1_content['features']['crashReporting']
+        customIndicators = log1_content['features']['customIndicators']
+        feedbackReporting = log1_content['features']['feedbackReporting']
+        gibraltar = log1_content['features']['gibraltar']
+        kernelExtension = log1_content['features']['kernelExtension']
+        networkFilter = log1_content['features']['networkFilter']
+        networkProtection = log1_content['features']['networkProtection']
+        realTimeProtectionStatistics = log1_content['features']['realTimeProtectionStatistics']
+        scannedFilesPerProcess = log1_content['features']['scannedFilesPerProcess']
+        systemExtensions = log1_content['features']['systemExtensions']
+        tamperProtection = log1_content['features']['tamperProtection']
+        usbDeviceControl = log1_content['features']['usbDeviceControl']
+        v2ContentScanning = log1_content['features']['v2ContentScanning']
+        v2DevMode = log1_content['features']['v2DevMode']
         
+        fileHashCacheMaximum = log1_content['fileHashCacheMaximum']
+        
+        enumerationThreads = log1_content['filesystemScanner']['enumerationThreads']
+        gibraltarSettings = log1_content['filesystemScanner']['gibraltarSettings']
+        networkProtection = log1_content['filesystemScanner']['networkProtection']
+        tamperProtection = log1_content['filesystemScanner']['tamperProtection']
+        userInterface = log1_content['filesystemScanner']['userInterface']
+                   
         #worksheet.write(index + 1, 0, endTime)
         #worksheet.write(index + 1, 1, filesScanned)
         #worksheet.write(index + 1, 2, startTime)
