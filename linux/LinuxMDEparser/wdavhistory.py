@@ -31,7 +31,7 @@ class Wdavhistory:
             worksheet.write(index + 1, 1, filesScanned)
             worksheet.write(index + 1, 2, startTime)
             worksheet.write(index + 1, 3, str(threats))
-            worksheet.write(index + 1, 4, type)
+            worksheet.write(index + 1, 4, str(type))
 
         print(f'added all events to {filename}.xlsx')
         workbook.close()

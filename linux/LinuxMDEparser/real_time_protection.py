@@ -35,12 +35,12 @@ class RealTimeStatiscs:
 
             worksheet.write(index + 1, 0, str(id))
             worksheet.write(index + 1, 1, str(isActive))
-            worksheet.write(index + 1, 2, str(maxFileScanTime))
+            worksheet.write(index + 1, 2, (maxFileScanTime))
             worksheet.write(index + 1, 3, str(name))
             worksheet.write(index + 1, 4, str(path))
             worksheet.write(index + 1, 5, str(scannedFilePaths))
-            worksheet.write(index + 1, 6, str(totalFilesScanned))
-            worksheet.write(index + 1, 7, str(totalScanTime))
+            worksheet.write(index + 1, 6, (totalFilesScanned))
+            worksheet.write(index + 1, 7, (totalScanTime))
             print(f'added event {id} to {filename}.xlsx')
         
         workbook.close()
