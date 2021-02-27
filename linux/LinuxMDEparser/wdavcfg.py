@@ -79,10 +79,20 @@ class Wdavcfg:
         fileHashCacheMaximum = log1_content['fileHashCacheMaximum']
         
         enumerationThreads = log1_content['filesystemScanner']['enumerationThreads']
-        gibraltarSettings = log1_content['filesystemScanner']['gibraltarSettings']
-        networkProtection = log1_content['filesystemScanner']['networkProtection']
-        tamperProtection = log1_content['filesystemScanner']['tamperProtection']
-        userInterface = log1_content['filesystemScanner']['userInterface']
+        
+        maxRetryAttempts = log1_content['gibraltarSettings']['maxRetryAttempts']
+        portalRefreshInterval = log1_content['gibraltarSettings']['portalRefreshInterval']
+        retryInterval = log1_content['gibraltarSettings']['retryInterval']
+
+        enforcementLevel = log1_content['networkProtection']['enforcementLevel']
+        exclusions = log1_content['networkProtection']['exclusions']
+        sideBySideVpn = log1_content['networkProtection']['sideBySideVpn']
+        
+        enforcementLevel = log1_content['tamperProtection']['enforcementLevel']
+        
+        disableNotifications = log1_content['userInterface']['disableNotifications']
+        hideStatusMenuIcon = log1_content['userInterface']['hideStatusMenuIcon']
+        userInitiatedFeedback = log1_content['userInterface']['userInitiatedFeedback']
                    
         #worksheet.write(index + 1, 0, endTime)
         #worksheet.write(index + 1, 1, filesScanned)
