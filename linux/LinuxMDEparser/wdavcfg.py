@@ -19,6 +19,27 @@ class Wdavcfg:
         #worksheet.write(0, 3, 'threats')
         #worksheet.write(0, 4, 'type')
 
+        #Create the excel file
+        workbook = xlsxwriter.Workbook(f'{filename}.xlsx')
+
+        #antivirusEngine
+    
+        worksheet = workbook.add_worksheet('antivirusEngine')
+        worksheet.write(0, 0, 'allowedThreats')
+        worksheet.write(0, 1, 'disallowedThreatActions')
+        worksheet.write(0, 2, 'enforcementLevel')
+        worksheet.write(0, 3, 'exclusions')
+        worksheet.write(0, 4, 'maximumOnDemandScanThreads')
+        worksheet.write(0, 5, 'maximumRealTimeScanThreads')
+        worksheet.write(0, 6, 'processExclusionCacheMaximum')
+        worksheet.write(0, 7, 'processIdPathCacheMaximum')
+        worksheet.write(0, 8, 'scanCacheMaximum')
+        worksheet.write(0, 9, 'scanHistoryCleanupIntervalHours')
+        worksheet.write(0, 10, 'scanHistoryMaximumItems')
+        worksheet.write(0, 11, 'scanResultsRetentionDays')
+        worksheet.write(0, 12, 'threatRestorationExclusionTime')
+        worksheet.write(0, 13, 'threatTypeSettings')
+
         allowedThreats = log1_content['antivirusEngine']['allowedThreats']
         disallowedThreatActions = log1_content['antivirusEngine']['disallowedThreatActions']
         enforcementLevel = log1_content['antivirusEngine']['enforcementLevel']
@@ -34,6 +55,37 @@ class Wdavcfg:
         threatRestorationExclusionTime = log1_content['antivirusEngine']['threatRestorationExclusionTime']
         threatTypeSettings = log1_content['antivirusEngine']['threatTypeSettings']
 
+        worksheet.write(1, 0, str(allowedThreats))
+        worksheet.write(1, 1, str(disallowedThreatActions))
+        worksheet.write(1, 2, str(enforcementLevel))
+        worksheet.write(1, 3, str(exclusions))
+        worksheet.write(1, 4, maximumOnDemandScanThreads)
+        worksheet.write(1, 5, maximumRealTimeScanThreads)
+        worksheet.write(1, 6, str(processExclusionCacheMaximum))
+        worksheet.write(1, 7, str(processIdPathCacheMaximum))
+        worksheet.write(1, 8, scanCacheMaximum)
+        worksheet.write(1, 9, scanHistoryCleanupIntervalHours)
+        worksheet.write(1, 10, str(scanHistoryMaximumItems))
+        worksheet.write(1, 11, str(scanResultsRetentionDays))
+        worksheet.write(1, 12, threatRestorationExclusionTime)
+        worksheet.write(1, 13, str(threatTypeSettings))
+
+        #cloudService
+    
+        worksheet = workbook.add_worksheet('cloudService')
+        worksheet.write(0, 0, 'automaticDefinitionUpdateEnabled')
+        worksheet.write(0, 1, 'automaticSampleSubmissionConsent')
+        worksheet.write(0, 2, 'definitionUpdateDue')
+        worksheet.write(0, 3, 'defintionUpdatesInterval')
+        worksheet.write(0, 4, 'diagnosticLevel')
+        worksheet.write(0, 5, 'enabled')
+        worksheet.write(0, 6, 'heartbeatInterval')
+        worksheet.write(0, 7, 'proxy')
+        worksheet.write(0, 8, 'retryCount')
+        worksheet.write(0, 9, 'retryInterval')
+        worksheet.write(0, 10, 'serviceUri')
+        worksheet.write(0, 11, 'timeout')
+       
         automaticDefinitionUpdateEnabled = log1_content['cloudService']['automaticDefinitionUpdateEnabled']
         automaticSampleSubmissionConsent = log1_content['cloudService']['automaticSampleSubmissionConsent']
         definitionUpdateDue = log1_content['cloudService']['definitionUpdateDue']
@@ -99,9 +151,8 @@ class Wdavcfg:
         #worksheet.write(index + 1, 2, startTime)
         #worksheet.write(index + 1, 3, str(threats))
         #worksheet.write(index + 1, 4, str(type))
-
-    #print(f'added all events to {filename}.xlsx')
-    #workbook.close()
+        
+        workbook.close()
 
 logparsed = Wdavcfg
 logparsed.Wdavcfg2Excel()
