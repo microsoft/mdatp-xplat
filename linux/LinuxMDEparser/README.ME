@@ -1,0 +1,42 @@
+# LinuxMDEparser
+Microsoft Defender Endpoint Log Parser for Linux and MacOS.
+
+# About
+The LinuxMDEparser is a tool to export multiple log files from MDE for Linux and Mac to Excel, making it easier to filter and search the logs.
+
+# Help
+You can always check the available options by running: LinuxMDEparser -h
+
+LogFile     Type the filename to convert. Available options:
+
+                 real_time_protection - Troubleshoot performance issues
+                 wdavhistory - Troubleshoot AV acvtivity. You can find this file in var\opt\microsoft\mdatp log folder
+                 real_time_protection.json - Troubleshoot performance issues for Microsoft Defender (https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/linux-support-perf)
+
+# Usage
+LinuxMDEparser {log filename}
+
+Make sure you run it from the folder where the log file is located. Excel file will also be created in the same folder.
+
+# Dependecies
+LinuxMDEparser will require you to install the following dependecies:
+
+Argparse - https://pypi.org/project/argparse/ --> pip install argparse
+
+XlsxWriter - https://pypi.org/project/XlsxWriter/ --> pip install XlsxWriter
+
+# Usage
+Most of the files are included when you collect the Linux/MacOS MDE logs - mdatp diagnostic create, except for the real_time_protection and real_time_protection.json - this ones need to be collected locally in a terminal window:
+
+mdatp --diagnostics --real-time-protection-statiscs > real_time_protection
+
+mdatp diagnostic real-time-protection-statistics --output json > real_time_protection.json
+
+More details https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/linux-support-perf
+
+# Compiling tool using pyinstaller
+pip install pyinstaller
+
+pyinstaller --onefile LinuxMDEparser.py --hidden-import xlsxwriter
+
+pyinstaller produces a standalone executable as dist/LinuxMDEparser (or dist/LinuxMDEparser.exe on Windows)
