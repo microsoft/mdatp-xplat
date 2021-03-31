@@ -1,3 +1,82 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>PayloadContent</key><array><dict><key>NotificationSettings</key><array><dict><key>AlertType</key><integer>2</integer><key>BadgesEnabled</key><true/><key>BundleIdentifier</key><string>com.microsoft.autoupdate2</string><key>CriticalAlertEnabled</key><false/><key>GroupingType</key><integer>0</integer><key>NotificationsEnabled</key><true/><key>ShowInLockScreen</key><false/><key>ShowInNotificationCenter</key><true/><key>SoundsEnabled</key><true/></dict><dict><key>AlertType</key><integer>2</integer><key>BadgesEnabled</key><true/><key>BundleIdentifier</key><string>com.microsoft.wdav.tray</string><key>CriticalAlertEnabled</key><false/><key>GroupingType</key><integer>0</integer><key>NotificationsEnabled</key><true/><key>ShowInLockScreen</key><false/><key>ShowInNotificationCenter</key><true/><key>SoundsEnabled</key><true/></dict></array><key>PayloadDescription</key><string></string><key>PayloadDisplayName</key><string>notifications</string><key>PayloadEnabled</key><true/><key>PayloadIdentifier</key><string>BB977315-E4CB-4915-90C7-8334C75A7C64</string><key>PayloadOrganization</key><string>Microsoft</string><key>PayloadType</key><string>com.apple.notificationsettings</string><key>PayloadUUID</key><string>BB977315-E4CB-4915-90C7-8334C75A7C64</string><key>PayloadVersion</key><integer>1</integer></dict></array><key>PayloadDescription</key><string></string><key>PayloadDisplayName</key><string>Defender - Notifications</string><key>PayloadEnabled</key><true/><key>PayloadIdentifier</key><string>0FD07262-DC96-4734-8D7D-30CD080A332C</string><key>PayloadOrganization</key><string>Microsoft Corporation</string><key>PayloadRemovalDisallowed</key><true/><key>PayloadScope</key><string>System</string><key>PayloadType</key><string>Configuration</string><key>PayloadUUID</key><string>0FD07262-DC96-4734-8D7D-30CD080A332C</string><key>PayloadVersion</key><integer>1</integer></dict></plist>
+<plist version="1">
+<dict>
+<key>PayloadUUID</key>
+<string>E1E0D3F7-546F-4867-B655-669E1361ABE5</string>
+<key>PayloadType</key>
+<string>Configuration</string>
+<key>PayloadOrganization</key>
+<string>Microsoft Corporation</string>
+<key>PayloadIdentifier</key>
+<string>E1E0D3F7-546F-4867-B655-669E1361ABE5</string>
+<key>PayloadDisplayName</key>
+<string>Defender - Notifications</string>
+<key>PayloadDescription</key>
+<string/>
+<key>PayloadVersion</key>
+<integer>1</integer>
+<key>PayloadEnabled</key>
+<true/>
+<key>PayloadRemovalDisallowed</key>
+<true/>
+<key>PayloadScope</key>
+<string>System</string>
+<key>PayloadContent</key>
+<array>
+<dict>
+<key>PayloadDisplayName</key>
+<string>Notifications Payload</string>
+<key>PayloadIdentifier</key>
+<string>05BF7221-2470-477D-99B3-1729B1932BDB</string>
+<key>PayloadOrganization</key>
+<string>Microsoft Corporation</string>
+<key>PayloadType</key>
+<string>com.apple.notificationsettings</string>
+<key>PayloadUUID</key>
+<string>05BF7221-2470-477D-99B3-1729B1932BDB</string>
+<key>PayloadVersion</key>
+<integer>1</integer>
+<key>NotificationSettings</key>
+<array>
+<dict>
+<key>AlertType</key>
+<integer>1</integer>
+<key>BadgesEnabled</key>
+<true/>
+<key>BundleIdentifier</key>
+<string>com.microsoft.autoupdate2</string>
+<key>CriticalAlertEnabled</key>
+<false/>
+<key>NotificationsEnabled</key>
+<true/>
+<key>ShowInLockScreen</key>
+<false/>
+<key>ShowInNotificationCenter</key>
+<true/>
+<key>SoundsEnabled</key>
+<true/>
+</dict>
+<dict>
+<key>AlertType</key>
+<integer>1</integer>
+<key>BadgesEnabled</key>
+<true/>
+<key>BundleIdentifier</key>
+<string>com.microsoft.wdav.tray</string>
+<key>CriticalAlertEnabled</key>
+<false/>
+<key>NotificationsEnabled</key>
+<true/>
+<key>ShowInLockScreen</key>
+<false/>
+<key>ShowInNotificationCenter</key>
+<true/>
+<key>SoundsEnabled</key>
+<true/>
+</dict>
+</array>
+</dict>
+</array>
+</dict>
+</plist>

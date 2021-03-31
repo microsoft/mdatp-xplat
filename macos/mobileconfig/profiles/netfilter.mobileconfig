@@ -1,3 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>PayloadContent</key><array><dict><key>FilterDataProviderBundleIdentifier</key><string>com.microsoft.wdav.netext</string><key>FilterDataProviderDesignatedRequirement</key><string>identifier "com.microsoft.wdav.netext" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = UBF8T346G9</string><key>FilterGrade</key><string>inspector</string><key>FilterSockets</key><true/><key>FilterType</key><string>Plugin</string><key>PayloadDescription</key><string></string><key>PayloadDisplayName</key><string>Approved Content Filter</string><key>PayloadEnabled</key><true/><key>PayloadIdentifier</key><string>CEBF7A71-D9A1-48BD-8CCF-BD9D18EC155A</string><key>PayloadOrganization</key><string>Microsoft Corporation</string><key>PayloadType</key><string>com.apple.webcontent-filter</string><key>PayloadUUID</key><string>2BA070D9-2233-4827-AFC1-1F44C8C8E527</string><key>PayloadVersion</key><integer>1</integer><key>PluginBundleID</key><string>com.microsoft.wdav</string><key>UserDefinedName</key><string>Microsoft Defender ATP Content Filter</string></dict></array><key>PayloadDescription</key><string></string><key>PayloadDisplayName</key><string>Defender - Network Filter</string><key>PayloadEnabled</key><true/><key>PayloadIdentifier</key><string>7D84EA5F-DB40-4052-8E18-57448B883808</string><key>PayloadOrganization</key><string>Microsoft Corporation</string><key>PayloadRemovalDisallowed</key><true/><key>PayloadScope</key><string>System</string><key>PayloadType</key><string>Configuration</string><key>PayloadUUID</key><string>7D84EA5F-DB40-4052-8E18-57448B883808</string><key>PayloadVersion</key><integer>1</integer></dict></plist>
+<plist version="1">
+<dict>
+<key>PayloadUUID</key>
+<string>1A853DDB-37AB-4D4F-B74D-15197FEF6423</string>
+<key>PayloadType</key>
+<string>Configuration</string>
+<key>PayloadOrganization</key>
+<string>Microsoft Corporation</string>
+<key>PayloadIdentifier</key>
+<string>1A853DDB-37AB-4D4F-B74D-15197FEF6423</string>
+<key>PayloadDisplayName</key>
+<string>Defender - Network Filter</string>
+<key>PayloadDescription</key>
+<string/>
+<key>PayloadVersion</key>
+<integer>1</integer>
+<key>PayloadEnabled</key>
+<true/>
+<key>PayloadRemovalDisallowed</key>
+<true/>
+<key>PayloadScope</key>
+<string>System</string>
+<key>PayloadContent</key>
+<array>
+<dict>
+<key>FilterDataProviderBundleIdentifier</key>
+<string>com.microsoft.wdav.netext</string>
+<key>FilterDataProviderDesignatedRequirement</key>
+<string>identifier "com.microsoft.wdav.netext" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = UBF8T346G9</string>
+<key>FilterGrade</key>
+<string>inspector</string>
+<key>FilterPackets</key>
+<false/>
+<key>FilterSockets</key>
+<true/>
+<key>FilterType</key>
+<string>Plugin</string>
+<key>PayloadDisplayName</key>
+<string>Web Content Filter Payload</string>
+<key>PayloadIdentifier</key>
+<string>283F4BF0-788A-4435-9B62-3E00896358D7</string>
+<key>PayloadOrganization</key>
+<string>JAMF Software</string>
+<key>PayloadType</key>
+<string>com.apple.webcontent-filter</string>
+<key>PayloadUUID</key>
+<string>283F4BF0-788A-4435-9B62-3E00896358D7</string>
+<key>PayloadVersion</key>
+<integer>1</integer>
+<key>PluginBundleID</key>
+<string>com.microsoft.wdav</string>
+<key>UserDefinedName</key>
+<string>Microsoft Defender ATP Content Filter</string>
+</dict>
+</array>
+</dict>
+</plist>
