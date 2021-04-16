@@ -2,13 +2,13 @@
 Microsoft Defender Endpoint Log Parser for Linux.
 
 # About
-The LinuxMDEparser is a Windows tool that allows you to export or parse MDE for Linux log files to Excel, making it easier to filter and search the logs. After collecting the MDE logs from any Linux machine, you can then run this tool on your on Windows.
+The LinuxMDEparser is a tool that allows you to export or parse MDE for Linux log files to Excel, making it easier to filter and search the logs. After collecting the MDE logs from any Linux machine, you can then run this tool on your on Windows.
 
 # Usage
-LinuxMDEparser {Command} <option>
+python3 main.py {Command} <option>
 
-EX: LinuxMDEparser.exe real-time-protection --convert
-    LinuxMDEparser.exe wdavhistory -h
+EX: python3 main.py real-time-protection --convert
+    python3 main.py wdavhistory -h
 
 Make sure you run it from the folder where the log file is located. Excel file will also be created in the same folder.
 
