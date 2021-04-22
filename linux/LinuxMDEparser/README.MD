@@ -21,7 +21,7 @@ More details https://docs.microsoft.com/en-us/windows/security/threat-protection
 # Help
 You can always check the available options by running: LinuxMDEparser -h
 
-usage: LinuxMDEparser.exe [command] [--option]
+usage: LinuxMDEparser [command] [--option]
 
 optional arguments:
   -h, --help            show this help message and exit
