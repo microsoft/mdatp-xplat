@@ -30,14 +30,14 @@ script_exit()
     if [ "$2" = "0" ]; then
         echo "$1"
     else
-	    echo "$1" >&2
+        echo "$1" >&2
     fi
 
     if [ -z "$2" ]; then
         exit 1
     else
         echo "Script exiting with status $2"
-	    exit $2
+        exit $2
     fi
 }
 
@@ -192,7 +192,7 @@ install_on_debian()
     install_required_pkgs ${PACKAGES[@]}
 
     ### Configure the repository ###
-    curl -sSL $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list | sudo tee /etc/apt/sources.list.d/microsoft-$CHANNEL.list || script_exit "Unable to fetch the repo" $?
+    curl -sSL $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list | sudo tee /etc/apt/sources.list.d/microsoft-$CHANNEL.list || script_exit "Unable to fetch the repo" $?
 
     ### Fetch the gpg key ###
     curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc || script_exit "Unable to fetch the gpg key" $?
@@ -240,8 +240,8 @@ install_on_redhat()
     sudo yum-config-manager --add-repo=$PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.repo || script_exit "Unable to fetch the repo" $?
 
     ### Fetch the gpg key ###
-    curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc || script_exit "Unable to fetch gpg key" $?
-    sudo rpm --import microsoft.asc
+    curl -sSL https://packages.microsoft.com/keys/microsoft.asc > ./microsoft.asc || script_exit "Unable to fetch gpg key" $?
+    sudo rpm --import ./microsoft.asc
     sudo yum makecache || echo " Unable to refresh the repos properly. Command exited with status $?">&2
 
     ### Install MDE ###
@@ -273,13 +273,13 @@ install_on_sles()
     sudo zypper addrepo -c -f -n microsoft-$CHANNEL https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo
 
     ### Fetch the gpg key ###
-    sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc || script_exit "Unable to fetch gpg key" $?
+    curl -sSL https://packages.microsoft.com/keys/microsoft.asc > ./microsoft.asc || script_exit "Unable to fetch gpg key" $?
+    sudo rpm --import ./microsoft.asc
     sudo zypper refresh || echo " Unable to refresh the repos properly. Command exited with status $?" >&2
 
     ### Install MDE ###
     echo "Installing MDE on distro: $DISTRO version: $VERSION"
-    sudo zypper install $ASSUMEYES $REPO-$CHANNEL:mdatp
-    if [ "$?" -ne 0 ]; then
+    if ! sudo zypper install $ASSUMEYES $REPO-$CHANNEL:mdatp; then
         echo "Failed, trying again"
         sudo zypper install mdatp || script_exit "Unable to install MDE" $?
     fi
