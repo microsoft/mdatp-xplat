@@ -14,8 +14,8 @@ VERSION=
 ONBOARDING_SCRIPT=
 MIN_REQUIREMENTS=
 PASSIVE_MODE=
-MIN_CORES=2
-MIN_MEM_MB=2048
+MIN_CORES=1
+MIN_MEM_MB=1024
 MIN_DISK_SPACE_MB=1024
 declare -a tags
 error_code=0
@@ -84,7 +84,7 @@ verify_privileges()
 verify_min_requirements()
 {
     echo "verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
-    
+
     local CORES=$(nproc --all)
     if [ $CORES -lt $MIN_CORES ]; then
         script_exit "MDE requires $MIN_CORES cores or more to run, found $CORES."
@@ -112,7 +112,7 @@ set_package_manager()
     elif [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ] ; then
         DISTRO="sles"
         PKG_MGR=zypper
-    else    
+    else
         script_exit "Unsupported distro"
     fi
 }
@@ -369,7 +369,7 @@ onboard_device()
     echo "running onboarding script..."
     sleep 2
     sudo $PYTHON $ONBOARDING_SCRIPT || script_exit "error: onboarding failed" 9
-    echo "onboarding successful"        
+    echo "onboarding successful"
 }
 
 set_epp_to_passive_mode()
@@ -427,7 +427,7 @@ do
         -c|--channel)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument"
-            fi        
+            fi
             CHANNEL=$2
             verify_channel
             shift 2
@@ -450,7 +450,7 @@ do
         -o|--onboard)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument"
-            fi        
+            fi
             ONBOARDING_SCRIPT=$2
             verify_privileges "onboard"
             shift 2
@@ -532,7 +532,7 @@ elif [ "$INSTALL_MODE" == "u" ]; then
         upgrade_mdatp "install --only-upgrade"
     elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "sles" ] || [ "$DISTRO" == "ol" ]; then
         upgrade_mdatp "update"
-    else    
+    else
         script_exit "Unsupported distro"
     fi
 
