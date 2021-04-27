@@ -192,8 +192,7 @@ install_on_debian()
     install_required_pkgs ${PACKAGES[@]}
 
     ### Configure the repository ###
-    curl -o microsoft.list $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list || script_exit "Unable to fetch the repo" $?
-    sudo mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list || script_exit "Unable to copy the repo" $?
+    curl -sSL $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list | sudo tee /etc/apt/sources.list.d/microsoft-$CHANNEL.list || script_exit "Unable to fetch the repo" $?
 
     ### Fetch the gpg key ###
     curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc || script_exit "Unable to fetch the gpg key" $?
