@@ -196,7 +196,7 @@ install_on_debian()
     sudo mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list || script_exit "Unable to copy the repo" $?
 
     ### Fetch the gpg key ###
-    curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add - || script_exit "Unable to fetch the gpg key" $?
+    curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc || script_exit "Unable to fetch the gpg key" $?
 
     sudo apt-get update || echo "Unable to refresh the repos properly. command exited with status $?" >&2
 
