@@ -1,13 +1,14 @@
 # Installer scripts
 
 ## About the script
+
 `mde_installer.sh` is a bash script that sets up mde on all [supported distros](https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/microsoft-defender-atp-linux#system-requirements).
 
 It runs through the steps of the [manual deployment](https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/linux-install-manually), and installs MDE.
 There are a few extra features for one-line installation like [onboarding](https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/linux-install-manually#download-the-onboarding-package).
 
-
 ## How to use
+
 ```bash
 ❯ ./mde_installer.sh --help
 usage: basename ./mde_installer.sh [OPTIONS]
@@ -26,6 +27,7 @@ Options:
 ```
 
 ## Sample use case
+
 ```bash
 sudo ~/mde_installer.sh --install --channel prod --onboard ~/linux_onboarding_script.py --tag GROUP Coders --min_req -y
 ```
@@ -47,6 +49,5 @@ The installer script can be used to (separatly or combined):
 * Install, upgrade or remove the product.
 * Onboad or offboard the product.
 * Clean package manager from repositry (only SLES for now)
-
 
 > [!NOTE] API might change in the future, please make sure to validate version.
