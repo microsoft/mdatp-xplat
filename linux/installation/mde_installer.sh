@@ -14,8 +14,8 @@ VERSION=
 ONBOARDING_SCRIPT=
 MIN_REQUIREMENTS=
 PASSIVE_MODE=
-MIN_CORES=2
-MIN_MEM_MB=2048
+MIN_CORES=1
+MIN_MEM_MB=1024
 MIN_DISK_SPACE_MB=1024
 declare -a tags
 error_code=0
@@ -30,14 +30,14 @@ script_exit()
     if [ "$2" = "0" ]; then
         echo "$1"
     else
-	    echo "$1" >&2
+        echo "$1" >&2
     fi
 
     if [ -z "$2" ]; then
         exit 1
     else
         echo "Script exiting with status $2"
-	    exit $2
+        exit $2
     fi
 }
 
@@ -84,7 +84,7 @@ verify_privileges()
 verify_min_requirements()
 {
     echo "verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
-    
+
     local CORES=$(nproc --all)
     if [ $CORES -lt $MIN_CORES ]; then
         script_exit "MDE requires $MIN_CORES cores or more to run, found $CORES."
@@ -112,7 +112,7 @@ set_package_manager()
     elif [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ] ; then
         DISTRO="sles"
         PKG_MGR=zypper
-    else    
+    else
         script_exit "Unsupported distro"
     fi
 }
@@ -192,11 +192,10 @@ install_on_debian()
     install_required_pkgs ${PACKAGES[@]}
 
     ### Configure the repository ###
-    curl -o microsoft.list $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list || script_exit "Unable to fetch the repo" $?
-    sudo mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list || script_exit "Unable to copy the repo" $?
+    curl -sSL $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list | sudo tee /etc/apt/sources.list.d/microsoft-$CHANNEL.list || script_exit "Unable to fetch the repo" $?
 
     ### Fetch the gpg key ###
-    curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add - || script_exit "Unable to fetch the gpg key" $?
+    curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc || script_exit "Unable to fetch the gpg key" $?
 
     sudo apt-get update || echo "Unable to refresh the repos properly. command exited with status $?" >&2
 
@@ -241,8 +240,8 @@ install_on_redhat()
     sudo yum-config-manager --add-repo=$PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.repo || script_exit "Unable to fetch the repo" $?
 
     ### Fetch the gpg key ###
-    curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc || script_exit "Unable to fetch gpg key" $?
-    sudo rpm --import microsoft.asc
+    curl -sSL https://packages.microsoft.com/keys/microsoft.asc > ./microsoft.asc || script_exit "Unable to fetch gpg key" $?
+    sudo rpm --import ./microsoft.asc
     sudo yum makecache || echo " Unable to refresh the repos properly. Command exited with status $?">&2
 
     ### Install MDE ###
@@ -274,13 +273,13 @@ install_on_sles()
     sudo zypper addrepo -c -f -n microsoft-$CHANNEL https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo
 
     ### Fetch the gpg key ###
-    sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc || script_exit "Unable to fetch gpg key" $?
+    curl -sSL https://packages.microsoft.com/keys/microsoft.asc > ./microsoft.asc || script_exit "Unable to fetch gpg key" $?
+    sudo rpm --import ./microsoft.asc
     sudo zypper refresh || echo " Unable to refresh the repos properly. Command exited with status $?" >&2
 
     ### Install MDE ###
     echo "Installing MDE on distro: $DISTRO version: $VERSION"
-    sudo zypper install $ASSUMEYES $REPO-$CHANNEL:mdatp
-    if [ "$?" -ne 0 ]; then
+    if ! sudo zypper install $ASSUMEYES $REPO-$CHANNEL:mdatp; then
         echo "Failed, trying again"
         sudo zypper install mdatp || script_exit "Unable to install MDE" $?
     fi
@@ -369,7 +368,7 @@ onboard_device()
     echo "running onboarding script..."
     sleep 2
     sudo $PYTHON $ONBOARDING_SCRIPT || script_exit "error: onboarding failed" 9
-    echo "onboarding successful"        
+    echo "onboarding successful"
 }
 
 set_epp_to_passive_mode()
@@ -427,7 +426,7 @@ do
         -c|--channel)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument"
-            fi        
+            fi
             CHANNEL=$2
             verify_channel
             shift 2
@@ -450,7 +449,7 @@ do
         -o|--onboard)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument"
-            fi        
+            fi
             ONBOARDING_SCRIPT=$2
             verify_privileges "onboard"
             shift 2
@@ -532,7 +531,7 @@ elif [ "$INSTALL_MODE" == "u" ]; then
         upgrade_mdatp "install --only-upgrade"
     elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "sles" ] || [ "$DISTRO" == "ol" ]; then
         upgrade_mdatp "update"
-    else    
+    else
         script_exit "Unsupported distro"
     fi
 
