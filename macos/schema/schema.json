@@ -1,0 +1,399 @@
+{
+    "__feedback": "jmanifest@microsoft.com",
+    "__version": "101.13.75",
+    "title": "com.microsoft.wdav",
+    "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
+    "options": {
+        "remove_empty_properties": true
+    },
+    "type": "object",
+    "properties": {
+        "antivirusEngine": {
+            "title": "Antivirus engine",
+            "description": "Properties displayed below will be managed, a user would not be able to override them",
+            "propertyOrder": 10,
+            "defaultProperties": [],
+            "properties": {
+                "enableRealTimeProtection": {
+                    "default": true,
+                    "description": "Locates and stops malware from installing or running on your device. You can turn off this setting for a short time before it turns back on automatically.",
+                    "format": "checkbox",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#enable--disable-real-time-protection",
+                            "rel": "More information"
+                        }
+                    ],
+                    "options": {
+                        "infoText": "Key: enableRealTimeProtection"
+                    },
+                    "propertyOrder": 10,
+                    "title": "Real-time protection",
+                    "type": "boolean"
+                },
+                "exclusions": {
+                    "description": "Entities that have been excluded from the scan. Exclusions can be specified by full paths, extensions, or file names.",
+                    "items": {
+                        "format": "grid",
+                        "properties": {
+                            "$type": {
+                                "default": "excludedPath",
+                                "enum": [
+                                    "excludedPath",
+                                    "excludedFileExtension",
+                                    "excludedFileName"
+                                ],
+                                "options": {
+                                    "enum_titles": [
+                                        "Path",
+                                        "File extension",
+                                        "Process name"
+                                ]},
+                                "title": "Type",
+                                "type": "string"
+                            },
+                            "extension": {
+                                "options": {
+                                    "dependencies": {
+                                        "$type": "excludedFileExtension"
+                                    }
+                                },
+                                "title": "File extension",
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "isDirectory": {
+                                "default": "true",
+                                "format": "checkbox",
+                                "options": {
+                                    "dependencies": {
+                                        "$type": "excludedPath"
+                                    }
+                                },
+                                "title": "Is directory",
+                                "description": "Directory if selected, or file if not selected",
+                                "type": "boolean"
+                            },
+                            "name": {
+                                "options": {
+                                    "dependencies": {
+                                        "$type": "excludedFileName"
+                                    }
+                                },
+                                "title": "Process name",
+                                "description": "Process name, either or full path or file name, wildcards supported",
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "path": {
+                                "options": {
+                                    "dependencies": {
+                                        "$type": "excludedPath"
+                                    }
+                                },
+                                "title": "Path",
+                                "description": "Path to exclude, wildcards are supported",
+                                "type": "string",
+                                "minLength": 1
+                            }
+                        },
+                        "title": "Exclusions",
+                        "type": "object"
+                    },
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#scan-exclusions",
+                            "rel": "More information"
+                        }
+                    ],
+                    "options": {
+                        "infoText": "Key: exclusions"
+                    },
+                    "propertyOrder": 30,
+                    "title": "Scan exclusions",
+                    "type": "array"
+                },
+                "passiveMode": {
+                    "default": false,
+                    "description": "Whether the antivirus engine runs in passive mode or not.",
+                    "format": "checkbox",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#enable--disable-passive-mode",
+                            "rel": "More information"
+                        }
+                    ],
+                    "options": {
+                        "infoText": "Key: passiveMode"
+                    },
+                    "propertyOrder": 40,
+                    "title": "Passive mode",
+                    "type": "boolean"
+                },
+                "allowedThreats": {
+                    "type": "array",
+                    "description": "List of threats (identified by their name) that are not blocked by the product and are instead allowed to run.",
+                    "propertyOrder": 50,
+                    "title": "Allowed threats",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#allowed-threats",
+                            "rel": "More information"
+                        }
+                    ],
+                    "items": {
+                        "title": "Threat",
+                        "format": "grid",
+                        "type": "string"
+                    }
+                },
+                "threatTypeSettings": {
+                    "type": "array",
+                    "description": "The threatTypeSettings preference in the antivirus engine is used to control how certain threat types are handled by the product.",
+                    "propertyOrder": 60,
+                    "title": "Threat type settings",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#threat-type-settings",
+                            "rel": "More information"
+                        }
+                    ],
+                    "items": {
+                        "title": "Setting",
+                        "format": "grid",
+                        "type": "object",
+                        "properties": {
+                            "key": {
+                                "type": "string",
+                                "title": "Threat type",
+                                "description": "Type of the threat for which the behavior is configured.",
+                                "propertyOrder": 10,
+                                "enum": ["potentially_unwanted_application", "archive_bomb"]
+                            },
+                            "value": {
+                                "type": "string",
+                                "title": "Action to take",
+                                "description": "Action to take when coming across a threat of the type specified in the preceding section.",
+                                "propertyOrder": 20,
+                                "default": "audit",
+                                "enum": ["audit", "block", "off"]
+                            }
+                        }
+                    }
+                },
+                "exclusionsMergePolicy": {
+                    "default": "merge",
+                    "title": "Exclusions merge",
+                    "type": "string",
+                    "propertyOrder": 70,
+                    "description": "Specify the merge policy for exclusions. This can be a combination of administrator-defined and user-defined exclusions (merge) or only administrator-defined exclusions (admin_only). This setting can be used to restrict local users from defining their own exclusions.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#exclusion-merge-policy",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["merge", "admin_only"]
+                },
+                "disallowedThreatActions": {
+                    "type": "array",
+                    "description": "Restricts the actions that the local user of a device can take when threats are detected. The actions included in this list are not displayed in the user interface.",
+                    "propertyOrder": 80,
+                    "title": "Disallowed threat actions",
+                    "uniqueItems": true,
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#disallowed-threat-actions",
+                            "rel": "More information"
+                        }
+                    ],
+                    "items": {
+                        "title": "Action",
+                        "format": "grid",
+                        "type": "string",
+                        "enum": ["allow", "restore"]
+                    }
+                },
+                "threatTypeSettingsMergePolicy": {
+                    "default": "merge",
+                    "title": "Threat type settings merge",
+                    "type": "string",
+                    "propertyOrder": 90,
+                    "description": "Specify the merge policy for threat type settings. This can be a combination of administrator-defined and user-defined settings (merge) or only administrator-defined settings (admin_only). This setting can be used to restrict local users from defining their own settings for different threat types.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#threat-type-settings-merge-policy",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["merge", "admin_only"]
+                },
+                "scanResultsRetentionDays": {
+                    "default": 90,
+                    "title": "Scan results retention",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 180,
+                    "propertyOrder": 100,
+                    "description": "Specify the number of days that results are retained in the scan history on the device. Old scan results are removed from the history. Old quarantined files that are also removed from the disk.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#antivirus-scan-history-retention-in-days",
+                            "rel": "More information"
+                        }
+                    ]
+                },
+                "scanHistoryMaximumItems": {
+                    "default": 10000,
+                    "title": "Scan history size",
+                    "type": "number",
+                    "minimum": 5000,
+                    "maximum": 15000,
+                    "propertyOrder": 110,
+                    "description": "Specify the maximum number of entries to keep in the scan history. Entries include all on-demand scans performed in the past and all antivirus detections.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#maximum-number-of-items-in-the-antivirus-scan-history",
+                            "rel": "More information"
+                        }
+                    ]
+                }
+            }
+        },
+        "cloudService": {
+            "title": "Cloud delivered protection preferences",
+            "propertyOrder": 20,
+            "defaultProperties": [],
+            "properties": {
+                "enabled": {
+                    "default": true,
+                    "description": "Provides increased, faster protection with access to the latest protection data in the cloud. Works best with automatic sample submission turned on",
+                    "format": "checkbox",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#enable--disable-cloud-delivered-protection",
+                            "rel": "More information"
+                        }
+                    ],
+                    "propertyOrder": 10,
+                    "title": "Cloud delivered protection",
+                    "type": "boolean"
+                },
+                "diagnosticLevel": {
+                    "default": "optional",
+                    "title": "Diagnostic data collection",
+                    "type": "string",
+                    "propertyOrder": 20,
+                    "description": "We encourage you to share your diagnostic and usage data with us to help improve Microsoft products and services.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#diagnostic-collection-level",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["optional", "required"]
+                },
+                "automaticSampleSubmission": {
+                    "default": true,
+                    "description": "Sends sample files to Microsoft to help protect device users and your organization from potential threats",
+                    "format": "checkbox",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#enable--disable-automatic-sample-submissions",
+                            "rel": "More information"
+                        }
+                    ],
+                    "propertyOrder": 30,
+                    "title": "Automatic sample submissions",
+                    "type": "boolean"
+                },
+                "automaticDefinitionUpdateEnabled": {
+                    "default": true,
+                    "title": "Automatic security intelligence updates",
+                    "description": "Determines whether security intelligence updates are installed automatically:",
+                    "format": "checkbox",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#enable--disable-automatic-security-intelligence-updates",
+                            "rel": "More information"
+                        }
+                    ],
+                    "propertyOrder": 40,
+                    "type": "boolean"
+                }
+            }
+        },
+        "userInterface": {
+            "title": "User interface preferences",
+            "propertyOrder": 30,
+            "defaultProperties": [],
+            "properties": {
+                "hideStatusMenuIcon": {
+                    "default": false,
+                    "description": "Whether the status menu icon (shown in the top-right corner of the screen) is hidden or not.",
+                    "format": "checkbox",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#show--hide-status-menu-icon",
+                            "rel": "More information"
+                        }
+                    ],
+                    "propertyOrder": 10,
+                    "title": "Hide status menu icon",
+                    "type": "boolean"                    
+                },
+                "userInitiatedFeedback": {
+                    "default": "enabled",
+                    "title": "User initiated feedback",
+                    "type": "string",
+                    "propertyOrder": 20,
+                    "description": "Specify whether users can submit feedback to Microsoft by going to Help > Send Feedback.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#diagnostic-collection-level",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
+                }
+            }
+        },
+        "edr": {
+            "title": "EDR preferences",
+            "propertyOrder": 40,
+            "defaultProperties": [],
+            "properties": {
+                "tags": {
+                    "title": "Device tags",
+                    "type": "array",
+                    "maxItems": 1,
+                    "propertyOrder": 20,
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#device-tags",
+                            "rel": "More information"
+                        }
+                    ],
+                    "items": {
+                        "title": "Tag",
+                        "format": "grid",
+                        "type": "object",
+                        "properties": {
+                            "key": {
+                                "type": "string",
+                                "title": "Type of tag",
+                                "propertyOrder": 10,
+                                "enum": ["GROUP"]
+                            },
+                            "value": {
+                                "type": "string",
+                                "title": "Value of tag",
+                                "propertyOrder": 20
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
