@@ -44,10 +44,16 @@ script_exit()
 detect_distro()
 {
     if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        DISTRO=$ID
-        VERSION=$VERSION_ID
-        VERSION_NAME=$VERSION_CODENAME
+        if [[ $(grep -o -i "amazon_linux:2" | /etc/os-release) ]]; then
+            DISTRO='rhel'
+            VERSION=7
+        elif
+            . /etc/os-release
+            DISTRO=$ID
+            VERSION=$VERSION_ID
+            VERSION_NAME=$VERSION_CODENAME
+        fi
+        
     elif [ -f /etc/redhat-release ]; then
         if [ -f /etc/oracle-release ]; then
             DISTRO="ol"
@@ -60,9 +66,8 @@ detect_distro()
     else
         script_exit "Unable to detect distro"
     fi
-    echo "Distro detected: $DISTRO"
+    echo "Distro detected or similar to: $DISTRO"
 }
-
 verify_channel()
 {
     if [ "$CHANNEL" != "prod" ] && [ "$CHANNEL" != "insiders-fast" ] && [ "$CHANNEL" != "insiders-slow" ]; then
