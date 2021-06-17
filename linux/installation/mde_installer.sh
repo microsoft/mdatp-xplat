@@ -47,8 +47,7 @@ detect_distro()
         if [[ $(grep -o -i "amazon_linux:2" /etc/os-release) ]]; then
             DISTRO='rhel'
             VERSION=7
-        elif
-            . /etc/os-release
+        else
             DISTRO=$ID
             VERSION=$VERSION_ID
             VERSION_NAME=$VERSION_CODENAME
