@@ -44,7 +44,7 @@ script_exit()
 detect_distro()
 {
     if [ -f /etc/os-release ]; then
-        if [[ $(grep -o -i "amazon_linux:2" | /etc/os-release) ]]; then
+        if [[ $(grep -o -i "amazon_linux:2" /etc/os-release) ]]; then
             DISTRO='rhel'
             VERSION=7
         elif
