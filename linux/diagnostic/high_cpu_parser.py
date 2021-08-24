@@ -17,11 +17,15 @@ if group:
 
     for v in vals:
         name = v["name"]
+        
+        if "path" in v:
+            path = v["path"]
+
         cnt = int(v["total_files_scanned"])
         if name not in groups:
-            groups[name] = cnt
+            groups[name] = { cnt, path }
         else:
-            groups[name] = groups[name] + cnt
+            groups[name][0] = groups[name] + cnt
 
     lines = sorted(groups, key=lambda k: groups[k], reverse=True)
     for k in lines[:top]:
@@ -31,4 +35,4 @@ else:
     lines = sorted(vals, key=lambda k: int(k['total_files_scanned']), reverse=True)
     for v in lines[:top]:
         if int(v["total_files_scanned"]) != 0:
-            print("%s\t%s\t%s" % (v["id"], v["name"], v["total_files_scanned"]))
+            print("%s\t%s\t%s\t%s" % (v["id"], v["name"], v["total_files_scanned"], v["path"]))
