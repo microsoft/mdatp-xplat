@@ -18,7 +18,7 @@ if group:
     for v in vals:
         name = v["name"]
         
-        if ("path" in v):
+        if "path" in v:
             path = v["path"]
 
         cnt = int(v["total_files_scanned"])
