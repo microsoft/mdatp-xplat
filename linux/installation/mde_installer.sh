@@ -53,7 +53,7 @@ detect_distro()
             VERSION=$VERSION_ID
             VERSION_NAME=$VERSION_CODENAME
         fi
-        
+
     elif [ -f /etc/redhat-release ]; then
         if [ -f /etc/oracle-release ]; then
             DISTRO="ol"
@@ -112,7 +112,7 @@ set_package_manager()
 {
     if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         PKG_MGR=apt
-    elif [ "$DISTRO" = "rhel" ] || [ "$DISTRO" = "centos" ] || [ "$DISTRO" = "ol" ]; then
+    elif [ "$DISTRO" = "rhel" ] || [ "$DISTRO" = "centos" ] || [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ]; then
         PKG_MGR=yum
     elif [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ] ; then
         DISTRO="sles"
@@ -523,7 +523,7 @@ set_package_manager
 if [ "$INSTALL_MODE" == "i" ]; then
     if [ "$DISTRO" == "debian" ] || [ "$DISTRO" == "ubuntu" ]; then
         install_on_debian
-    elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ]; then
+    elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ]; then
         install_on_redhat
     elif [ "$DISTRO" = "sles" ]; then
         install_on_sles
