@@ -11,19 +11,25 @@ There are a few extra features for one-line installation like [onboarding](https
 
 ```bash
 ❯ ./mde_installer.sh --help
+mde_installer.sh v0.4.2
 usage: basename ./mde_installer.sh [OPTIONS]
 Options:
--c|--channel      specify the channel from which you want to install. Default: insiders-fast
--i|--install      install the product
--r|--remove       remove the product
--u|--upgrade      upgrade the existing product
--o|--onboard      onboard/offboard the product with <onboarding_script>
--p|--passive-mode set EPP to passive mode
--t|--tag          set a tag by declaring <name> and <value>. ex: -t GROUP Coders
--m|--min_req      enforce minimum requirements
--w|--clean        remove repo from package manager for a specific channel
--v|--version      print out script version
--h|--help         display help
+ -c|--channel         specify the channel from which you want to install. Default: insiders-fast
+ -i|--install         install the product
+ -r|--remove          remove the product
+ -u|--upgrade         upgrade the existing product to a newer version if available
+ -o|--onboard         onboard/offboard the product with <onboarding_script>
+ -p|--passive-mode    set EPP to passive mode
+ -t|--tag             set a tag by declaring <name> and <value>. ex: -t GROUP Coders
+ -m|--min_req         enforce minimum requirements
+ -x|--skip_conflict   skip conflicting application verification
+ -w|--clean           remove repo from package manager for a specific channel
+ -y|--yes             assume yes for all mid-process prompts (highly reccomended)
+ -s|--verbose         verbose output
+ -v|--version         print out script version
+ -d|--debug           set debug mode
+ --proxy <proxy URL>  set proxy
+ -h|--help            display help
 ```
 
 ## Sample use case
@@ -41,6 +47,7 @@ This one-liner would:
    3. Pull latest version of MDE and install it.
 3. Onboard MDE according to a provided onboarding script (`--onboarding <onboarding_script>`)
 4. Once installed, will set a device group tag to the device (`--tag GROUP Coders`)
+5. If the machine is behind proxy, use `--proxy` to set proxy url
 
 ## Additional details
 
