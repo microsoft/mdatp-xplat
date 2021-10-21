@@ -1,59 +1,171 @@
 #!/bin/bash
 
-SCRIPT_VERSION=0.1
+SCRIPT_VERSION="0.4.2"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
+DISTRO_FAMILY=
 PKG_MGR=
-INSTALL_CMD=
 INSTALL_MODE=
+DEBUG=
+VERBOSE=
 MDE_VERSION_CMD="mdatp health --field app_version"
 PMC_URL=https://packages.microsoft.com/config
 SCALED_VERSION=
 VERSION=
 ONBOARDING_SCRIPT=
 MIN_REQUIREMENTS=
+SKIP_CONFLICTING_APPS=
 PASSIVE_MODE=
-MIN_CORES=1
-MIN_MEM_MB=1024
-MIN_DISK_SPACE_MB=1024
+MIN_CORES=2
+MIN_MEM_MB=2048
+MIN_DISK_SPACE_MB=1280
 declare -a tags
-error_code=0
+
+# Error codes
+SUCCESS=0
+ERR_INTERNAL=1
+ERR_INVALID_ARGUMENTS=2
+ERR_INSUFFICIENT_PRIVILAGES=3
+ERR_NO_INTERNET_CONNECTIVITY=4
+ERR_CONFLICTING_APPS=5
+ERR_UNSUPPORTED_DISTRO=10
+ERR_UNSUPPORTED_VERSION=11
+ERR_INSUFFICIENT_REQUIREMENTS=12
+ERR_MDE_NOT_INSTALLED=20
+ERR_INSTALLATION_FAILED=21
+ERR_UNINSTALLATION_FAILED=22
+ERR_FAILED_DEPENDENCY=23
+ERR_FAILED_REPO_SETUP=24
+ERR_INVALID_CHANNEL=25
+ERR_ONBOARDING_NOT_FOUND=30
+ERR_ONBOARDING_FAILED=31
+ERR_TAG_NOT_SUPPORTED=40
+ERR_PARAMETER_SET_FAILED=41
+
+# Predefined values
+export DEBIAN_FRONTEND=noninteractive
+
 
 script_exit()
 {
     if [ -z "$1" ]; then
-        echo "INTERNAL ERROR. script_exit requires an argument" >&2
+        echo "[!] INTERNAL ERROR. script_exit requires an argument" >&2
         exit 1
     fi
 
+    if [ -n $DEBUG ]; then
+        print_state
+    fi
+
     if [ "$2" = "0" ]; then
-        echo "$1"
+        echo "[v] $1"
     else
-        echo "$1" >&2
+	    echo "[x] $1" >&2
     fi
 
     if [ -z "$2" ]; then
         exit 1
     else
-        echo "Script exiting with status $2"
-        exit $2
+        echo "[*] exiting ($2)"
+	    exit $2
     fi
 }
+
+print_state()
+{
+    if [ -z $(which mdatp) ]; then
+        echo "[S] MDE not installed."
+    else
+        echo "[S] MDE installed."
+        echo "[S] Onboarded: $(mdatp health --field licensed)"
+        echo "[S] Passive mode: $(mdatp health --field passive_mode_enabled)"
+        echo "[S] Device tags: $(mdatp health --field edr_device_tags)"
+        echo "[S] Subsystem: $(mdatp health --field real_time_protection_subsystem)"
+        echo "[S] Conflicting applications: $(mdatp health --field conflicting_applications)"
+    fi
+}
+
+run_quietly()
+{
+    # run_quietly <command> <error_msg> [<error_code>]
+    # use error_code for script_exit
+
+    if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+        echo "[!] INTERNAL ERROR. run_quietly requires 2 or 3 arguments" >&2
+        exit 1
+    fi
+
+    local out=$(eval $1 2>&1; echo "$?")
+    local exit_code=$(echo "$out" | tail -n1)
+
+    if [ -n "$VERBOSE" ]; then
+        echo "$out"
+    fi
+    
+    if [ "$exit_code" -ne 0 ]; then
+        if [ -n $DEBUG ]; then             
+            echo "command: $1"
+            echo "output: $out"
+            echo "exit_code: $exit_code"
+        fi
+
+        if [ $# -eq 2 ]; then
+            echo $2 >&2
+        else
+            script_exit "$2" $3
+        fi
+    fi
+
+    return $exit_code
+}
+
+retry_quietly()
+{
+    # retry_quietly <retries> <command> <error_msg> [<error_code>]
+    # use error_code for script_exit
+    
+    if [ $# -lt 3 ] || [ $# -gt 4 ]; then
+        echo "[!] INTERNAL ERROR. retry_quietly requires 3 or 4 arguments" >&2
+        exit 1
+    fi
+
+    local exit_code=
+    local retries=$1
+
+    while [ $retries -gt 0 ]
+    do
+
+        if run_quietly "$2" "$3"; then
+            exit_code=0
+        else
+            exit_code=1
+        fi
+        
+        if [ $exit_code -ne 0 ]; then
+            sleep 1
+            ((retries--))
+            echo "[r] $(($1-$retries))/$1"
+        else
+            retries=0
+        fi
+    done
+
+    if [ $# -eq 4 ] && [ $exit_code -ne 0 ]; then
+        script_exit $3 $4
+    fi
+
+    return $exit_code
+}
+
 
 detect_distro()
 {
     if [ -f /etc/os-release ]; then
-        if [[ $(grep -o -i "amazon_linux:2" /etc/os-release) ]]; then
-            DISTRO='rhel'
-            VERSION=7
-        else
-            . /etc/os-release
-            DISTRO=$ID
-            VERSION=$VERSION_ID
-            VERSION_NAME=$VERSION_CODENAME
-        fi
-
+        . /etc/os-release
+        DISTRO=$ID
+        VERSION=$VERSION_ID
+        VERSION_NAME=$VERSION_CODENAME
     elif [ -f /etc/redhat-release ]; then
         if [ -f /etc/oracle-release ]; then
             DISTRO="ol"
@@ -64,68 +176,167 @@ detect_distro()
         fi
         VERSION=$(grep -o "release .*" /etc/redhat-release | cut -d ' ' -f2)
     else
-        script_exit "Unable to detect distro"
+        script_exit "unable to detect distro" $ERR_UNSUPPORTED_DISTRO
     fi
-    echo "Distro detected or similar to: $DISTRO"
+
+    if [ "$DISTRO" == "debian" ] || [ "$DISTRO" == "ubuntu" ]; then
+        DISTRO_FAMILY="debian"
+    elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
+        DISTRO_FAMILY="fedora"
+    elif [ "$DISTRO" == "sles" ] || [ "$DISTRO" == "sle-hpc" ] || [ "$DISTRO" == "sles_sap" ]; then
+        DISTRO_FAMILY="sles"
+    else
+        script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
+    fi
+
+    echo "[>] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
 }
+
+verify_connectivity()
+{
+    if [ -z "$1" ]; then
+        script_exit "Internal error. verify_connectivity require a parameter" $ERR_INTERNAL
+    fi
+
+    if which wget; then
+        connect_command="wget -O - --quiet --no-verbose --timeout 2 https://cdn.x.cp.wd.microsoft.com/ping --no-check-certificate"
+    elif which curl; then
+        connect_command="curl --silent --connect-timeout 2 --insecure https://cdn.x.cp.wd.microsoft.com/ping"
+    else
+        script_exit "Unable to find wget/curl commands" $ERR_INTERNAL
+    fi
+
+    local connected=
+    local counter=3
+
+    while [ $counter -gt 0 ]
+    do
+        connected=$($connect_command)
+
+        if [[ "$connected" != "OK" ]]; then
+            sleep 1
+            ((counter--))
+        else
+            counter=0
+        fi
+    done
+
+    echo "[final] connected=$connected"
+    
+    if [[ "$connected" != "OK" ]]; then
+        script_exit "internet connectivity needed for $1" $ERR_NO_INTERNET_CONNECTIVITY
+    fi
+    echo "[v] connected"
+}
+
 verify_channel()
 {
     if [ "$CHANNEL" != "prod" ] && [ "$CHANNEL" != "insiders-fast" ] && [ "$CHANNEL" != "insiders-slow" ]; then
-        script_exit "Invalid channel: $CHANNEL. Please provide valid channel. Available channels are prod, insiders-fast, insiders-slow"
+        script_exit "Invalid channel: $CHANNEL. Please provide valid channel. Available channels are prod, insiders-fast, insiders-slow" $ERR_INVALID_CHANNEL
     fi
 }
 
 verify_privileges()
 {
     if [ -z "$1" ]; then
-        script_exit "Internal error. verify_privileges require a parameter"
+        script_exit "Internal error. verify_privileges require a parameter" $ERR_INTERNAL
     fi
 
     if [ $(id -u) -ne 0 ]; then
-        script_exit "Need sudo privileges to perform $1 operation"
+        script_exit "root privileges required to perform $1 operation" $ERR_INSUFFICIENT_PRIVILAGES
     fi
 }
 
 verify_min_requirements()
 {
-    echo "verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
-
-    local CORES=$(nproc --all)
-    if [ $CORES -lt $MIN_CORES ]; then
-        script_exit "MDE requires $MIN_CORES cores or more to run, found $CORES."
+    # echo "[>] verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
+    
+    local cores=$(nproc --all)
+    if [ $cores -lt $MIN_CORES ]; then
+        script_exit "MDE requires $MIN_CORES cores or more to run, found $cores." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
-    local MEM_MB=$(free -m | grep Mem | awk '{print $2}')
-    if [ $MEM_MB -lt $MIN_MEM_MB ]; then
-        script_exit "MDE requires at least $MIN_MEM_MB MB of RAM to run. found $MEM_MB MB."
+    local mem_mb=$(free -m | grep Mem | awk '{print $2}')
+    if [ $mem_mb -lt $MIN_MEM_MB ]; then
+        script_exit "MDE requires at least $MIN_MEM_MB MB of RAM to run. found $mem_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
-    local DISK_SPACE_MB=$(df -m . | tail -1 | awk '{print $4}')
-    if [ $DISK_SPACE_MB -lt $MIN_DISK_SPACE_MB ]; then
-        script_exit "MDE requires at least $MIN_DISK_SPACE_MB MB of free disk space for installation"
+    local disk_space_mb=$(df -m . | tail -1 | awk '{print $4}')
+    if [ $disk_space_mb -lt $MIN_DISK_SPACE_MB ]; then
+        script_exit "MDE requires at least $MIN_DISK_SPACE_MB MB of free disk space for installation. found $disk_space_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
-    echo "device qualifies"
+    echo "[v] min_requirements met"
+}
+
+find_service()
+{
+    if [ -z "$1" ]; then
+        script_exit "INTERNAL ERROR. find_service requires an argument" $ERR_INTERNAL
+    fi
+
+	lines=$(systemctl status $1 2>&1 | grep "Active: active" | wc -l)
+	
+    if [ $lines -eq 0 ]; then
+		return 1
+	fi
+
+	return 0
+}
+
+verify_conflicting_applications()
+{
+    # echo "[>] identifying conflicting applications (fanotify mounts)"
+
+    # find applications that are using fanotify
+    local conflicting_apps=$(find /proc/*/fdinfo/ -type f -exec sh -c 'lines=$(cat {} | grep "fanotify mnt_id" | wc -l); if [ $lines -gt 0 ]; then cat $(dirname {})/../cmdline; fi;' \; 2>/dev/null)
+    
+    if [ ! -z $conflicting_apps ]; then
+        script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
+    fi
+
+    # find known security services
+    # | Vendor      | Service       |
+    # |-------------|---------------|
+    # | CrowdStrike | falcon-sensor |
+    # | CarbonBlack | cbsensor      |
+    # | McAfee      | MFEcma        |
+    # | Trend Micro | ds_agent      |
+
+    local conflicting_services=('ds_agent' 'falcon-sensor' 'cbsensor' 'MFEcma')
+    for t in "${conflicting_services[@]}"
+    do
+        set -- $t
+        # echo "[>] locating service: $1"
+        if find_service $1; then
+            script_exit "found conflicting service: [$1], aborting" $ERR_CONFLICTING_APPS
+        fi        
+    done 
+
+    echo "[v] no conflicting applications found"
 }
 
 set_package_manager()
 {
-    if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+    if [ "$DISTRO_FAMILY" = "debian" ]; then
         PKG_MGR=apt
-    elif [ "$DISTRO" = "rhel" ] || [ "$DISTRO" = "centos" ] || [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ]; then
+        PKG_MGR_INVOKER="apt $ASSUMEYES"
+    elif [ "$DISTRO_FAMILY" = "fedora" ]; then
         PKG_MGR=yum
-    elif [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ] ; then
+        PKG_MGR_INVOKER="yum $ASSUMEYES"
+    elif [ "$DISTRO_FAMILY" = "sles" ]; then
         DISTRO="sles"
-        PKG_MGR=zypper
-    else
-        script_exit "Unsupported distro"
+        PKG_MGR="zypper"
+        PKG_MGR_INVOKER="zypper --non-interactive"
+    else    
+        script_exit "unsupported distro", $ERR_UNSUPPORTED_DISTRO
     fi
 }
 
 check_if_pkg_is_installed()
 {
     if [ -z "$1" ]; then
-        script_exit "INTERNAL ERROR. check_if_pkg_is_installed requires an argument"
+        script_exit "INTERNAL ERROR. check_if_pkg_is_installed requires an argument" $ERR_INTERNAL
     fi
 
     if [ "$PKG_MGR" = "apt" ]; then
@@ -139,180 +350,202 @@ check_if_pkg_is_installed()
 
 install_required_pkgs()
 {
-    local PACKAGES=
-    local PKGS_TO_BE_INSTALLED=
+    local packages=
+    local pkgs_to_be_installed=
 
     if [ -z "$1" ]; then
-        script_exit "INTERNAL ERROR. install_required_pkgs requires an argument"
+        script_exit "INTERNAL ERROR. install_required_pkgs requires an argument" $ERR_INTERNAL
     fi
 
-    PACKAGES=("$@")
-    for pkg in "${PACKAGES[@]}"
+    packages=("$@")
+    for pkg in "${packages[@]}"
     do
         if  ! check_if_pkg_is_installed $pkg; then
-            PKGS_TO_BE_INSTALLED="$PKGS_TO_BE_INSTALLED $pkg"
+            pkgs_to_be_installed="$pkgs_to_be_installed $pkg"
         fi
     done
 
-    if [ ! -z "$PKGS_TO_BE_INSTALLED" ]; then
-        echo "Installing required packages $PKGS_TO_BE_INSTALLED"
-        eval "$INSTALL_CMD $PKGS_TO_BE_INSTALLED" || script_exit "Unable to install the required packages" $?
+    if [ ! -z "$pkgs_to_be_installed" ]; then
+        echo "[>] installing $pkgs_to_be_installed"
+        run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY 
     else
-        echo "All the required packages are installed"
+        echo "[v] required pkgs are installed"
     fi
 }
 
 wait_for_package_manager_to_complete()
 {
-    local LINES=
-    local COUNTER=10
+    local lines=
+    local counter=120
 
-    while [ $COUNTER -gt 0 ]
+    while [ $counter -gt 0 ]
     do
-        LINES=$(ps axo pid,comm | grep "$PKG_MGR" | grep -v grep -c)
-        if [ "$LINES" -eq 0 ]; then
-            echo "package manager is free"
+        lines=$(ps axo pid,comm | grep "$PKG_MGR" | grep -v grep -c)
+        if [ "$lines" -eq 0 ]; then
+            echo "[>] package manager freed, resuming installation"
             return
         fi
         sleep 1
-        ((COUNTER--))
+        ((counter--))
     done
 
-    echo "package manager still online..."
+    echo "[!] pkg_mgr blocked"
 }
 
 install_on_debian()
 {
-    INSTALL_CMD="sudo apt install $ASSUMEYES"
-    local PACKAGES=
-    local PKG_VERSION=
+    local packages=
+    local pkg_version=
+    local success=
 
     if check_if_pkg_is_installed mdatp; then
-        PKG_VERSION=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version" $?
-        script_exit "MDE package is already installed with version $PKG_VERSION" 0
+        pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
+        echo "[i] MDE already installed ($pkg_version)"
+        return
     fi
 
-    PACKAGES=(curl libplist-utils apt-transport-https gnupg)
+    packages=(curl apt-transport-https gnupg)
 
-    install_required_pkgs ${PACKAGES[@]}
+    install_required_pkgs ${packages[@]}
 
     ### Configure the repository ###
-    curl -sSL $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list | sudo tee /etc/apt/sources.list.d/microsoft-$CHANNEL.list || script_exit "Unable to fetch the repo" $?
+    rm -f microsoft.list > /dev/null
+    run_quietly "curl -s -o microsoft.list $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list" "unable to fetch repo list" $ERR_FAILED_REPO_SETUP
+    run_quietly "mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
 
     ### Fetch the gpg key ###
-    curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc || script_exit "Unable to fetch the gpg key" $?
-
-    sudo apt-get update || echo "Unable to refresh the repos properly. command exited with status $?" >&2
+    run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+    run_quietly "apt-get update" "[!] unable to refresh the repos properly"
 
     ### Install MDE ###
-    echo "Installing MDE on distro: $DISTRO version: $VERSION"
+    echo "[>] installing MDE"
     if [ "$CHANNEL" = "prod" ]; then
-        sudo apt -t $VERSION_NAME install $ASSUMEYES mdatp || script_exit "Unable to install MDE" $?
+        if [[ -z "$VERSION_NAME" ]]; then
+            run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+        else
+            run_quietly "$PKG_MGR_INVOKER -t $VERSION_NAME install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+        fi
     else
-        sudo apt -t $CHANNEL install $ASSUMEYES mdatp || script_exit "Unable to install MDE" $?
+        run_quietly "$PKG_MGR_INVOKER -t $CHANNEL install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     fi
 
-    echo "Package successfully installed"
+    sleep 5
+    echo "[v] installed"
 }
 
-install_on_redhat()
+install_on_fedora()
 {
-    INSTALL_CMD="sudo yum install $ASSUMEYES"
-    local PACKAGES=
-    local PKG_VERSION=
-    local REPO=
+    local packages=
+    local pkg_version=
+    local repo=
+    local effective_distro=
 
     if check_if_pkg_is_installed mdatp; then
-        PKG_VERSION=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version" $?
-        script_exit "MDE package is already installed with version $PKG_VERSION" 0
+        pkg_version=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
+        echo "[i] MDE already installed ($pkg_version)"
+        return
     fi
 
-    REPO=packages-microsoft-com
-    PACKAGES=(curl yum-utils)
+    repo=packages-microsoft-com
+    packages=(curl yum-utils)
 
-    install_required_pkgs ${PACKAGES[@]}
+    if [[ $SCALED_VERSION == 7* ]] && [ "$DISTRO" == "rhel" ]; then
+        packages=($packages deltarpm)
+    fi
+
+    install_required_pkgs ${packages[@]}
 
     ### Configure the repo name from which package should be installed
     if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
-        REPO=packages-microsoft-com-prod
+        repo=packages-microsoft-com-prod
     fi
 
-    if [ "$DISTRO" == "ol" ]; then
-        DISTRO="rhel"
+    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
+        effective_distro="rhel"
+    else
+        effective_distro="$DISTRO"
     fi
 
     ### Configure the repository ###
-    sudo yum-config-manager --add-repo=$PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.repo || script_exit "Unable to fetch the repo" $?
+    run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
 
     ### Fetch the gpg key ###
-    curl -sSL https://packages.microsoft.com/keys/microsoft.asc > ./microsoft.asc || script_exit "Unable to fetch gpg key" $?
-    sudo rpm --import ./microsoft.asc
-    sudo yum makecache || echo " Unable to refresh the repos properly. Command exited with status $?">&2
+    run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+    run_quietly "rpm --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+    run_quietly "yum makecache" " Unable to refresh the repos properly. Command exited with status ($?)"
 
     ### Install MDE ###
-    echo "Installing MDE on distro: $DISTRO version: $VERSION"
-    sudo yum --enablerepo=$REPO-$CHANNEL install $ASSUMEYES mdatp || script_exit "Unable to install MDE" $?
-    echo "Package successfully installed"
+    echo "[>] installing MDE"
+    run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo-$CHANNEL install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    
+    sleep 5
+    echo "[v] installed"
 }
 
 install_on_sles()
 {
-    INSTALL_CMD="sudo zypper install $ASSUMEYES"
-    local PACKAGES=
-    local PKG_VERSION=
-    local REPO=
+    local packages=
+    local pkg_version=
+    local repo=
 
     if check_if_pkg_is_installed mdatp; then
-        PKG_VERSION=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version" $?
-        script_exit "MDE package is already installed with version $PKG_VERSION" 0
+        pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
+        echo "[i] MDE already installed ($pkg_version)"
+        return
     fi
 
-    REPO=packages-microsoft-com
-    PACKAGES=(curl)
+    repo=packages-microsoft-com
+    packages=(curl)
 
-    install_required_pkgs ${PACKAGES[@]}
+    install_required_pkgs ${packages[@]}
 
     wait_for_package_manager_to_complete
 
     ### Configure the repository ###
-    sudo zypper addrepo -c -f -n microsoft-$CHANNEL https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo
+    run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n microsoft-$CHANNEL https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
 
     ### Fetch the gpg key ###
-    curl -sSL https://packages.microsoft.com/keys/microsoft.asc > ./microsoft.asc || script_exit "Unable to fetch gpg key" $?
-    sudo rpm --import ./microsoft.asc
-    sudo zypper refresh || echo " Unable to refresh the repos properly. Command exited with status $?" >&2
+    run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+    
+    wait_for_package_manager_to_complete
 
     ### Install MDE ###
-    echo "Installing MDE on distro: $DISTRO version: $VERSION"
-    if ! sudo zypper install $ASSUMEYES $REPO-$CHANNEL:mdatp; then
-        echo "Failed, trying again"
-        sudo zypper install mdatp || script_exit "Unable to install MDE" $?
+    echo "[>] installing MDE"
+
+    run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES $repo-$CHANNEL:mdatp" "[!] failed to install MDE (1/2)"
+    
+    if ! check_if_pkg_is_installed mdatp; then
+        echo "[r] retrying"
+        sleep 2
+        run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES mdatp" "unable to install MDE 2/2 ($?)" $ERR_INSTALLATION_FAILED
     fi
-    echo "Package successfully installed"
+
+    sleep 5
+    echo "[v] installed."
 }
 
 remove_repo()
 {
     # TODO: add support for debian and fedora
-    if [ $DISTRO == 'sles' ]; then
-        sudo zypper removerepo packages-microsoft-com-$CHANNEL
+    if [ $DISTRO == 'sles' ] || [ "$DISTRO" = "sle-hpc" ]; then
+        run_quietly "$PKG_MGR_INVOKER removerepo packages-microsoft-com-$CHANNEL" "failed to remove repo"
     else
-        echo "unsupported for distro $DISTRO"
+        script_exit "unsupported distro for remove repo $DISTRO" $ERR_UNSUPPORTED_DISTRO
     fi
 }
 
 upgrade_mdatp()
 {
     if [ -z "$1" ]; then
-        script_exit "INTERNAL ERROR. upgrade_mdatp requires an argument (the upgrade command)"
+        script_exit "INTERNAL ERROR. upgrade_mdatp requires an argument (the upgrade command)" $ERR_INTERNAL
     fi
 
     if ! check_if_pkg_is_installed mdatp; then
-        script_exit "MDE package is not installed. Please install it first"
+        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
     fi
 
-    sudo $PKG_MGR $1 $ASSUMEYES mdatp || script_exit "Unable to upgrade MDE" $?
-    echo "Package successfully upgraded"
+    run_quietly "$PKG_MGR_INVOKER $1 mdatp" "Unable to upgrade MDE $?" $ERR_INSTALLATION_FAILED
+    echo "[v] upgraded"
 }
 
 remove_mdatp()
@@ -321,70 +554,80 @@ remove_mdatp()
         script_exit "MDE package is not installed. Please install it first"
     fi
 
-    sudo $PKG_MGR remove $ASSUMEYES mdatp || script_exit "Unable to remove MDE" $?
-    script_exit "Package successfully removed" 0
+    run_quietly "$PKG_MGR_INVOKER remove mdatp" "unable to remove MDE $?" $ERR_UNINSTALLATION_FAILED
+    script_exit "[v] removed" $SUCCESS
 }
 
 scale_version_id()
 {
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
-    if [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ]; then
-        if [[ $VERSION == 7* ]]; then
+    if [ "$DISTRO_FAMILY" == "fedora" ]; then
+        if [[ $VERSION == 7* ]] || [ "$DISTRO" == "amzn" ]; then
             SCALED_VERSION=7
-        elif [[ $VERSION == 8* ]]; then
+        elif [[ $VERSION == 8* ]] || [ "$DISTRO" == "fedora" ]; then
             SCALED_VERSION=8
         else
-            script_exit "Unsupported version: $DISTRO $VERSION" 7
+            script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [ "$DISTRO" == "sles" ]; then
+    elif [ "$DISTRO_FAMILY" == "sles" ]; then
         if [[ $VERSION == 12* ]]; then
             SCALED_VERSION=12
         elif [[ $VERSION == 15* ]]; then
             SCALED_VERSION=15
         else
-            script_exit "Unsupported version: $DISTRO $VERSION" 7
+            script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
+    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]]; then
+        SCALED_VERSION=18.04
     else
+        # no problems with 
         SCALED_VERSION=$VERSION
     fi
-    echo "Scaled version: $SCALED_VERSION"
+    echo "[>] scaled: $SCALED_VERSION"
 }
 
 onboard_device()
 {
-    echo "onboarding script: $ONBOARDING_SCRIPT"
+    echo "[>] onboarding script: $ONBOARDING_SCRIPT"
 
     if ! check_if_pkg_is_installed mdatp; then
-        script_exit "MDE package is not installed. Please install it first"
+        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
     fi
 
     if [ ! -f $ONBOARDING_SCRIPT ]; then
-        script_exit "error: onboarding script not found."
+        script_exit "error: onboarding script not found." $ERR_ONBOARDING_NOT_FOUND
     fi
 
     # Make sure python is installed
     PYTHON=$(which python || which python3)
 
     if [ -z $PYTHON ]; then
-        script_exit "error: cound not locate python."
+        script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
     fi
 
     # Run onboarding script
-    echo "running onboarding script..."
-    sleep 2
-    sudo $PYTHON $ONBOARDING_SCRIPT || script_exit "error: onboarding failed" 9
-    echo "onboarding successful"
+    # echo "[>] running onboarding script..."
+    sleep 1
+    run_quietly "$PYTHON $ONBOARDING_SCRIPT" "error: onboarding failed" $ERR_ONBOARDING_FAILED
+
+    # validate onboarding
+    sleep 3
+    if [[ $(mdatp health --field org_id | grep "No license found" -c) -gt 0 ]]; then
+        script_exit "onboarding failed" $ERR_ONBOARDING_FAILED
+    fi
+    echo "[>] onboarded"
 }
 
 set_epp_to_passive_mode()
 {
-    echo "Settgin MDE/EPP to passive mode"
+    # echo "[>] setting MDE/EPP to passive mode"
 
     if ! check_if_pkg_is_installed mdatp; then
-        script_exit "MDE package is not installed. Please install it first"
+        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
     fi
 
-    mdatp config passive-mode --value enabled
+    retry_quietly 3 "mdatp config passive-mode --value enabled" "failed to set MDE to passive-mode" $ERR_PARAMETER_SET_FAILED
+    echo "[v] passive mode set"
 }
 
 set_device_tags()
@@ -393,13 +636,13 @@ set_device_tags()
     do
         set -- $t
         if [ "$1" == "GROUP" ] || [ "$1" == "SecurityWorkspaceId" ] || [ "$1" == "AzureResourceId" ] || [ "$1" == "SecurityAgentId" ]; then
-            echo "setting tag: ($1, $2)"
-            eval "sudo mdatp edr tag set --name $1 --value $2"
+            # echo "[>] setting tag: ($1, $2)"
+            retry_quietly 2 "mdatp edr tag set --name $1 --value $2" "failed to set tag" $ERR_PARAMETER_SET_FAILED
         else
-            echo "invalid tag name: $1. supported tags: GROUP, SecurityWorkspaceId, AzureResourceId and SecurityAgentId"
-            error_code=11
+            script_exit "invalid tag name: $1. supported tags: GROUP, SecurityWorkspaceId, AzureResourceId and SecurityAgentId" $ERR_TAG_NOT_SUPPORTED
         fi
     done
+    echo "[v] tags set."  
 }
 
 usage()
@@ -407,22 +650,27 @@ usage()
     echo "mde_installer.sh v$SCRIPT_VERSION"
     echo "usage: $1 [OPTIONS]"
     echo "Options:"
-    echo " -c|--channel      specify the channel from which you want to install. Default: insiders-fast"
-    echo " -i|--install      install the product"
-    echo " -r|--remove       remove the product"
-    echo " -u|--upgrade      upgrade the existing product"
-    echo " -o|--onboard      onboard/offboard the product with <onboarding_script>"
-    echo " -p|--passive-mode set EPP to passive mode"
-    echo " -t|--tag          set a tag by declaring <name> and <value>. ex: -t GROUP Coders"
-    echo " -m|--min_req      enforce minimum requirements"
-    echo " -w|--clean        remove repo from package manager for a specific channel"
-    echo " -v|--version      print out script version"
-    echo " -h|--help         display help"
+    echo " -c|--channel         specify the channel from which you want to install. Default: insiders-fast"
+    echo " -i|--install         install the product"
+    echo " -r|--remove          remove the product"
+    echo " -u|--upgrade         upgrade the existing product to a newer version if available"
+    echo " -o|--onboard         onboard/offboard the product with <onboarding_script>"
+    echo " -p|--passive-mode    set EPP to passive mode"
+    echo " -t|--tag             set a tag by declaring <name> and <value>. ex: -t GROUP Coders"
+    echo " -m|--min_req         enforce minimum requirements"
+    echo " -x|--skip_conflict   skip conflicting application verification"
+    echo " -w|--clean           remove repo from package manager for a specific channel"
+    echo " -y|--yes             assume yes for all mid-process prompts (highly reccomended)"
+    echo " -s|--verbose         verbose output"
+    echo " -v|--version         print out script version"
+    echo " -d|--debug           set debug mode"
+    echo " --proxy <proxy URL>  set proxy"   
+    echo " -h|--help            display help"
 }
 
 if [ $# -eq 0 ]; then
     usage
-    script_exit "No arguments were provided. Specify --help for help"
+    script_exit "no arguments were provided. specify --help for details" $ERR_INVALID_ARGUMENTS
 fi
 
 while [ $# -ne 0 ];
@@ -430,8 +678,8 @@ do
     case "$1" in
         -c|--channel)
             if [ -z "$2" ]; then
-                script_exit "$1 option requires an argument"
-            fi
+                script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
+            fi        
             CHANNEL=$2
             verify_channel
             shift 2
@@ -441,7 +689,7 @@ do
             verify_privileges "install"
             shift 1
             ;;
-        -u|--upgrade)
+        -u|--upgrade|--update)
             INSTALL_MODE="u"
             verify_privileges "upgrade"
             shift 1
@@ -453,14 +701,18 @@ do
             ;;
         -o|--onboard)
             if [ -z "$2" ]; then
-                script_exit "$1 option requires an argument"
-            fi
+                script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
+            fi        
             ONBOARDING_SCRIPT=$2
             verify_privileges "onboard"
             shift 2
             ;;
         -m|--min_req)
             MIN_REQUIREMENTS=1
+            shift 1
+            ;;
+        -x|--skip_conflict)
+            SKIP_CONFLICTING_APPS=1
             shift 1
             ;;
         -p|--passive-mode)
@@ -470,7 +722,7 @@ do
             ;;
         -t|--tag)
             if [[ -z "$2" || -z "$3" ]]; then
-                script_exit "$1 option requires two arguments"
+                script_exit "$1 option requires two arguments" $ERR_INVALID_ARGUMENTS
             fi
             verify_privileges "set-tag"
             tags+=("$2 $3")
@@ -489,19 +741,34 @@ do
             ASSUMEYES=-y
             shift 1
             ;;
+        -s|--verbose)
+            VERBOSE=1
+            shift 1
+            ;;
         -v|--version)
-            script_exit "$SCRIPT_VERSION" 0
+            script_exit "$SCRIPT_VERSION" $SUCCESS
+            ;;
+        -d|--debug)
+            DEBUG=1
+            shift 1
+            ;;
+        --proxy)
+            if [[ -z "$2" ]]; then
+                script_exit "$1 option requires two arguments" $ERR_INVALID_ARGUMENTS
+            fi
+            export http_proxy=$2
+            export https_proxy=$2
+            shift 2
             ;;
         *)
-            echo "Unknown argument: '$1'" >&2
-            echo "Use -h or --help for usage" >&2
-            script_exit "Invalid argument" 2
+            echo "use -h or --help for details"
+            script_exit "unknown argument" $ERR_INVALID_ARGUMENTS
             ;;
     esac
 done
 
 if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && ${#tags[@]} -eq 0 ]]; then
-    script_exit "No installation mode specified. Specify --help for help"
+    script_exit "no installation mode specified. Specify --help for help" $ERR_INVALID_ARGUMENTS
 fi
 
 echo "--- mde_installer.sh v$SCRIPT_VERSION ---"
@@ -517,27 +784,38 @@ detect_distro
 ### Scale the version number according to repos avaiable on pmc ###
 scale_version_id
 
-### Set package manager
+### Set package manager ###
 set_package_manager
 
+### Act according to arguments ###
 if [ "$INSTALL_MODE" == "i" ]; then
-    if [ "$DISTRO" == "debian" ] || [ "$DISTRO" == "ubuntu" ]; then
+    verify_connectivity "package installation"
+
+    if [ -z $SKIP_CONFLICTING_APPS ]; then
+        verify_conflicting_applications
+    fi
+    
+    if [ "$DISTRO_FAMILY" == "debian" ]; then
         install_on_debian
-    elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ]; then
-        install_on_redhat
-    elif [ "$DISTRO" = "sles" ]; then
+    elif [ "$DISTRO_FAMILY" == "fedora" ]; then
+        install_on_fedora
+    elif [ "$DISTRO_FAMILY" = "sles" ]; then
         install_on_sles
     else
-        script_exit "Unsupported distro $DISTRO $VERSION"
+        script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
 elif [ "$INSTALL_MODE" == "u" ]; then
-    if [ "$DISTRO" == "debian" ] || [ "$DISTRO" == "ubuntu" ]; then
-        upgrade_mdatp "install --only-upgrade"
-    elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "sles" ] || [ "$DISTRO" == "ol" ]; then
-        upgrade_mdatp "update"
-    else
-        script_exit "Unsupported distro"
+    verify_connectivity "package update"
+
+    if [ "$DISTRO_FAMILY" == "debian" ]; then
+        upgrade_mdatp "$ASSUMEYES install --only-upgrade"
+    elif [ "$DISTRO_FAMILY" == "fedora" ]; then
+        upgrade_mdatp "$ASSUMEYES update"
+    elif [ "$DISTRO_FAMILY" == "sles" ]; then
+        upgrade_mdatp "up $ASSUMEYES"
+    else    
+        script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
 elif [ "$INSTALL_MODE" = "r" ]; then
@@ -547,16 +825,16 @@ elif [ "$INSTALL_MODE" == "c" ]; then
     remove_repo
 fi
 
-if [ $ONBOARDING_SCRIPT ]; then
-    onboard_device
+if [ ! -z $PASSIVE_MODE ]; then
+    set_epp_to_passive_mode
 fi
 
-if [ $PASSIVE_MODE ]; then
-    set_epp_to_passive_mode
+if [ ! -z $ONBOARDING_SCRIPT ]; then
+    onboard_device
 fi
 
 if [ ${#tags[@]} -gt 0 ]; then
     set_device_tags
 fi
 
-script_exit "--- mde_installer.sh ended. ---" $error_code
+script_exit "--- mde_installer.sh ended. ---" $SUCCESS
