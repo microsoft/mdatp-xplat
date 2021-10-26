@@ -1,5 +1,17 @@
 #!/bin/bash
 
+#============================================================================
+#
+#  Copyright (c) 2021 Microsoft Corporation.  All rights reserved.
+#
+#  Abstract:
+#    MDE installation script 
+#    - Fingerprinting OS and manually installs MDE as described in the online documentation
+#      https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/linux-install-manually?view=o365-worldwide
+#    - Runs additional optional checks: minimal requirements, fanotify subscribters, etc.
+#
+#============================================================================
+
 SCRIPT_VERSION="0.4.2"
 ASSUMEYES=
 CHANNEL=insiders-fast
