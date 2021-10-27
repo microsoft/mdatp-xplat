@@ -5,14 +5,14 @@
 #  Copyright (c) 2021 Microsoft Corporation.  All rights reserved.
 #
 #  Abstract:
-#    MDE installation script 
+#    MDE installation script
 #    - Fingerprinting OS and manually installs MDE as described in the online documentation
 #      https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/linux-install-manually?view=o365-worldwide
 #    - Runs additional optional checks: minimal requirements, fanotify subscribters, etc.
 #
 #============================================================================
 
-SCRIPT_VERSION="0.4.2"
+SCRIPT_VERSION="0.4.3"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
@@ -108,35 +108,39 @@ run_quietly()
         exit 1
     fi
 
-    local out=$(eval $1 2>&1; echo "$?")
-    local exit_code=$(echo "$out" | tail -n1)
+    if [ "$ASSUMEYES" == "-y" ]; then
+        local out=$(eval $1 2>&1; echo "$?")
+        local exit_code=$(echo "$out" | tail -n1)
 
-    if [ -n "$VERBOSE" ]; then
-        echo "$out"
-    fi
-    
-    if [ "$exit_code" -ne 0 ]; then
-        if [ -n $DEBUG ]; then             
-            echo "command: $1"
-            echo "output: $out"
-            echo "exit_code: $exit_code"
+        if [ -n "$VERBOSE" ]; then
+            echo "$out"
         fi
 
-        if [ $# -eq 2 ]; then
-            echo $2 >&2
-        else
-            script_exit "$2" $3
-        fi
-    fi
+        if [ "$exit_code" -ne 0 ]; then
+            if [ -n $DEBUG ]; then
+                echo "command: $1"
+                echo "output: $out"
+                echo "exit_code: $exit_code"
+            fi
 
-    return $exit_code
+            if [ $# -eq 2 ]; then
+                echo $2 >&2
+            else
+                script_exit "$2" $3
+            fi
+        fi
+
+        return $exit_code
+    else
+        eval $1
+    fi
 }
 
 retry_quietly()
 {
     # retry_quietly <retries> <command> <error_msg> [<error_code>]
     # use error_code for script_exit
-    
+
     if [ $# -lt 3 ] || [ $# -gt 4 ]; then
         echo "[!] INTERNAL ERROR. retry_quietly requires 3 or 4 arguments" >&2
         exit 1
@@ -153,7 +157,7 @@ retry_quietly()
         else
             exit_code=1
         fi
-        
+
         if [ $exit_code -ne 0 ]; then
             sleep 1
             ((retries--))
@@ -234,7 +238,7 @@ verify_connectivity()
     done
 
     echo "[final] connected=$connected"
-    
+
     if [[ "$connected" != "OK" ]]; then
         script_exit "internet connectivity needed for $1" $ERR_NO_INTERNET_CONNECTIVITY
     fi
@@ -262,7 +266,7 @@ verify_privileges()
 verify_min_requirements()
 {
     # echo "[>] verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
-    
+
     local cores=$(nproc --all)
     if [ $cores -lt $MIN_CORES ]; then
         script_exit "MDE requires $MIN_CORES cores or more to run, found $cores." $ERR_INSUFFICIENT_REQUIREMENTS
@@ -288,7 +292,7 @@ find_service()
     fi
 
 	lines=$(systemctl status $1 2>&1 | grep "Active: active" | wc -l)
-	
+
     if [ $lines -eq 0 ]; then
 		return 1
 	fi
@@ -302,7 +306,7 @@ verify_conflicting_applications()
 
     # find applications that are using fanotify
     local conflicting_apps=$(find /proc/*/fdinfo/ -type f -exec sh -c 'lines=$(cat {} | grep "fanotify mnt_id" | wc -l); if [ $lines -gt 0 ]; then cat $(dirname {})/../cmdline; fi;' \; 2>/dev/null)
-    
+
     if [ ! -z $conflicting_apps ]; then
         script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
     fi
@@ -322,8 +326,8 @@ verify_conflicting_applications()
         # echo "[>] locating service: $1"
         if find_service $1; then
             script_exit "found conflicting service: [$1], aborting" $ERR_CONFLICTING_APPS
-        fi        
-    done 
+        fi
+    done
 
     echo "[v] no conflicting applications found"
 }
@@ -340,7 +344,7 @@ set_package_manager()
         DISTRO="sles"
         PKG_MGR="zypper"
         PKG_MGR_INVOKER="zypper --non-interactive"
-    else    
+    else
         script_exit "unsupported distro", $ERR_UNSUPPORTED_DISTRO
     fi
 }
@@ -379,7 +383,7 @@ install_required_pkgs()
 
     if [ ! -z "$pkgs_to_be_installed" ]; then
         echo "[>] installing $pkgs_to_be_installed"
-        run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY 
+        run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY
     else
         echo "[v] required pkgs are installed"
     fi
@@ -489,7 +493,7 @@ install_on_fedora()
     ### Install MDE ###
     echo "[>] installing MDE"
     run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo-$CHANNEL install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
-    
+
     sleep 5
     echo "[v] installed"
 }
@@ -518,14 +522,14 @@ install_on_sles()
 
     ### Fetch the gpg key ###
     run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-    
+
     wait_for_package_manager_to_complete
 
     ### Install MDE ###
     echo "[>] installing MDE"
 
     run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES $repo-$CHANNEL:mdatp" "[!] failed to install MDE (1/2)"
-    
+
     if ! check_if_pkg_is_installed mdatp; then
         echo "[r] retrying"
         sleep 2
@@ -592,7 +596,7 @@ scale_version_id()
     elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]]; then
         SCALED_VERSION=18.04
     else
-        # no problems with 
+        # no problems with
         SCALED_VERSION=$VERSION
     fi
     echo "[>] scaled: $SCALED_VERSION"
@@ -654,7 +658,7 @@ set_device_tags()
             script_exit "invalid tag name: $1. supported tags: GROUP, SecurityWorkspaceId, AzureResourceId and SecurityAgentId" $ERR_TAG_NOT_SUPPORTED
         fi
     done
-    echo "[v] tags set."  
+    echo "[v] tags set."
 }
 
 usage()
@@ -676,7 +680,7 @@ usage()
     echo " -s|--verbose         verbose output"
     echo " -v|--version         print out script version"
     echo " -d|--debug           set debug mode"
-    echo " --proxy <proxy URL>  set proxy"   
+    echo " --proxy <proxy URL>  set proxy"
     echo " -h|--help            display help"
 }
 
@@ -691,7 +695,7 @@ do
         -c|--channel)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi        
+            fi
             CHANNEL=$2
             verify_channel
             shift 2
@@ -714,7 +718,7 @@ do
         -o|--onboard)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi        
+            fi
             ONBOARDING_SCRIPT=$2
             verify_privileges "onboard"
             shift 2
@@ -806,7 +810,7 @@ if [ "$INSTALL_MODE" == "i" ]; then
     if [ -z $SKIP_CONFLICTING_APPS ]; then
         verify_conflicting_applications
     fi
-    
+
     if [ "$DISTRO_FAMILY" == "debian" ]; then
         install_on_debian
     elif [ "$DISTRO_FAMILY" == "fedora" ]; then
@@ -826,7 +830,7 @@ elif [ "$INSTALL_MODE" == "u" ]; then
         upgrade_mdatp "$ASSUMEYES update"
     elif [ "$DISTRO_FAMILY" == "sles" ]; then
         upgrade_mdatp "up $ASSUMEYES"
-    else    
+    else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
