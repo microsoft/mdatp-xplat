@@ -12,7 +12,7 @@
             "title": "Antivirus engine",
             "description": "Properties displayed below will be managed, a user would not be able to override them",
             "propertyOrder": 10,
-            "defaultProperties": [],
+            "defaultProperties": [ "passiveMode" ],
             "properties": {
                 "enableRealTimeProtection": {
                     "default": true,
@@ -398,10 +398,10 @@
         "features": {
             "title": "Features",
             "propertyOrder": 50,
-            "defaultProperties": [],
+            "defaultProperties": [ "systemExtensions", "dataLossPrevention" ],
             "properties": {
                 "systemExtensions": {
-                    "default": "disabled",
+                    "default": "enabled",
                     "title": "Use System Extensions",
                     "type": "string",
                     "propertyOrder": 10,
@@ -415,7 +415,7 @@
                     "enum": ["enabled", "disabled"]                
                 },
                 "dataLossPrevention": {
-                    "default": "disabled",
+                    "default": "enabled",
                     "title": "Use Data Loss Prevention",
                     "type": "string",
                     "propertyOrder": 20,
