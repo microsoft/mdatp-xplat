@@ -3,15 +3,15 @@
 <plist version="1">
 <dict>
 <key>PayloadUUID</key>
-<string>186DB26E-B96F-4D1B-9C80-6AD7EFF87D01</string>
+<string>1C146304-DF5B-41F2-8AD4-17EA9A95D095</string>
 <key>PayloadType</key>
 <string>Configuration</string>
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>186DB26E-B96F-4D1B-9C80-6AD7EFF87D01</string>
+<string>1C146304-DF5B-41F2-8AD4-17EA9A95D095</string>
 <key>PayloadDisplayName</key>
-<string>Defender - Full Disk Access</string>
+<string>Defender - Accessibility Access</string>
 <key>PayloadDescription</key>
 <string/>
 <key>PayloadVersion</key>
@@ -26,13 +26,13 @@
 <array>
 <dict>
 <key>PayloadUUID</key>
-<string>782EFFBA-A158-4571-822D-D085BA43ED7A</string>
+<string>E23CA4BE-65BA-4685-89D6-041F82994606</string>
 <key>PayloadType</key>
 <string>com.apple.TCC.configuration-profile-policy</string>
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>782EFFBA-A158-4571-822D-D085BA43ED7A</string>
+<string>E23CA4BE-65BA-4685-89D6-041F82994606</string>
 <key>PayloadDisplayName</key>
 <string>Privacy Preferences Policy Control</string>
 <key>PayloadDescription</key>
@@ -43,32 +43,8 @@
 <true/>
 <key>Services</key>
 <dict>
-<key>SystemPolicyAllFiles</key>
+<key>Accessibility</key>
 <array>
-<dict>
-<key>Identifier</key>
-<string>com.microsoft.wdav</string>
-<key>CodeRequirement</key>
-<string>identifier "com.microsoft.wdav" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = UBF8T346G9</string>
-<key>IdentifierType</key>
-<string>bundleID</string>
-<key>StaticCode</key>
-<integer>0</integer>
-<key>Allowed</key>
-<integer>1</integer>
-</dict>
-<dict>
-<key>Identifier</key>
-<string>com.microsoft.wdav.epsext</string>
-<key>CodeRequirement</key>
-<string>identifier "com.microsoft.wdav.epsext" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = UBF8T346G9</string>
-<key>IdentifierType</key>
-<string>bundleID</string>
-<key>StaticCode</key>
-<integer>0</integer>
-<key>Allowed</key>
-<integer>1</integer>
-</dict>
 <dict>
 <key>Identifier</key>
 <string>com.microsoft.dlp.daemon</string>

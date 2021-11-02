@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>antivirusEngine</key>
+    <dict>
+        <key>passiveMode</key>
+        <true/>
+    </dict>
+    <key>cloudService</key>
+    <dict>
+        <key>diagnosticLevel</key>
+        <string>optional</string>
+    </dict>
+    <key>features</key>
+    <dict>
+        <key>systemExtensions</key>
+        <string>enabled</string>
+        <key>dataLossPrevention</key>
+        <string>enabled</string>
+    </dict>
+</dict>
+</plist>
