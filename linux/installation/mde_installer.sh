@@ -8,7 +8,7 @@
 #    MDE installation script 
 #    - Fingerprinting OS and manually installs MDE as described in the online documentation
 #      https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/linux-install-manually?view=o365-worldwide
-#    - Runs additional optional checks: minimal requirements, fanotify subscribters, etc.
+#    - Runs additional optional checks: minimal requirements, fanotify subscribers, etc.
 #
 #============================================================================
 
@@ -251,7 +251,7 @@ verify_channel()
 verify_privileges()
 {
     if [ -z "$1" ]; then
-        script_exit "Internal error. verify_privileges require a parameter" $ERR_INTERNAL
+        script_exit "Internal error. verify_privileges requires a parameter" $ERR_INTERNAL
     fi
 
     if [ $(id -u) -ne 0 ]; then
@@ -261,7 +261,7 @@ verify_privileges()
 
 verify_min_requirements()
 {
-    # echo "[>] verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
+    # echo "[>] verifying minimal requirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
     
     local cores=$(nproc --all)
     if [ $cores -lt $MIN_CORES ]; then
@@ -672,7 +672,7 @@ usage()
     echo " -m|--min_req         enforce minimum requirements"
     echo " -x|--skip_conflict   skip conflicting application verification"
     echo " -w|--clean           remove repo from package manager for a specific channel"
-    echo " -y|--yes             assume yes for all mid-process prompts (highly reccomended)"
+    echo " -y|--yes             assume yes for all mid-process prompts (highly recommended)"
     echo " -s|--verbose         verbose output"
     echo " -v|--version         print out script version"
     echo " -d|--debug           set debug mode"
