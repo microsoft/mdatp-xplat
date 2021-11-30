@@ -8,7 +8,7 @@
 #    MDE installation script
 #    - Fingerprinting OS and manually installs MDE as described in the online documentation
 #      https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/linux-install-manually?view=o365-worldwide
-#    - Runs additional optional checks: minimal requirements, fanotify subscribters, etc.
+#    - Runs additional optional checks: minimal requirements, fanotify subscribers, etc.
 #
 #============================================================================
 
@@ -82,6 +82,60 @@ script_exit()
         echo "[*] exiting ($2)"
 	    exit $2
     fi
+}
+
+get_python() {
+   if which python3 &> /dev/null; then
+      echo "python3"
+   elif which python2 &> /dev/null; then
+      echo "python2"
+   else
+      echo "python"
+   fi
+}
+
+
+parse_uri() {
+   cat <<EOF | /usr/bin/env $(get_python)
+import sys
+
+if sys.version_info < (3,):
+   from urlparse import urlparse
+else:
+   from urllib.parse import urlparse
+
+uri = urlparse("$1")
+print(uri.scheme or "")
+print(uri.hostname or "")
+print(uri.port or "")
+EOF
+}
+
+get_rpm_proxy_params() {
+    proxy_params=""
+    if [ -n "$http_proxy" ]; then
+	    proxy_host=$(parse_uri "$http_proxy" | sed -n '2p')
+        if [ -n "$proxy_host" ];then
+           proxy_params="$proxy_params --httpproxy $proxy_host"
+        fi
+
+	    proxy_port=$(parse_uri "$http_proxy" | sed -n '3p')
+        if [ -n "$proxy_port" ]; then
+           proxy_params="$proxy_params --httpport $proxy_port"
+        fi
+    fi
+    if [ -n "$ftp_proxy" ];then
+       proxy_host=$(parse_uri "$ftp_proxy" | sed -n '2p')
+       if [ -n "$proxy_host" ];then
+          proxy_params="$proxy_params --ftpproxy $proxy_host"
+       fi
+
+       proxy_port=$(parse_uri "$ftp_proxy" | sed -n '3p')
+       if [ -n "$proxy_port" ]; then
+          proxy_params="$proxy_params --ftpport $proxy_port"
+       fi
+    fi
+    echo $proxy_params
 }
 
 print_state()
@@ -255,7 +309,7 @@ verify_channel()
 verify_privileges()
 {
     if [ -z "$1" ]; then
-        script_exit "Internal error. verify_privileges require a parameter" $ERR_INTERNAL
+        script_exit "Internal error. verify_privileges requires a parameter" $ERR_INTERNAL
     fi
 
     if [ $(id -u) -ne 0 ]; then
@@ -265,7 +319,7 @@ verify_privileges()
 
 verify_min_requirements()
 {
-    # echo "[>] verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
+    # echo "[>] verifying minimal requirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
 
     local cores=$(nproc --all)
     if [ $cores -lt $MIN_CORES ]; then
@@ -358,7 +412,7 @@ check_if_pkg_is_installed()
     if [ "$PKG_MGR" = "apt" ]; then
         dpkg -s $1 2> /dev/null | grep Status | grep "install ok installed" 1> /dev/null
     else
-        rpm --quiet --query $1
+        rpm --quiet --query $(get_rpm_proxy_params) $1
     fi
 
     return $?
@@ -487,7 +541,7 @@ install_on_fedora()
 
     ### Fetch the gpg key ###
     run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-    run_quietly "rpm --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+    run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
     run_quietly "yum makecache" " Unable to refresh the repos properly. Command exited with status ($?)"
 
     ### Install MDE ###
@@ -521,7 +575,7 @@ install_on_sles()
     run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n microsoft-$CHANNEL https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
 
     ### Fetch the gpg key ###
-    run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+    run_quietly "rpm $(get_rpm_proxy_params) --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
 
     wait_for_package_manager_to_complete
 
@@ -676,11 +730,13 @@ usage()
     echo " -m|--min_req         enforce minimum requirements"
     echo " -x|--skip_conflict   skip conflicting application verification"
     echo " -w|--clean           remove repo from package manager for a specific channel"
-    echo " -y|--yes             assume yes for all mid-process prompts (highly reccomended)"
+    echo " -y|--yes             assume yes for all mid-process prompts (highly recommended)"
     echo " -s|--verbose         verbose output"
     echo " -v|--version         print out script version"
     echo " -d|--debug           set debug mode"
-    echo " --proxy <proxy URL>  set proxy"
+    echo " --http-proxy <URL>   set http proxy"
+    echo " --https-proxy <URL>  set https proxy"
+    echo " --ftp-proxy <URL>    set ftp proxy"
     echo " -h|--help            display help"
 }
 
@@ -768,12 +824,25 @@ do
             DEBUG=1
             shift 1
             ;;
-        --proxy)
+        --http-proxy)
             if [[ -z "$2" ]]; then
                 script_exit "$1 option requires two arguments" $ERR_INVALID_ARGUMENTS
             fi
             export http_proxy=$2
+            shift 2
+            ;;
+        --https-proxy)
+            if [[ -z "$2" ]]; then
+                script_exit "$1 option requires two arguments" $ERR_INVALID_ARGUMENTS
+            fi
             export https_proxy=$2
+            shift 2
+            ;;
+        --ftp-proxy)
+            if [[ -z "$2" ]]; then
+                script_exit "$1 option requires two arguments" $ERR_INVALID_ARGUMENTS
+            fi
+            export ftp_proxy=$2
             shift 2
             ;;
         *)
