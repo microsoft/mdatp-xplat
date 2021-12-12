@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.4.3"
+SCRIPT_VERSION="0.4.4"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
@@ -261,7 +261,7 @@ detect_distro()
 verify_connectivity()
 {
     if [ -z "$1" ]; then
-        script_exit "Internal error. verify_connectivity require a parameter" $ERR_INTERNAL
+        script_exit "Internal error. verify_connectivity requires a parameter" $ERR_INTERNAL
     fi
 
     if which wget; then
@@ -568,7 +568,12 @@ install_on_sles()
     wait_for_package_manager_to_complete
 
     ### Configure the repository ###
-    run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n microsoft-$CHANNEL https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
+    # add repository if it does not exist
+    lines=$($PKG_MGR_INVOKER lr | grep "packages-microsoft-com-$CHANNEL" | wc -l)
+
+    if [ $lines -eq 0 ]; then
+        run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n microsoft-$CHANNEL https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
+    fi
 
     ### Fetch the gpg key ###
     run_quietly "rpm $(get_rpm_proxy_params) --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
