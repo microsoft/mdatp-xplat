@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.4.4"
+SCRIPT_VERSION="0.4.5"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
@@ -538,7 +538,6 @@ install_on_fedora()
     ### Fetch the gpg key ###
     run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
     run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
-    run_quietly "yum makecache" " Unable to refresh the repos properly. Command exited with status ($?)"
 
     ### Install MDE ###
     echo "[>] installing MDE"
