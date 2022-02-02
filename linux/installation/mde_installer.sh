@@ -263,7 +263,7 @@ detect_distro()
 {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        DISTRO=$ID
+        DISTRO=$ID_LIKE
         VERSION=$VERSION_ID
         VERSION_NAME=$VERSION_CODENAME
     elif [ -f /etc/redhat-release ]; then
