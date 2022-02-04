@@ -52,7 +52,7 @@
 <key>PluginBundleID</key>
 <string>com.microsoft.wdav</string>
 <key>UserDefinedName</key>
-<string>Microsoft Defender ATP Content Filter</string>
+<string>Microsoft Defender Content Filter</string>
 </dict>
 </array>
 </dict>

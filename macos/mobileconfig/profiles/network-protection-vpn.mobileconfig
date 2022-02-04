@@ -56,7 +56,7 @@
 <key>Proxies</key>
 <dict/>
 <key>UserDefinedName</key>
-<string>Microsoft Defender ATP VPN Tunnel</string>
+<string>Microsoft Defender VPN Tunnel</string>
 <key>VPN</key>
 <dict>
 <key>RemoteAddress</key>

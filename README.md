@@ -4,7 +4,7 @@ languages:
 - python
 products:
 - mdatp-xplat
-description: "Auxiliary tools and sampled for Microsoft Defender ATP Cross-Platform"
+description: "Auxiliary tools and sampled for Microsoft Defender Cross-Platform"
 urlFragment: "update-this-to-unique-url-stub"
 ---
 
