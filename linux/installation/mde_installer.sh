@@ -389,7 +389,7 @@ verify_conflicting_applications()
     # echo "[>] identifying conflicting applications (fanotify mounts)"
 
     # find applications that are using fanotify
-    local conflicting_apps=$(find /proc/*/fdinfo/ -type f -exec sh -c 'lines=$(cat {} | grep "fanotify mnt_id" | wc -l); if [ $lines -gt 0 ]; then cat $(dirname {})/../cmdline; fi;' \; 2>/dev/null)
+    local conflicting_apps=$(find /proc/*/fdinfo/ -type f -print0 2>/dev/null | xargs -r0 grep -Fl "fanotify mnt_id" 2>/dev/null | xargs -I {} -r sh -c 'cat "$(dirname {})/../cmdline"')
     
     if [ ! -z $conflicting_apps ]; then
         script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
