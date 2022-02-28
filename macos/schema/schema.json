@@ -257,6 +257,34 @@
                             "rel": "More information"
                         }
                     ]
+                },
+                "scanAfterDefinitionUpdate": {
+                  "default": true,
+                  "title": "Run a scan after definitions are updated",
+                  "type": "boolean",
+                  "propertyOrder": 120,
+                  "description": "Specifies whether to start a process scan after new security intelligence updates are downloaded on the device. Enabling this setting will trigger an antivirus scan on the running processes of the device.",
+                  "links": [
+                    {
+                      "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#run-a-scan-after-definitions-are-updated",
+                      "rel": "More information"
+                    }
+                  ]
+                },
+                "maximumOnDemandScanThreads": {
+                  "default": "2",
+                  "title": "Degree of parallelism for on-demand scans",
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 64,
+                  "propertyOrder": 130,
+                  "description": "Specifies the degree of parallelism for on-demand scans. This corresponds to the number of threads used to perform the scan and impacts the CPU usage, as well as the duration of the on-demand scan.",
+                  "links": [
+                    {
+                      "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#degree-of-parallelism-for-on-demand-scans",
+                      "rel": "More information"
+                    }
+                  ]
                 }
             }
         },
