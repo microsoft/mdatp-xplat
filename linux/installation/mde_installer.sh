@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.5.1"
+SCRIPT_VERSION="0.5.2"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
@@ -178,6 +178,7 @@ print_state()
         log_warning "[S] MDE not installed."
     else
         log_info "[S] MDE installed."
+        log_info "[S] Version: $($MDE_VERSION_CMD)"
         log_info "[S] Onboarded: $(mdatp health --field licensed)"
         log_info "[S] Passive mode: $(mdatp health --field passive_mode_enabled)"
         log_info "[S] Device tags: $(mdatp health --field edr_device_tags)"
@@ -205,9 +206,9 @@ run_quietly()
     
     if [ "$exit_code" -ne 0 ]; then
         if [ -n $DEBUG ]; then             
-            log_debug "command: $1"
-            log_debug "output: $out"
-            log_debug "exit_code: $exit_code"
+            log_debug "[>] Running command: $1"
+            log_debug "[>] Command output: $out"
+            log_debug "[>] Command exit_code: $exit_code"
         fi
 
         if [ $# -eq 2 ]; then
@@ -366,7 +367,7 @@ verify_min_requirements()
         script_exit "MDE requires at least $MIN_DISK_SPACE_MB MB of free disk space for installation. found $disk_space_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
-    log_info "[v] min_requirements met"
+    log_info "[v] minimal requirements met"
 }
 
 find_service()
@@ -431,6 +432,8 @@ set_package_manager()
     else    
         script_exit "unsupported distro", $ERR_UNSUPPORTED_DISTRO
     fi
+
+    log_info "[v] set package manager: $PKG_MGR"
 }
 
 check_if_pkg_is_installed()
@@ -648,6 +651,8 @@ upgrade_mdatp()
         script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
     fi
 
+    log_info "[>] Current MDE package installed: $($MDE_VERSION_CMD)"
+
     run_quietly "$PKG_MGR_INVOKER $1 mdatp" "Unable to upgrade MDE $?" $ERR_INSTALLATION_FAILED
     log_info "[v] upgraded"
 }
@@ -719,7 +724,7 @@ onboard_device()
     if [[ $(mdatp health --field org_id | grep "No license found" -c) -gt 0 ]]; then
         script_exit "onboarding failed" $ERR_ONBOARDING_FAILED
     fi
-    log_info "[>] onboarded"
+    log_info "[v] onboarded"
 }
 
 set_epp_to_passive_mode()
