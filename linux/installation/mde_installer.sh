@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.5.2"
+SCRIPT_VERSION="0.5.3"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
@@ -390,7 +390,7 @@ verify_conflicting_applications()
     # echo "[>] identifying conflicting applications (fanotify mounts)"
 
     # find applications that are using fanotify
-    local conflicting_apps=$(find /proc/*/fdinfo/ -type f -exec sh -c 'lines=$(cat {} | grep "fanotify mnt_id" | wc -l); if [ $lines -gt 0 ]; then cat $(dirname {})/../cmdline; fi;' \; 2>/dev/null)
+    local conflicting_apps=$(timeout 5m find /proc/*/fdinfo/ -type f -exec sh -c 'lines=$(cat {} | grep "fanotify mnt_id" | wc -l); if [ $lines -gt 0 ]; then cat $(dirname {})/../cmdline; fi;' \; 2>/dev/null)
     
     if [ ! -z $conflicting_apps ]; then
         script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
