@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.5.4"
+SCRIPT_VERSION="0.5.5"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
