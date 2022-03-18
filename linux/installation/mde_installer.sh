@@ -670,8 +670,11 @@ remove_mdatp()
 scale_version_id()
 {
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
+    ### Support for CentOS 6 added https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/linux-whatsnew?view=o365-worldwide#1014513-30121082145130
     if [ "$DISTRO_FAMILY" == "fedora" ]; then
-        if [[ $VERSION == 7* ]] || [ "$DISTRO" == "amzn" ]; then
+        if [[ $VERSION == 6* ]] && [ "$DISTRO" == "centos" ]; then
+            SCALED_VERSION=6        
+        elif [[ $VERSION == 7* ]] || [ "$DISTRO" == "amzn" ]; then
             SCALED_VERSION=7
         elif [[ $VERSION == 8* ]] || [ "$DISTRO" == "fedora" ]; then
             SCALED_VERSION=8
