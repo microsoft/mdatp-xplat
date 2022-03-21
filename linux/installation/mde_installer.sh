@@ -263,7 +263,7 @@ detect_distro()
 {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        DISTRO=$ID_LIKE
+        DISTRO=$ID
         VERSION=$VERSION_ID
         VERSION_NAME=$VERSION_CODENAME
     elif [ -f /etc/redhat-release ]; then
@@ -279,7 +279,7 @@ detect_distro()
         script_exit "unable to detect distro" $ERR_UNSUPPORTED_DISTRO
     fi
 
-    if [ "$DISTRO" == "debian" ] || [ "$DISTRO" == "ubuntu" ]; then
+    if [ "$DISTRO" == "debian" ] || [ "$DISTRO" == "ubuntu" ] || [ "$DISTRO" == "linuxmint" ]; then
         DISTRO_FAMILY="debian"
     elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
         DISTRO_FAMILY="fedora"
@@ -287,6 +287,11 @@ detect_distro()
         DISTRO_FAMILY="sles"
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
+    fi
+
+    # change distro to ubuntu for linux mint support
+    if [ "$DISTRO" == "linuxmint" ]; then
+        DISTRO="ubuntu"
     fi
 
     log_info "[>] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
