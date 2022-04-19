@@ -328,17 +328,34 @@ if not args.template:
     if not os.path.exists(args.template):
         url = 'https://raw.githubusercontent.com/microsoft/mdatp-xplat/master/macos/mobileconfig/combined/mdatp.mobileconfig'
         args.template = '/tmp/mdatp.mobileconfig'
-        print_debug("Downloading template from {}".format(url))
+        print_debug("Downloading template from {}".format(url))      
 
         try:
             import urllib.request
-            with urllib.request.urlopen(url) as response, open(args.template, 'wb') as out_file:
-                shutil.copyfileobj(response, out_file)
+            print_debug('Using module urllib.request')
+
+            def downloader():
+                try:
+                    with urllib.request.urlopen(url) as response, open(args.template, 'wb') as out_file:
+                        shutil.copyfileobj(response, out_file)
+                except:
+                    print_warning('Your Python has issues with SSL validation, please fix it. Querying {} with disabled validation.'.format(url))
+                    import ssl
+                    ssl._create_default_https_context = ssl._create_unverified_context
+
+                    with urllib.request.urlopen(url) as response, open(args.template, 'wb') as out_file:
+                        shutil.copyfileobj(response, out_file)
+
         except:
             import urllib2
-            response = urllib2.urlopen(url)
-            with open(args.template, 'wb') as out_file:
-                out_file.write(response.read())
+            print_debug('Using module urllib2')
+
+            def downloader():
+                response = urllib2.urlopen(url)
+                with open(args.template, 'wb') as out_file:
+                    out_file.write(response.read())
+
+        downloader()
 
 args.template = os.path.abspath(os.path.expanduser(args.template))
 
