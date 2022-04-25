@@ -672,14 +672,32 @@ remove_mdatp()
     script_exit "[v] removed" $SUCCESS
 }
 
+rhel6_supported_version()
+{
+    local SUPPORTED_RHEL6_VERSIONS=("6.7" "6.8" "6.9" "6.10")
+    for version in ${SUPPORTED_RHEL6_VERSIONS[@]}; do
+        if [[ "$1" == "$version" ]]; then 
+            return 0
+        fi
+    done
+    return 1    
+}
+
 scale_version_id()
 {
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
     if [ "$DISTRO_FAMILY" == "fedora" ]; then
-        if [[ $VERSION == 6* ]] && [ "$DISTRO" == "centos" ]; then  # support CentOS 6.7+
-            SCALED_VERSION=6        
-        elif [[ $VERSION == 6* ]] && [ "$DISTRO" == "fedora" ]; then  # support RedHat 6.7+ 
-            SCALED_VERSION=6        
+        if [[ $VERSION == 6* ]]; then
+            if rhel6_supported_version $VERSION; then # support versions 6.7+
+                if [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "rhel" ]; then
+                    SCALED_VERSION=6
+                else
+                    script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
+                fi
+            else
+               script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
+            fi
+
         elif [[ $VERSION == 7* ]] || [ "$DISTRO" == "amzn" ]; then
             SCALED_VERSION=7
         elif [[ $VERSION == 8* ]] || [ "$DISTRO" == "fedora" ]; then
