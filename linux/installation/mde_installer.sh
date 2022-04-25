@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.5.4"
+SCRIPT_VERSION="0.5.6"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
@@ -280,7 +280,12 @@ detect_distro()
         script_exit "unable to detect distro" $ERR_UNSUPPORTED_DISTRO
     fi
 
-    if [ "$DISTRO" == "debian" ] || [ "$DISTRO" == "ubuntu" ] || [ "$DISTRO" == "linuxmint" ]; then
+    # change distro to ubuntu for linux mint support
+    if [ "$DISTRO" == "linuxmint" ]; then
+        DISTRO="ubuntu"
+    fi
+
+    if [ "$DISTRO" == "debian" ] || [ "$DISTRO" == "ubuntu" ]; then
         DISTRO_FAMILY="debian"
     elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
         DISTRO_FAMILY="fedora"
@@ -288,11 +293,6 @@ detect_distro()
         DISTRO_FAMILY="sles"
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
-    fi
-
-    # change distro to ubuntu for linux mint support
-    if [ "$DISTRO" == "linuxmint" ]; then
-        DISTRO="ubuntu"
     fi
 
     log_info "[>] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
@@ -676,7 +676,11 @@ scale_version_id()
 {
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
     if [ "$DISTRO_FAMILY" == "fedora" ]; then
-        if [[ $VERSION == 7* ]] || [ "$DISTRO" == "amzn" ]; then
+        if [[ $VERSION == 6* ]] && [ "$DISTRO" == "centos" ]; then  # support CentOS 6.7+
+            SCALED_VERSION=6        
+        elif [[ $VERSION == 6* ]] && [ "$DISTRO" == "fedora" ]; then  # support RedHat 6.7+ 
+            SCALED_VERSION=6        
+        elif [[ $VERSION == 7* ]] || [ "$DISTRO" == "amzn" ]; then
             SCALED_VERSION=7
         elif [[ $VERSION == 8* ]] || [ "$DISTRO" == "fedora" ]; then
             SCALED_VERSION=8
@@ -750,13 +754,27 @@ set_device_tags()
     do
         set -- $t
         if [ "$1" == "GROUP" ] || [ "$1" == "SecurityWorkspaceId" ] || [ "$1" == "AzureResourceId" ] || [ "$1" == "SecurityAgentId" ]; then
-            # echo "[>] setting tag: ($1, $2)"
-            retry_quietly 2 "mdatp edr tag set --name $1 --value $2" "failed to set tag" $ERR_PARAMETER_SET_FAILED
+            local set_tags=$(mdatp health --field edr_device_tags)
+            local tag_exists=0
+
+            local result=$(echo "$set_tags" | grep -q "\"key\":\"$1\""; echo "$?")
+            if [ $result -eq 0 ]; then
+                local value=$(echo "$set_tags" | grep -o "\"key\":\"$1\".*\"" | cut -d '"' -f 8)
+                if [ "$value" == "$2" ]; then
+                    log_warning "[>] tag already set."
+                    tag_exists=1
+                fi
+            fi
+
+            if [ $tag_exists -eq 0 ]; then
+                # echo "[>] setting tag: ($1, $2)"
+                retry_quietly 2 "mdatp edr tag set --name $1 --value $2" "failed to set tag" $ERR_PARAMETER_SET_FAILED
+            fi
         else
             script_exit "invalid tag name: $1. supported tags: GROUP, SecurityWorkspaceId, AzureResourceId and SecurityAgentId" $ERR_TAG_NOT_SUPPORTED
         fi
     done
-    log_info "[v] tags set."  
+    log_info "[v] tags set."   
 }
 
 usage()
