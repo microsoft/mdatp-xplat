@@ -263,7 +263,7 @@ def report(path_profiles, path_expected, path_tcc):
             check_tcc = False
 
             if expected.payload_type == 'com.apple.TCC.configuration-profile-policy' and expected.service_type == 'SystemPolicyAllFiles':
-                if tcc:
+                if tcc and expected in tcc:
                     t = tcc[expected]
 
                 check_tcc = True
@@ -363,6 +363,11 @@ in_file = getattr(args, 'in')
 
 if not in_file:
     in_file = '/tmp/profiles.xml'
+
+    if os.path.exists(in_file):
+        print_debug("{} already exists, remove it first".format(in_file))
+        os.system('sudo rm -f "{}"'.format(in_file))
+
     print_debug('Running "profiles" command, sudo password may be required...')
     os.system('sudo profiles show -output "{}"'.format(in_file))
 
