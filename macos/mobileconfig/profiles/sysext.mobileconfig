@@ -49,7 +49,6 @@
 <array>
 <string>com.microsoft.wdav.epsext</string>
 <string>com.microsoft.wdav.netext</string>
-<string>com.microsoft.wdav.tunnelext</string>
 </array>
 </dict>
 </dict>
