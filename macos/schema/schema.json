@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.47.27",
+    "__version": "101.66.54",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
     "options": {
@@ -197,10 +197,9 @@
                 },
                 "disallowedThreatActions": {
                     "type": "array",
-                    "description": "Restricts the actions that the local user of a device can take when threats are detected. The actions included in this list are not displayed in the user interface.",
+                    "description": "Restricts the actions that the local user of a device can take when threats are detected. The actions included in this list are not displayed in the user interface. Use unique values.",
                     "propertyOrder": 80,
                     "title": "Disallowed threat actions",
-                    "uniqueItems": true,
                     "links": [
                         {
                             "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#disallowed-threat-actions",
@@ -455,6 +454,21 @@
                         }
                     ],
                     "enum": ["enabled", "disabled"]                
+                }
+            }
+        },
+        "tamperProtection": {
+            "title": "Tamper protection",
+            "propertyOrder": 60,
+            "defaultProperties": [],
+            "properties": {
+                "enforcementLevel": {
+                    "title": "Enforcement level",
+                    "default": "audit",
+                    "type": "string",
+                    "propertyOrder": 10,
+                    "description": "Specifies if network protection is disabled, in audit mode, or enforced",
+                    "enum": ["disabled", "audit", "block"]
                 }
             }
         }
