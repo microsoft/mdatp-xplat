@@ -5,14 +5,14 @@
 #  Copyright (c) 2021 Microsoft Corporation.  All rights reserved.
 #
 #  Abstract:
-#    MDE installation script 
+#    MDE installation script
 #    - Fingerprinting OS and manually installs MDE as described in the online documentation
 #      https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/linux-install-manually?view=o365-worldwide
 #    - Runs additional optional checks: minimal requirements, fanotify subscribers, etc.
 #
 #============================================================================
 
-SCRIPT_VERSION="0.5.6"
+SCRIPT_VERSION="0.5.7"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
@@ -57,6 +57,9 @@ ERR_PARAMETER_SET_FAILED=41
 
 # Predefined values
 export DEBIAN_FRONTEND=noninteractive
+
+# Feature switches
+[[ "$ENABLE_MARINER_ENV" == "1" ]] && ENABLE_MARINER=1 || ENABLE_MARINER=0
 
 _log() {
     level="$1"
@@ -203,9 +206,9 @@ run_quietly()
     if [ -n "$VERBOSE" ]; then
         log_info "$out"
     fi
-    
+
     if [ "$exit_code" -ne 0 ]; then
-        if [ -n $DEBUG ]; then             
+        if [ -n $DEBUG ]; then
             log_debug "[>] Running command: $1"
             log_debug "[>] Command output: $out"
             log_debug "[>] Command exit_code: $exit_code"
@@ -225,7 +228,7 @@ retry_quietly()
 {
     # retry_quietly <retries> <command> <error_msg> [<error_code>]
     # use error_code for script_exit
-    
+
     if [ $# -lt 3 ] || [ $# -gt 4 ]; then
         log_error "[!] INTERNAL ERROR. retry_quietly requires 3 or 4 arguments"
         exit 1
@@ -242,7 +245,7 @@ retry_quietly()
         else
             exit_code=1
         fi
-        
+
         if [ $exit_code -ne 0 ]; then
             sleep 1
             ((retries--))
@@ -291,6 +294,8 @@ detect_distro()
         DISTRO_FAMILY="fedora"
     elif [ "$DISTRO" == "sles" ] || [ "$DISTRO" == "sle-hpc" ] || [ "$DISTRO" == "sles_sap" ]; then
         DISTRO_FAMILY="sles"
+    elif [ "$DISTRO" == "mariner" ]; then
+        DISTRO_FAMILY="mariner"
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
@@ -328,7 +333,7 @@ verify_connectivity()
     done
 
     log_info "[final] connected=$connected"
-    
+
     if [[ "$connected" != "OK" ]]; then
         script_exit "internet connectivity needed for $1" $ERR_NO_INTERNET_CONNECTIVITY
     fi
@@ -356,7 +361,7 @@ verify_privileges()
 verify_min_requirements()
 {
     # echo "[>] verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
-    
+
     local cores=$(nproc --all)
     if [ $cores -lt $MIN_CORES ]; then
         script_exit "MDE requires $MIN_CORES cores or more to run, found $cores." $ERR_INSUFFICIENT_REQUIREMENTS
@@ -382,7 +387,7 @@ find_service()
     fi
 
 	lines=$(systemctl status $1 2>&1 | grep "Active: active" | wc -l)
-	
+
     if [ $lines -eq 0 ]; then
 		return 1
 	fi
@@ -396,7 +401,7 @@ verify_conflicting_applications()
 
     # find applications that are using fanotify
     local conflicting_apps=$(timeout 5m find /proc/*/fdinfo/ -type f -print0 2>/dev/null | xargs -r0 grep -Fl "fanotify mnt_id" 2>/dev/null | xargs -I {} -r sh -c 'cat "$(dirname {})/../cmdline"')
-    
+
     if [ ! -z $conflicting_apps ]; then
         script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
     fi
@@ -416,8 +421,8 @@ verify_conflicting_applications()
         # echo "[>] locating service: $1"
         if find_service $1; then
             script_exit "found conflicting service: [$1], aborting" $ERR_CONFLICTING_APPS
-        fi        
-    done 
+        fi
+    done
 
     log_info "[v] no conflicting applications found"
 }
@@ -434,7 +439,12 @@ set_package_manager()
         DISTRO="sles"
         PKG_MGR="zypper"
         PKG_MGR_INVOKER="zypper --non-interactive"
-    else    
+    elif [ "$DISTRO_FAMILY" = "mariner" ]; then
+        DISTRO="mariner"
+        PKG_MGR="yum"
+        ASSUMEYES="-y"
+        PKG_MGR_INVOKER="yum $ASSUMEYES"
+    else
         script_exit "unsupported distro", $ERR_UNSUPPORTED_DISTRO
     fi
 
@@ -475,7 +485,7 @@ install_required_pkgs()
 
     if [ ! -z "$pkgs_to_be_installed" ]; then
         log_info "[>] installing $pkgs_to_be_installed"
-        run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY 
+        run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY
     else
         log_info "[v] required pkgs are installed"
     fi
@@ -584,7 +594,7 @@ install_on_fedora()
     ### Install MDE ###
     log_info "[>] installing MDE"
     run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo-$CHANNEL install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
-    
+
     sleep 5
     log_info "[v] installed"
 }
@@ -618,14 +628,14 @@ install_on_sles()
 
     ### Fetch the gpg key ###
     run_quietly "rpm $(get_rpm_proxy_params) --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-    
+
     wait_for_package_manager_to_complete
 
     ### Install MDE ###
     log_info "[>] installing MDE"
 
     run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES $repo-$CHANNEL:mdatp" "[!] failed to install MDE (1/2)"
-    
+
     if ! check_if_pkg_is_installed mdatp; then
         log_warning "[r] retrying"
         sleep 2
@@ -634,6 +644,31 @@ install_on_sles()
 
     sleep 5
     log_info "[v] installed."
+}
+
+install_on_mariner()
+{
+    local packages=
+
+    if check_if_pkg_is_installed mdatp; then
+        pkg_version=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
+        log_info "[i] MDE already installed ($pkg_version)"
+        return
+    fi
+
+    # Note: Install the Mariner Extras Repo if required
+    packages=(mariner-repos-extras)
+
+    install_required_pkgs ${packages[@]}
+
+    wait_for_package_manager_to_complete
+
+    ### Install MDE ###
+    log_info "[>] installing MDE"
+    run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+
+    sleep 5
+    log_info "[v] installed"
 }
 
 remove_repo()
@@ -676,11 +711,11 @@ rhel6_supported_version()
 {
     local SUPPORTED_RHEL6_VERSIONS=("6.7" "6.8" "6.9" "6.10")
     for version in ${SUPPORTED_RHEL6_VERSIONS[@]}; do
-        if [[ "$1" == "$version" ]]; then 
+        if [[ "$1" == "$version" ]]; then
             return 0
         fi
     done
-    return 1    
+    return 1
 }
 
 scale_version_id()
@@ -716,7 +751,7 @@ scale_version_id()
     elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]]; then
         SCALED_VERSION=18.04
     else
-        # no problems with 
+        # no problems with
         SCALED_VERSION=$VERSION
     fi
     log_info "[>] scaled: $SCALED_VERSION"
@@ -792,7 +827,7 @@ set_device_tags()
             script_exit "invalid tag name: $1. supported tags: GROUP, SecurityWorkspaceId, AzureResourceId and SecurityAgentId" $ERR_TAG_NOT_SUPPORTED
         fi
     done
-    log_info "[v] tags set."   
+    log_info "[v] tags set."
 }
 
 usage()
@@ -832,7 +867,7 @@ do
         -c|--channel)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi        
+            fi
             CHANNEL=$2
             verify_channel
             shift 2
@@ -855,7 +890,7 @@ do
         -o|--onboard)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi        
+            fi
             ONBOARDING_SCRIPT=$2
             verify_privileges "onboard"
             shift 2
@@ -968,13 +1003,20 @@ if [ "$INSTALL_MODE" == "i" ]; then
     if [ -z $SKIP_CONFLICTING_APPS ]; then
         verify_conflicting_applications
     fi
-    
+
     if [ "$DISTRO_FAMILY" == "debian" ]; then
         install_on_debian
     elif [ "$DISTRO_FAMILY" == "fedora" ]; then
         install_on_fedora
     elif [ "$DISTRO_FAMILY" = "sles" ]; then
         install_on_sles
+    elif [ "$DISTRO_FAMILY" = "mariner" ]; then
+        #Note: Prevent installation in unsupported environments
+        if [ "$ENABLE_MARINER" == "1" ]; then
+            install_on_mariner
+        else
+            script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
+        fi
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
@@ -988,7 +1030,9 @@ elif [ "$INSTALL_MODE" == "u" ]; then
         upgrade_mdatp "$ASSUMEYES update"
     elif [ "$DISTRO_FAMILY" == "sles" ]; then
         upgrade_mdatp "up $ASSUMEYES"
-    else    
+    elif [ "$DISTRO_FAMILY" == "mariner" ]; then
+        upgrade_mdatp "$ASSUMEYES update"
+    else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
