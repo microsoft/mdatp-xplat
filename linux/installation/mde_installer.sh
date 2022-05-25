@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.5.7"
+SCRIPT_VERSION="0.5.8"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
@@ -50,6 +50,7 @@ ERR_UNINSTALLATION_FAILED=22
 ERR_FAILED_DEPENDENCY=23
 ERR_FAILED_REPO_SETUP=24
 ERR_INVALID_CHANNEL=25
+ERR_FAILED_REPO_CLEANUP=26
 ERR_ONBOARDING_NOT_FOUND=30
 ERR_ONBOARDING_FAILED=31
 ERR_TAG_NOT_SUPPORTED=40
@@ -673,12 +674,34 @@ install_on_mariner()
 
 remove_repo()
 {
-    # TODO: add support for debian and fedora
+    # Remove mdatp if installed
+    if check_if_pkg_is_installed mdatp; then
+        remove_mdatp
+    fi
+
+    # Remove configured packages.microsoft.com repository
     if [ $DISTRO == 'sles' ] || [ "$DISTRO" = "sle-hpc" ]; then
         run_quietly "$PKG_MGR_INVOKER removerepo packages-microsoft-com-$CHANNEL" "failed to remove repo"
+    
+    elif [ "$DISTRO_FAMILY" == "fedora" ]; then
+        local repo=packages-microsoft-com
+        if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
+            repo=packages-microsoft-com-prod
+        fi
+
+        local repo_name="$repo-$CHANNEL"
+        run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
+        run_quietly "find /etc/yum.repos.d -exec grep -lqR \"\[$repo_name\]\" '{}' \; -delete" "Unable to remove repo ($?)" $ERR_FAILED_REPO_CLEANUP
+    
+    elif [ "$DISTRO_FAMILY" == "debian" ]; then
+        if [ -f "/etc/apt/sources.list.d/microsoft-$CHANNEL.list" ]; then
+            run_quietly "rm -f '/etc/apt/sources.list.d/microsoft-$CHANNEL.list'" "unable to remove repo list ($?)" $ERR_FAILED_REPO_CLEANUP
+        fi
     else
         script_exit "unsupported distro for remove repo $DISTRO" $ERR_UNSUPPORTED_DISTRO
     fi
+
+    log_info "[v] clean-up done."
 }
 
 upgrade_mdatp()
@@ -704,7 +727,6 @@ remove_mdatp()
     fi
 
     run_quietly "$PKG_MGR_INVOKER remove mdatp" "unable to remove MDE $?" $ERR_UNINSTALLATION_FAILED
-    script_exit "[v] removed" $SUCCESS
 }
 
 rhel6_supported_version()
@@ -769,17 +791,25 @@ onboard_device()
         script_exit "error: onboarding script not found." $ERR_ONBOARDING_NOT_FOUND
     fi
 
-    # Make sure python is installed
-    PYTHON=$(which python || which python3)
+    if [[ $ONBOARDING_SCRIPT == *.py ]]; then
+        # Make sure python is installed
+        PYTHON=$(which python || which python3)
 
-    if [ -z $PYTHON ]; then
-        script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
+        if [ -z $PYTHON ]; then
+            script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
+        fi
+
+        # Run onboarding script
+        # echo "[>] running onboarding script..."
+        sleep 1
+        run_quietly "$PYTHON $ONBOARDING_SCRIPT" "error: python onboarding failed" $ERR_ONBOARDING_FAILED
+
+    elif [[ $ONBOARDING_SCRIPT == *.sh ]]; then        
+        run_quietly "sh $ONBOARDING_SCRIPT" "error: bash onboarding failed" $ERR_ONBOARDING_FAILED
+
+    else
+        script_exit "error: unknown onboarding script type." $ERR_ONBOARDING_FAILED
     fi
-
-    # Run onboarding script
-    # echo "[>] running onboarding script..."
-    sleep 1
-    run_quietly "$PYTHON $ONBOARDING_SCRIPT" "error: onboarding failed" $ERR_ONBOARDING_FAILED
 
     # validate onboarding
     sleep 3
@@ -791,13 +821,17 @@ onboard_device()
 
 set_epp_to_passive_mode()
 {
-    # echo "[>] setting MDE/EPP to passive mode"
-
     if ! check_if_pkg_is_installed mdatp; then
         script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
     fi
 
-    retry_quietly 3 "mdatp config passive-mode --value enabled" "failed to set MDE to passive-mode" $ERR_PARAMETER_SET_FAILED
+    if [ $(mdatp health --field passive_mode_enabled | tail -1) == "false" ]; then
+        log_info "[>] setting MDE/EPP to passive mode"
+        retry_quietly 3 "mdatp config passive-mode --value enabled" "failed to set MDE to passive-mode" $ERR_PARAMETER_SET_FAILED
+    else
+        log_info "[>] MDE/EPP already in passive mode"
+    fi
+    
     log_info "[v] passive mode set"
 }
 
@@ -814,7 +848,7 @@ set_device_tags()
             if [ $result -eq 0 ]; then
                 local value=$(echo "$set_tags" | grep -o "\"key\":\"$1\".*\"" | cut -d '"' -f 8)
                 if [ "$value" == "$2" ]; then
-                    log_warning "[>] tag already set."
+                    log_warning "[>] tag $1 already set to value $2."
                     tag_exists=1
                 fi
             fi
@@ -979,7 +1013,7 @@ if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" 
     script_exit "no installation mode specified. Specify --help for help" $ERR_INVALID_ARGUMENTS
 fi
 
-echo "--- mde_installer.sh v$SCRIPT_VERSION ---"
+# echo "--- mde_installer.sh v$SCRIPT_VERSION ---"
 log_info "--- mde_installer.sh v$SCRIPT_VERSION ---"
 
 ### Validate mininum requirements ###
@@ -1037,10 +1071,14 @@ elif [ "$INSTALL_MODE" == "u" ]; then
     fi
 
 elif [ "$INSTALL_MODE" = "r" ]; then
-    remove_mdatp
+    if remove_mdatp; then
+        script_exit "[v] removed MDE" $SUCCESS
+    fi
 
 elif [ "$INSTALL_MODE" == "c" ]; then
-    remove_repo
+    if remove_repo; then
+        script_exit "[v] removed repo" $SUCCESS
+    fi
 fi
 
 if [ ! -z $PASSIVE_MODE ]; then
