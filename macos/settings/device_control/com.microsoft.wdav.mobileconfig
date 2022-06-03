@@ -58,7 +58,81 @@
                     <key>dataLossPrevention</key>
                     <string>enabled</string>
                 </dict>
-       
+                <key>deviceControl</key>
+                <dict>
+                    <key>policy</key>
+                    <string>{
+    "groups": [
+        {
+            "id": "3f082cd3-f701-4c21-9a6a-ed115c28e217",
+            "name": "All Apple Devices",
+            "query": {
+                "$type": "all",
+                "clauses": [
+                    {
+                        "$type": "primaryId",
+                        "value": "apple_devices"
+                    }
+                ]
+            }
+        }
+    ],
+    "rules": [
+        {
+            "id": "772cef80-229f-48b4-bd17-a6913009298d",
+            "name": "Deny all Apple Devices",
+            "includeGroups": [
+                "3f082cd3-f701-4c21-9a6a-ed115c28e217"
+            ],
+            "entries": [
+                {
+                    "$type": "appleDevice",
+                    "enforcement": {
+                        "$type": "deny"
+                    },
+                    "access": [
+                        "download_files_from_device",
+                        "sync_content_to_device",
+                        "backup_device",
+                        "update_device",
+                        "download_photos_from_device"
+                    ]
+                },
+                {
+                    "$type": "appleDevice",
+                    "enforcement": {
+                        "$type": "auditDeny",
+                        "options": [
+                            "send_event",
+                            "show_notification"
+                        ]
+                    },
+                    "access": [
+                        "download_files_from_device",
+                        "sync_content_to_device",
+                        "backup_device",
+                        "update_device",
+                        "download_photos_from_device"
+                    ]
+                }
+            ]
+        }
+    ],
+    "settings": {
+        "features": {
+            "appleDevice": {
+                "disable": false
+            }
+        },
+        "global": {
+            "defaultEnforcement": "allow"
+        },
+        "ux": {
+            "navigationTarget": "http://www.microsoft.com"
+        }
+    }
+}</string>
+                </dict>
             </dict>
         </array>
     </dict>
