@@ -429,6 +429,44 @@
                     "enum": ["enabled", "disabled"]                
                 }
             }
+        },
+        "tamperProtection": {
+            "title": "Tamper protection",
+            "propertyOrder": 60,
+            "defaultProperties": [],
+            "properties": {
+                "enforcementLevel": {
+                    "title": "Enforcement level",
+                    "default": "audit",
+                    "type": "string",
+                    "propertyOrder": 10,
+                    "description": "Specifies if network protection is disabled, in audit mode, or enforced",
+                    "enum": ["disabled", "audit", "block"]
+                }
+            }
+        },
+        "deviceControl": {
+            "title": "Device Control",
+            "propertyOrder": 70,
+            "defaultProperties": [ "policy" ],
+            "properties": {
+                "policy": {
+                    "title": "Device Control Policy",
+                    "type": "string",
+                    "propertyOrder": 10,
+                    "description": "JSON string representing the device control policy",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-device-control-overview?view=o365-worldwide",
+                            "rel": "More information"
+                        },
+                        {
+                            "href": "https://github.com/microsoft/mdatp-devicecontrol/blob/main/Removable%20Storage%20Access%20Control%20Samples/macOS/policy/device_control_policy_schema.json",
+                            "rel": "Schema"
+                        }
+                    ]
+                }
+            }
         }
     }
 }
