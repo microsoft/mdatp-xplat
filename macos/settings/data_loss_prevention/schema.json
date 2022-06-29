@@ -430,9 +430,24 @@
                 }
             }
         },
+        "tamperProtection": {
+            "title": "Tamper protection",
+            "propertyOrder": 60,
+            "defaultProperties": [],
+            "properties": {
+                "enforcementLevel": {
+                    "title": "Enforcement level",
+                    "default": "audit",
+                    "type": "string",
+                    "propertyOrder": 10,
+                    "description": "Specifies if network protection is disabled, in audit mode, or enforced",
+                    "enum": ["disabled", "audit", "block"]
+                }
+            }
+        },
         "deviceControl": {
             "title": "Device Control",
-            "propertyOrder": 60,
+            "propertyOrder": 70,
             "defaultProperties": [ "policy" ],
             "properties": {
                 "policy": {
@@ -452,7 +467,6 @@
                     ]
                 }
             }
-
         }
     }
 }
