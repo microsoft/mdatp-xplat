@@ -58,7 +58,6 @@
                     <key>dataLossPrevention</key>
                     <string>enabled</string>
                 </dict>
-       
             </dict>
         </array>
     </dict>
