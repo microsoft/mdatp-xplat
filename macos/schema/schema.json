@@ -382,6 +382,20 @@
                         }
                     ],
                     "enum": ["enabled", "disabled"]
+                },
+                "consumerExperience": {
+                    "default": "enabled",
+                    "title": "Control sign-in to consumer version",
+                    "type": "string",
+                    "propertyOrder": 30,
+                    "description": "Specify whether users can sign into the consumer version of Microsoft Defender",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#control-sign-in-to-consumer-version-of-microsoft-defender",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
                 }
             }
         },
