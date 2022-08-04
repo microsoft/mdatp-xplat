@@ -855,7 +855,8 @@ set_device_tags()
 
             if [ $tag_exists -eq 0 ]; then
                 # echo "[>] setting tag: ($1, $2)"
-                retry_quietly 2 "mdatp edr tag set --name $1 --value $2" "failed to set tag" $ERR_PARAMETER_SET_FAILED
+                local tag_value="\"${@:2}\""
+                retry_quietly 2 "mdatp edr tag set --name $1 --value $tag_value" "failed to set tag" $ERR_PARAMETER_SET_FAILED
             fi
         else
             script_exit "invalid tag name: $1. supported tags: GROUP, SecurityWorkspaceId, AzureResourceId and SecurityAgentId" $ERR_TAG_NOT_SUPPORTED
