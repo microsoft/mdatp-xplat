@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from __future__ import print_function
 import getopt, os, sys, plistlib, re, shutil, sys, argparse, uuid
@@ -83,13 +83,28 @@ except:
 plist_template['PayloadContent'] = []
 plist_template['PayloadIdentifier'] = plist_template['PayloadUUID'] = str(uuid.uuid1()).upper()
 
+tcc_payload = None
 for f_in in getattr(args, 'in'):
     try:
         plist = read_plist(f_in)
         for payload in plist['PayloadContent']:
+
+            # JAMF doesn't like having multiple TCC configuration profiles, so combine into a single one
+            if payload['PayloadType'] == "com.apple.TCC.configuration-profile-policy":
+                if tcc_payload is None:
+                    tcc_payload = payload
+                else:
+                    # Merge the new TCC profile with the existing one.
+                    tcc_payload['Services'].update(payload['Services'])
+                # Don't append TCC until all profiles have been examined
+                continue
+
             plist_template['PayloadContent'].append(payload)
     except:
         print_error("Cannot read input file {}".format(f_in))
+
+if tcc_payload is not None:
+    plist_template['PayloadContent'].append(tcc_payload)
 
 out_file = getattr(args, 'out')
 
