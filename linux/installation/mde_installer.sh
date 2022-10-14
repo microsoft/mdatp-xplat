@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.5.8"
+SCRIPT_VERSION="0.5.9"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
@@ -58,9 +58,6 @@ ERR_PARAMETER_SET_FAILED=41
 
 # Predefined values
 export DEBIAN_FRONTEND=noninteractive
-
-# Feature switches
-[[ "$ENABLE_MARINER_ENV" == "1" ]] && ENABLE_MARINER=1 || ENABLE_MARINER=0
 
 _log() {
     level="$1"
@@ -1046,12 +1043,7 @@ if [ "$INSTALL_MODE" == "i" ]; then
     elif [ "$DISTRO_FAMILY" = "sles" ]; then
         install_on_sles
     elif [ "$DISTRO_FAMILY" = "mariner" ]; then
-        #Note: Prevent installation in unsupported environments
-        if [ "$ENABLE_MARINER" == "1" ]; then
-            install_on_mariner
-        else
-            script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
-        fi
+        install_on_mariner
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
