@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1">
+<dict>
+<key>PayloadUUID</key>
+<string>69DD9825-067B-4C6C-8B54-EDA83C7F179D</string>
+<key>PayloadType</key>
+<string>Configuration</string>
+<key>PayloadOrganization</key>
+<string>Microsoft Corporation</string>
+<key>PayloadIdentifier</key>
+<string>69DD9825-067B-4C6C-8B54-EDA83C7F179D</string>
+<key>PayloadDisplayName</key>
+<string>Background Service Configuration Profile</string>
+<key>PayloadDescription</key>
+<string/>
+<key>PayloadVersion</key>
+<integer>1</integer>
+<key>PayloadEnabled</key>
+<true/>
+<key>PayloadRemovalDisallowed</key>
+<true/>
+<key>PayloadScope</key>
+<string>System</string>
+<key>PayloadContent</key>
+<array>
+<dict>
+<key>PayloadDescription</key>
+<string>Test Payload for Backround Service Management</string>
+<key>PayloadIdentifier</key>
+<string>4DB96276-2310-44C2-AE11-C6E761FB0304.privacy.04102481-C1F1-44F2-B548-E0B554890493</string>
+<key>PayloadUUID</key>
+<string>A9BF8FA9-CEA3-42A2-B8C1-E1998B84CBB0</string>
+<key>Rules</key>
+<array>
+<dict>
+<key>RuleType</key>
+<string>LabelPrefix</string>
+<key>RuleValue</key>
+<string>com.microsoft.fresno</string>
+</dict>
+<dict>
+<key>RuleType</key>
+<string>LabelPrefix</string>
+<key>RuleValue</key>
+<string>com.microsoft.dlp</string>
+</dict>
+</array>
+<key>PayloadType</key>
+<string>com.apple.servicemanagement</string>
+<key>PayloadDisplayName</key>
+<string>Backround Service Management Test</string>
+</dict>
+</array>
+</dict>
+</plist>
