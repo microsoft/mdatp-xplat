@@ -26,7 +26,11 @@ pip install -r requirements.txt
 
 python MDEAuditAnalyzer.py
 
-# Dependecies
-Dependecies can be found on the requirements.txt
+# Dependencies
+Dependencies can be found in requirements.txt
 
-Manual install - pip install pandas
+Manual install:
+
+`
+    pip install pandas
+`
