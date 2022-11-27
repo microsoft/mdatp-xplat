@@ -47,7 +47,6 @@ Argparse - https://pypi.org/project/argparse/ --> `pip install argparse`
 # Compiling tool using pyinstaller
 `
     pip install pyinstaller
-
     pyinstaller -F -n LinuxMDEparser
 `
 
