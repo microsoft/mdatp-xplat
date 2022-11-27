@@ -15,7 +15,7 @@ EX:
 
 Make sure you run it from the folder where the log file is located. Excel file will also be created in the same folder.
 
-Files are included when you collect the Linux - "mdatp diagnostic create" command in Linux, except for real_time_protection.json - this ones need to be collected locally in a terminal window:
+Files are included when you collect the Linux - "mdatp diagnostic create" command in Linux, except for real_time_protection.json - this one needs to be collected locally in a terminal window:
 
 `mdatp diagnostic real-time-protection-statistics --output json > real_time_protection.json`
 
