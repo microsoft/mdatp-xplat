@@ -467,6 +467,75 @@
                     ]
                 }
             }
+        },
+        "dlp": {
+            "title": "Data Loss Prevention",
+            "propertyOrder": 90,
+            "defaultProperties": [],
+            "properties": {
+                "exclusions": {
+                    "title": "Exclusions",
+                    "propertyOrder": 10,
+                    "type": "array",
+                    "items": {
+                        "title": "Exclusion",
+                        "format": "grid",
+                        "type": "object",
+                        "defaultProperties": ["signingId", "flag"],
+                        "required": ["signingId", "flag"],
+                        "properties": {
+                            "signingId": {
+                                "title": "Signing ID",
+                                "description": "The signing id of the application to exclude from data loss prevention.",
+                                "propertyOrder": 10,
+                                "type": "string"
+                            },
+                            "flag": {
+                                "title": "Flag",
+                                "description": "Bit flags to control the type of exclusion(s) to apply.  EPS=0x1, AX=0x2.",
+                                "propertyOrder": 20,
+                                "type": "number"
+                            }
+                        }
+                    }
+                },
+                "features": {
+                    "title": "Features",
+                    "propertyOrder": 20,
+                    "type": "array",
+                    "items": {
+                        "title": "Feature",
+                        "format": "grid",
+                        "type": "object",
+                        "defaultProperties": ["name", "state"],
+                        "required": ["name", "state"],
+                        "properties": {
+                            "name": {
+                                "title": "Feature Name",
+                                "description": "The name of a DLP feature to enable or disable.",
+                                "propertyOrder": 10,
+                                "type": "string"
+                            },
+                            "state": {
+                                "title": "State",
+                                "description": "Enable a feature up to a deployment ring (default production), or force disable a feature for all rings.",
+                                "propertyOrder": 20,
+                                "type": "string",
+                                "default": "enabled",
+                                "enum": ["enabled", "disabled"]
+                            },
+                            "ring": {
+                                "title": "Release Ring",
+                                "description": "Limit enabling the feature to a specific deployment ring.",
+                                "propertyOrder": 30,
+                                "type": "string",
+                                "default": "production",
+                                "enum": ["insiderFast", "external", "production"]
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
