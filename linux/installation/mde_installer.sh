@@ -756,6 +756,8 @@ scale_version_id()
             SCALED_VERSION=7
         elif [[ $VERSION == 8* ]] || [ "$DISTRO" == "fedora" ]; then
             SCALED_VERSION=8
+	elif [[ $VERSION == 9* ]]; then
+            SCALED_VERSION=9.0
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
