@@ -820,6 +820,7 @@ onboard_device()
             license_found=false
         else
         # If "No license found" is not present, exit the loop
+            license_found=true
             break
         fi
     done
