@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.5.9"
+SCRIPT_VERSION="0.5.10"
 ASSUMEYES=
 CHANNEL=insiders-fast
 DISTRO=
@@ -792,7 +792,7 @@ onboard_device()
 
     if [[ $ONBOARDING_SCRIPT == *.py ]]; then
         # Make sure python is installed
-        PYTHON=$(which python || which python3)
+        PYTHON=$(which python 2>/dev/null || which python3 2>/dev/null)
 
         if [ -z $PYTHON ]; then
             script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
@@ -811,10 +811,26 @@ onboard_device()
     fi
 
     # validate onboarding
-    sleep 3
-    if [[ $(mdatp health --field org_id | grep "No license found" -c) -gt 0 ]]; then
+    license_found=false
+    
+    for ((i = 1; i <= 10; i++)); do
+        sleep 15 # Delay for 15 seconds before checking the license status
+        
+        # Check if "No license found" is present in the output of the mdatp health command
+        if [[ $(mdatp health --field org_id | grep "No license found" -c) -gt 0 ]]; then
+        # If "No license found" is present, set the license_found variable to false
+            license_found=false
+        else
+        # If "No license found" is not present, exit the loop
+            license_found=true
+            break
+        fi
+    done
+    
+    if [[ $license_found == false ]]; then
         script_exit "onboarding failed" $ERR_ONBOARDING_FAILED
     fi
+    
     log_info "[v] onboarded"
 }
 
