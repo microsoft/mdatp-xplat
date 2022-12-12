@@ -14,22 +14,26 @@
             "propertyOrder": 10,
             "defaultProperties": [],
             "properties": {
-                "enableRealTimeProtection": {
-                    "default": true,
-                    "description": "Locates and stops malware from installing or running on your device. You can turn off this setting for a short time before it turns back on automatically.",
-                    "format": "checkbox",
+                "enforcementLevel": {
+                    "title": "Enforcement level",
+                    "description": "Specifies the enforcement preference of antivirus engine.",
                     "links": [
                         {
-                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#enable--disable-real-time-protection",
+                            "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#enforcement-level-for-antivirus-engine",
                             "rel": "More information"
                         }
                     ],
                     "options": {
-                        "infoText": "Key: enableRealTimeProtection"
+                        "infoText": "Key: enforcementLevel"
                     },
+                    "type": "string",
                     "propertyOrder": 10,
-                    "title": "Real-time protection",
-                    "type": "boolean"
+                    "default": "real_time",
+                    "enum": [
+                        "real_time",
+                        "on_demand",
+                        "passive"
+                    ]
                 },
                 "exclusions": {
                     "description": "Entities that have been excluded from the scan. Exclusions can be specified by full paths, extensions, or file names.",
@@ -48,7 +52,8 @@
                                         "Path",
                                         "File extension",
                                         "Process name"
-                                ]},
+                                    ]
+                                },
                                 "title": "Type",
                                 "type": "string"
                             },
@@ -113,23 +118,6 @@
                     "title": "Scan exclusions",
                     "type": "array"
                 },
-                "passiveMode": {
-                    "default": false,
-                    "description": "Whether the antivirus engine runs in passive mode or not.",
-                    "format": "checkbox",
-                    "links": [
-                        {
-                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#enable--disable-passive-mode",
-                            "rel": "More information"
-                        }
-                    ],
-                    "options": {
-                        "infoText": "Key: passiveMode"
-                    },
-                    "propertyOrder": 40,
-                    "title": "Passive mode",
-                    "type": "boolean"
-                },
                 "allowedThreats": {
                     "type": "array",
                     "description": "List of threats (identified by their name) that are not blocked by the product and are instead allowed to run.",
@@ -168,7 +156,10 @@
                                 "title": "Threat type",
                                 "description": "Type of the threat for which the behavior is configured.",
                                 "propertyOrder": 10,
-                                "enum": ["potentially_unwanted_application", "archive_bomb"]
+                                "enum": [
+                                    "potentially_unwanted_application",
+                                    "archive_bomb"
+                                ]
                             },
                             "value": {
                                 "type": "string",
@@ -176,7 +167,11 @@
                                 "description": "Action to take when coming across a threat of the type specified in the preceding section.",
                                 "propertyOrder": 20,
                                 "default": "audit",
-                                "enum": ["audit", "block", "off"]
+                                "enum": [
+                                    "audit",
+                                    "block",
+                                    "off"
+                                ]
                             }
                         }
                     }
@@ -193,7 +188,10 @@
                             "rel": "More information"
                         }
                     ],
-                    "enum": ["merge", "admin_only"]
+                    "enum": [
+                        "merge",
+                        "admin_only"
+                    ]
                 },
                 "disallowedThreatActions": {
                     "type": "array",
@@ -210,7 +208,10 @@
                         "title": "Action",
                         "format": "grid",
                         "type": "string",
-                        "enum": ["allow", "restore"]
+                        "enum": [
+                            "allow",
+                            "restore"
+                        ]
                     }
                 },
                 "threatTypeSettingsMergePolicy": {
@@ -225,7 +226,10 @@
                             "rel": "More information"
                         }
                     ],
-                    "enum": ["merge", "admin_only"]
+                    "enum": [
+                        "merge",
+                        "admin_only"
+                    ]
                 },
                 "scanResultsRetentionDays": {
                     "default": 90,
@@ -318,7 +322,10 @@
                             "rel": "More information"
                         }
                     ],
-                    "enum": ["optional", "required"]
+                    "enum": [
+                        "optional",
+                        "required"
+                    ]
                 },
                 "automaticSampleSubmission": {
                     "default": true,
@@ -367,7 +374,7 @@
                     ],
                     "propertyOrder": 10,
                     "title": "Hide status menu icon",
-                    "type": "boolean"                    
+                    "type": "boolean"
                 },
                 "userInitiatedFeedback": {
                     "default": "enabled",
@@ -381,7 +388,10 @@
                             "rel": "More information"
                         }
                     ],
-                    "enum": ["enabled", "disabled"]
+                    "enum": [
+                        "enabled",
+                        "disabled"
+                    ]
                 },
                 "consumerExperience": {
                     "default": "enabled",
@@ -395,7 +405,10 @@
                             "rel": "More information"
                         }
                     ],
-                    "enum": ["enabled", "disabled"]
+                    "enum": [
+                        "enabled",
+                        "disabled"
+                    ]
                 }
             }
         },
@@ -424,7 +437,9 @@
                                 "type": "string",
                                 "title": "Type of tag",
                                 "propertyOrder": 10,
-                                "enum": ["GROUP"]
+                                "enum": [
+                                    "GROUP"
+                                ]
                             },
                             "value": {
                                 "type": "string",
@@ -453,7 +468,10 @@
                             "rel": "More information"
                         }
                     ],
-                    "enum": ["enabled", "disabled"]                
+                    "enum": [
+                        "enabled",
+                        "disabled"
+                    ]
                 },
                 "dataLossPrevention": {
                     "default": "disabled",
@@ -467,7 +485,10 @@
                             "rel": "More information"
                         }
                     ],
-                    "enum": ["enabled", "disabled"]                
+                    "enum": [
+                        "enabled",
+                        "disabled"
+                    ]
                 }
             }
         },
@@ -482,7 +503,11 @@
                     "type": "string",
                     "propertyOrder": 10,
                     "description": "Specifies if tamper protection is disabled, in audit mode, or enforced",
-                    "enum": ["disabled", "audit", "block"]
+                    "enum": [
+                        "disabled",
+                        "audit",
+                        "block"
+                    ]
                 }
             }
         },
@@ -520,76 +545,11 @@
                     "type": "string",
                     "propertyOrder": 10,
                     "description": "Specifies if network protection is disabled, in audit mode, or enforced",
-                    "enum": ["disabled", "audit", "block"]
-                }
-            }
-        },
-        "dlp": {
-            "title": "Data Loss Prevention",
-            "propertyOrder": 90,
-            "defaultProperties": [],
-            "properties": {
-                "exclusions": {
-                    "title": "Exclusions",
-                    "propertyOrder": 10,
-                    "type": "array",
-                    "items": {
-                        "title": "Exclusion",
-                        "format": "grid",
-                        "type": "object",
-                        "defaultProperties": ["signingId", "flag"],
-                        "required": ["signingId", "flag"],
-                        "properties": {
-                            "signingId": {
-                                "title": "Signing ID",
-                                "description": "The signing id of the application to exclude from data loss prevention.",
-                                "propertyOrder": 10,
-                                "type": "string"
-                            },
-                            "flag": {
-                                "title": "Flag",
-                                "description": "Bit flags to control the type of exclusion(s) to apply.  EPS=0x1, AX=0x2.",
-                                "propertyOrder": 20,
-                                "type": "number"
-                            }
-                        }
-                    }
-                },
-                "features": {
-                    "title": "Features",
-                    "propertyOrder": 20,
-                    "type": "array",
-                    "items": {
-                        "title": "Feature",
-                        "format": "grid",
-                        "type": "object",
-                        "defaultProperties": ["name", "state"],
-                        "required": ["name", "state"],
-                        "properties": {
-                            "name": {
-                                "title": "Feature Name",
-                                "description": "The name of a DLP feature to enable or disable.",
-                                "propertyOrder": 10,
-                                "type": "string"
-                            },
-                            "state": {
-                                "title": "State",
-                                "description": "Enable a feature up to a deployment ring (default production), or force disable a feature for all rings.",
-                                "propertyOrder": 20,
-                                "type": "string",
-                                "default": "enabled",
-                                "enum": ["enabled", "disabled"]
-                            },
-                            "ring": {
-                                "title": "Release Ring",
-                                "description": "Limit enabling the feature to a specific deployment ring.",
-                                "propertyOrder": 30,
-                                "type": "string",
-                                "default": "production",
-                                "enum": ["insiderFast", "external", "production"]
-                            }
-                        }
-                    }
+                    "enum": [
+                        "disabled",
+                        "audit",
+                        "block"
+                    ]
                 }
             }
         }
