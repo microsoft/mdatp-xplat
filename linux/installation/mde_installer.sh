@@ -198,28 +198,33 @@ run_quietly()
         exit 1
     fi
 
-    local out=$(eval $1 2>&1; echo "$?")
-    local exit_code=$(echo "$out" | tail -n1)
+    if [ "$ASSUMEYES" == "-y" ]; then
+        local out=$(eval $1 2>&1; echo "$?")
+        local exit_code=$(echo "$out" | tail -n1)
 
-    if [ -n "$VERBOSE" ]; then
-        log_info "$out"
-    fi
-
-    if [ "$exit_code" -ne 0 ]; then
-        if [ -n $DEBUG ]; then
-            log_debug "[>] Running command: $1"
-            log_debug "[>] Command output: $out"
-            log_debug "[>] Command exit_code: $exit_code"
+        if [ -n "$VERBOSE" ]; then
+            log_info "$out"
         fi
 
-        if [ $# -eq 2 ]; then
-            log_error $2
-        else
-            script_exit "$2" "$3"
-        fi
-    fi
+        if [ "$exit_code" -ne 0 ]; then
+            if [ -n $DEBUG ]; then
+                log_debug "[>] Running command: $1"
+                log_debug "[>] Command output: $out"
+                log_debug "[>] Command exit_code: $exit_code"
+            fi
 
-    return $exit_code
+            if [ $# -eq 2 ]; then
+                log_error $2
+            else
+                script_exit "$2" "$3"
+            fi
+        fi
+
+        return $exit_code
+
+    else
+        eval $1
+    fi
 }
 
 retry_quietly()
@@ -679,7 +684,7 @@ remove_repo()
     # Remove configured packages.microsoft.com repository
     if [ $DISTRO == 'sles' ] || [ "$DISTRO" = "sle-hpc" ]; then
         run_quietly "$PKG_MGR_INVOKER removerepo packages-microsoft-com-$CHANNEL" "failed to remove repo"
-    
+
     elif [ "$DISTRO_FAMILY" == "fedora" ]; then
         local repo=packages-microsoft-com
         if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
@@ -689,7 +694,7 @@ remove_repo()
         local repo_name="$repo-$CHANNEL"
         run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
         run_quietly "find /etc/yum.repos.d -exec grep -lqR \"\[$repo_name\]\" '{}' \; -delete" "Unable to remove repo ($?)" $ERR_FAILED_REPO_CLEANUP
-    
+
     elif [ "$DISTRO_FAMILY" == "debian" ]; then
         if [ -f "/etc/apt/sources.list.d/microsoft-$CHANNEL.list" ]; then
             run_quietly "rm -f '/etc/apt/sources.list.d/microsoft-$CHANNEL.list'" "unable to remove repo list ($?)" $ERR_FAILED_REPO_CLEANUP
@@ -803,7 +808,7 @@ onboard_device()
         sleep 1
         run_quietly "$PYTHON $ONBOARDING_SCRIPT" "error: python onboarding failed" $ERR_ONBOARDING_FAILED
 
-    elif [[ $ONBOARDING_SCRIPT == *.sh ]]; then        
+    elif [[ $ONBOARDING_SCRIPT == *.sh ]]; then
         run_quietly "sh $ONBOARDING_SCRIPT" "error: bash onboarding failed" $ERR_ONBOARDING_FAILED
 
     else
@@ -812,10 +817,10 @@ onboard_device()
 
     # validate onboarding
     license_found=false
-    
+
     for ((i = 1; i <= 10; i++)); do
         sleep 15 # Delay for 15 seconds before checking the license status
-        
+
         # Check if "No license found" is present in the output of the mdatp health command
         if [[ $(mdatp health --field org_id | grep "No license found" -c) -gt 0 ]]; then
         # If "No license found" is present, set the license_found variable to false
@@ -826,11 +831,11 @@ onboard_device()
             break
         fi
     done
-    
+
     if [[ $license_found == false ]]; then
         script_exit "onboarding failed" $ERR_ONBOARDING_FAILED
     fi
-    
+
     log_info "[v] onboarded"
 }
 
@@ -846,7 +851,7 @@ set_epp_to_passive_mode()
     else
         log_info "[>] MDE/EPP already in passive mode"
     fi
-    
+
     log_info "[v] passive mode set"
 }
 
