@@ -401,7 +401,30 @@ verify_conflicting_applications()
     local conflicting_apps=$(timeout 5m find /proc/*/fdinfo/ -type f -print0 2>/dev/null | xargs -r0 grep -Fl "fanotify mnt_id" 2>/dev/null | xargs -I {} -r sh -c 'cat "$(dirname {})/../cmdline"')
 
     if [ ! -z $conflicting_apps ]; then
-        script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
+    
+        if [ $conflicting_apps == "/opt/microsoft/mdatp/sbin/wdavdaemon" ]; then
+	
+                    op=$(command -v mdatp)
+
+                    #make sure mdatp is installed
+                    if [ ! -z $op ]; then
+
+                            #check if mdatp is onboarded or not
+                            is_onboarded=$(mdatp health --field healthy | tail -1)
+                            if [ "$is_onboarded" = false ]; then
+                                    log_info "MDE already installed but not onboarded. Please use --onboard command to onboard the product."
+                            else
+                                    mdatp_version=$($MDE_VERSION_CMD | tail -1)
+                                    org_id=$(mdatp health --field org_id | tail -1)
+                                    script_exit "Found MDE already installed and onboarded with org_id $org_id and app_version $mdatp_version. Either try to upgrade your MDE version using --upgrade option or Please verify that the onboarded linux server appears in Microsoft 365 Defender."
+                            fi
+                    else
+                            script_exit "seems like MDE was installed previously but not successfully. Please, first try to uninstall the previous version of MDE using --remove option, aborting"  $ERR_CONFLICTING_APPS
+                    fi
+            else
+                    script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
+            fi
+
     fi
 
     # find known security services
