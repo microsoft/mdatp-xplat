@@ -281,8 +281,8 @@ detect_distro()
         script_exit "unable to detect distro" $ERR_UNSUPPORTED_DISTRO
     fi
 
-    # change distro to ubuntu for linux mint support
-    if [ "$DISTRO" == "linuxmint" ]; then
+    # change distro to ubuntu for linux mint and kde neon support
+    if [ "$DISTRO" == "linuxmint" ] || [ "$DISTRO" == "neon" ]; then
         DISTRO="ubuntu"
     fi
 
