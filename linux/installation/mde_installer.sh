@@ -5,15 +5,15 @@
 #  Copyright (c) 2021 Microsoft Corporation.  All rights reserved.
 #
 #  Abstract:
-#    MDE installation script
+#    MDE installation script 
 #    - Fingerprinting OS and manually installs MDE as described in the online documentation
 #      https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/linux-install-manually?view=o365-worldwide
 #    - Runs additional optional checks: minimal requirements, fanotify subscribers, etc.
 #
 #============================================================================
 
-SCRIPT_VERSION="0.5.10"
-ASSUMEYES=
+SCRIPT_VERSION="0.6.1"
+ASSUMEYES=-y
 CHANNEL=insiders-fast
 DISTRO=
 DISTRO_FAMILY=
@@ -26,6 +26,7 @@ PMC_URL=https://packages.microsoft.com/config
 SCALED_VERSION=
 VERSION=
 ONBOARDING_SCRIPT=
+OFFBOARDING_SCRIPT=
 MIN_REQUIREMENTS=
 SKIP_CONFLICTING_APPS=
 PASSIVE_MODE=
@@ -44,6 +45,7 @@ ERR_CONFLICTING_APPS=5
 ERR_UNSUPPORTED_DISTRO=10
 ERR_UNSUPPORTED_VERSION=11
 ERR_INSUFFICIENT_REQUIREMENTS=12
+ERR_MDE_ALREADY_INSTALLED=15
 ERR_MDE_NOT_INSTALLED=20
 ERR_INSTALLATION_FAILED=21
 ERR_UNINSTALLATION_FAILED=22
@@ -52,7 +54,9 @@ ERR_FAILED_REPO_SETUP=24
 ERR_INVALID_CHANNEL=25
 ERR_FAILED_REPO_CLEANUP=26
 ERR_ONBOARDING_NOT_FOUND=30
-ERR_ONBOARDING_FAILED=31
+ERR_OFFBOARDING_NOT_FOUND=31
+ERR_ONBOARDING_FAILED=35
+ERR_OFFBOARDING_FAILED=36
 ERR_TAG_NOT_SUPPORTED=40
 ERR_PARAMETER_SET_FAILED=41
 
@@ -173,21 +177,6 @@ get_rpm_proxy_params() {
     echo $proxy_params
 }
 
-print_state()
-{
-    if [ -z $(which mdatp) ]; then
-        log_warning "[S] MDE not installed."
-    else
-        log_info "[S] MDE installed."
-        log_info "[S] Version: $($MDE_VERSION_CMD)"
-        log_info "[S] Onboarded: $(mdatp health --field licensed)"
-        log_info "[S] Passive mode: $(mdatp health --field passive_mode_enabled)"
-        log_info "[S] Device tags: $(mdatp health --field edr_device_tags)"
-        log_info "[S] Subsystem: $(mdatp health --field real_time_protection_subsystem)"
-        log_info "[S] Conflicting applications: $(mdatp health --field conflicting_applications)"
-    fi
-}
-
 run_quietly()
 {
     # run_quietly <command> <error_msg> [<error_code>]
@@ -204,9 +193,9 @@ run_quietly()
     if [ -n "$VERBOSE" ]; then
         log_info "$out"
     fi
-
+    
     if [ "$exit_code" -ne 0 ]; then
-        if [ -n $DEBUG ]; then
+        if [ -n $DEBUG ]; then             
             log_debug "[>] Running command: $1"
             log_debug "[>] Command output: $out"
             log_debug "[>] Command exit_code: $exit_code"
@@ -226,7 +215,7 @@ retry_quietly()
 {
     # retry_quietly <retries> <command> <error_msg> [<error_code>]
     # use error_code for script_exit
-
+    
     if [ $# -lt 3 ] || [ $# -gt 4 ]; then
         log_error "[!] INTERNAL ERROR. retry_quietly requires 3 or 4 arguments"
         exit 1
@@ -243,7 +232,7 @@ retry_quietly()
         else
             exit_code=1
         fi
-
+        
         if [ $exit_code -ne 0 ]; then
             sleep 1
             ((retries--))
@@ -260,10 +249,26 @@ retry_quietly()
     return $exit_code
 }
 
+print_state()
+{
+    if [ -z $(which mdatp) ]; then
+        log_warning "[S] MDE not installed."
+    else
+        log_info "[S] MDE installed."
+        if run_quietly "mdatp health" "[S] Could not connect to the daemon -- MDE is not ready to connect yet."; then
+            log_info "[S] Version: $($MDE_VERSION_CMD)"
+            log_info "[S] Onboarded: $(mdatp health --field licensed)"
+            log_info "[S] Passive mode: $(mdatp health --field passive_mode_enabled)"
+            log_info "[S] Device tags: $(mdatp health --field edr_device_tags)"
+            log_info "[S] Subsystem: $(mdatp health --field real_time_protection_subsystem)"
+            log_info "[S] Conflicting applications: $(mdatp health --field conflicting_applications)"
+        fi
+    fi
+}
 
 detect_distro()
 {
-    if [ -f /etc/os-release ]; then
+    if [ -f /etc/os-release ] || [ -f /etc/mariner-release ]; then
         . /etc/os-release
         DISTRO=$ID
         VERSION=$VERSION_ID
@@ -290,10 +295,10 @@ detect_distro()
         DISTRO_FAMILY="debian"
     elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
         DISTRO_FAMILY="fedora"
-    elif [ "$DISTRO" == "sles" ] || [ "$DISTRO" == "sle-hpc" ] || [ "$DISTRO" == "sles_sap" ]; then
-        DISTRO_FAMILY="sles"
     elif [ "$DISTRO" == "mariner" ]; then
         DISTRO_FAMILY="mariner"
+    elif [ "$DISTRO" == "sles" ] || [ "$DISTRO" == "sle-hpc" ] || [ "$DISTRO" == "sles_sap" ]; then
+        DISTRO_FAMILY="sles"
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
@@ -331,7 +336,7 @@ verify_connectivity()
     done
 
     log_info "[final] connected=$connected"
-
+    
     if [[ "$connected" != "OK" ]]; then
         script_exit "internet connectivity needed for $1" $ERR_NO_INTERNET_CONNECTIVITY
     fi
@@ -359,7 +364,7 @@ verify_privileges()
 verify_min_requirements()
 {
     # echo "[>] verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
-
+    
     local cores=$(nproc --all)
     if [ $cores -lt $MIN_CORES ]; then
         script_exit "MDE requires $MIN_CORES cores or more to run, found $cores." $ERR_INSUFFICIENT_REQUIREMENTS
@@ -385,7 +390,7 @@ find_service()
     fi
 
 	lines=$(systemctl status $1 2>&1 | grep "Active: active" | wc -l)
-
+	
     if [ $lines -eq 0 ]; then
 		return 1
 	fi
@@ -399,30 +404,30 @@ verify_conflicting_applications()
 
     # find applications that are using fanotify
     local conflicting_apps=$(timeout 5m find /proc/*/fdinfo/ -type f -print0 2>/dev/null | xargs -r0 grep -Fl "fanotify mnt_id" 2>/dev/null | xargs -I {} -r sh -c 'cat "$(dirname {})/../cmdline"')
-
+    
     if [ ! -z $conflicting_apps ]; then
-	    
-            if [ $conflicting_apps == "/opt/microsoft/mdatp/sbin/wdavdaemon" ]; then
-		    op=$(command -v mdatp)
 
-		    #make sure mdatp is installed
-		    if [ ! -z $op ]; then
-
-			    #check if mdatp is onboarded or not
-			    is_onboarded=$(mdatp health --field healthy | tail -1)
-			    if [ "$is_onboarded" = false ]; then
-				    log_info "MDE already installed but not onboarded. Please use --onboard command to onboard the product."
-			    else 
-				    mdatp_version=$($MDE_VERSION_CMD | tail -1)
-				    org_id=$(mdatp health --field org_id | tail -1)
-				    script_exit "Found MDE already installed and onboarded with org_id $org_id and app_version $mdatp_version. Either try to upgrade your MDE version using --upgrade option or Please verify that the onboarded linux server appears in Microsoft 365 Defender."
-			    fi
-                    else
-			    script_exit "seems like MDE was installed previously but not successfully. Please, first try to uninstall the previous version of MDE using --remove option, aborting"  $ERR_CONFLICTING_APPS
-		    fi
+        if [ $conflicting_apps == "/opt/microsoft/mdatp/sbin/wdavdaemon" ]; then
+            op=$(command -v mdatp)
+            #make sure mdatp is installed
+            if [ ! -z $op ]; then
+                #check if mdatp is onboarded or not
+                check_missing_license=$(mdatp health --field health_issues | grep "missing license" -c)
+                onboard_file=/etc/opt/microsoft/mdatp/mdatp_onboard.json
+                if ([ $check_missing_license -gt 0 ]) || ([ ! -f "$onboard_file" ]); then
+                    log_info "MDE already installed but not onboarded. Please use --onboard command to onboard the product."
+                else
+                    mdatp_version=$($MDE_VERSION_CMD | tail -1)
+                    org_id=$(mdatp health --field org_id | tail -1)
+                    log_info "Found MDE already installed and onboarded with org_id $org_id and app_version $mdatp_version. Either try to upgrade your MDE version using --upgrade option or Please verify that the onboarded linux server appears in Microsoft 365 Defender."
+                fi
             else
-		    script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
-	    fi
+                script_exit "seems like MDE was installed previously but not successfully. Please, first try to uninstall the previous version of MDE using --remove option, aborting" $ERR_MDE_ALREADY_INSTALLED
+            fi
+        else
+            script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
+        fi
+
     fi
 
     # find known security services
@@ -437,11 +442,11 @@ verify_conflicting_applications()
     for t in "${conflicting_services[@]}"
     do
         set -- $t
-        # echo "[>] locating serivice: $1"
+        # echo "[>] locating service: $1"
         if find_service $1; then
             script_exit "found conflicting service: [$1], aborting" $ERR_CONFLICTING_APPS
-        fi
-    done
+        fi        
+    done 
 
     log_info "[v] no conflicting applications found"
 }
@@ -454,16 +459,14 @@ set_package_manager()
     elif [ "$DISTRO_FAMILY" = "fedora" ]; then
         PKG_MGR=yum
         PKG_MGR_INVOKER="yum $ASSUMEYES"
+    elif [ "$DISTRO_FAMILY" = "mariner" ]; then
+        PKG_MGR=dnf
+        PKG_MGR_INVOKER="dnf $ASSUMEYES"
     elif [ "$DISTRO_FAMILY" = "sles" ]; then
         DISTRO="sles"
         PKG_MGR="zypper"
         PKG_MGR_INVOKER="zypper --non-interactive"
-    elif [ "$DISTRO_FAMILY" = "mariner" ]; then
-        DISTRO="mariner"
-        PKG_MGR="yum"
-        ASSUMEYES="-y"
-        PKG_MGR_INVOKER="yum $ASSUMEYES"
-    else
+    else    
         script_exit "unsupported distro", $ERR_UNSUPPORTED_DISTRO
     fi
 
@@ -485,6 +488,19 @@ check_if_pkg_is_installed()
     return $?
 }
 
+get_mdatp_version()
+{
+    local PKG_VERSION=""
+
+    if [ "$DISTRO_FAMILY" = "debian" ]; then
+        PKG_VERSION=$(dpkg -s mdatp | grep -i version)
+    else
+        PKG_VERSION=$(rpm -qi mdatp | grep -i version)
+    fi
+
+    echo $PKG_VERSION
+}
+
 install_required_pkgs()
 {
     local packages=
@@ -504,7 +520,7 @@ install_required_pkgs()
 
     if [ ! -z "$pkgs_to_be_installed" ]; then
         log_info "[>] installing $pkgs_to_be_installed"
-        run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY
+        run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY 
     else
         log_info "[v] required pkgs are installed"
     fi
@@ -537,7 +553,6 @@ install_on_debian()
 
     if check_if_pkg_is_installed mdatp; then
         pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
-        pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
         log_info "[i] MDE already installed ($pkg_version)"
         return
     fi
@@ -566,6 +581,30 @@ install_on_debian()
     else
         run_quietly "$PKG_MGR_INVOKER -t $CHANNEL install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     fi
+
+    sleep 5
+    log_info "[v] installed"
+}
+
+install_on_mariner()
+{
+    local packages=
+    local pkg_version=
+    local repo=
+    local effective_distro=
+
+    if check_if_pkg_is_installed mdatp; then
+        pkg_version=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
+        log_info "[i] MDE already installed ($pkg_version)"
+        return
+    fi
+
+    ### Add Preview Repo File ###
+    tdnf -y install mariner-repos-extras-preview
+
+    ### Install MDE ###
+    log_info "[>] installing MDE"
+    run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
 
     sleep 5
     log_info "[v] installed"
@@ -614,7 +653,7 @@ install_on_fedora()
     ### Install MDE ###
     log_info "[>] installing MDE"
     run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo-$CHANNEL install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
-
+    
     sleep 5
     log_info "[v] installed"
 }
@@ -648,14 +687,14 @@ install_on_sles()
 
     ### Fetch the gpg key ###
     run_quietly "rpm $(get_rpm_proxy_params) --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-
+    
     wait_for_package_manager_to_complete
 
     ### Install MDE ###
     log_info "[>] installing MDE"
 
     run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES $repo-$CHANNEL:mdatp" "[!] failed to install MDE (1/2)"
-
+    
     if ! check_if_pkg_is_installed mdatp; then
         log_warning "[r] retrying"
         sleep 2
@@ -664,31 +703,6 @@ install_on_sles()
 
     sleep 5
     log_info "[v] installed."
-}
-
-install_on_mariner()
-{
-    local packages=
-
-    if check_if_pkg_is_installed mdatp; then
-        pkg_version=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
-        log_info "[i] MDE already installed ($pkg_version)"
-        return
-    fi
-
-    # Note: Install the Mariner Extras Repo if required
-    packages=(mariner-repos-extras)
-
-    install_required_pkgs ${packages[@]}
-
-    wait_for_package_manager_to_complete
-
-    ### Install MDE ###
-    log_info "[>] installing MDE"
-    run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
-
-    sleep 5
-    log_info "[v] installed"
 }
 
 remove_repo()
@@ -733,10 +747,17 @@ upgrade_mdatp()
         script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
     fi
 
-    log_info "[>] Current MDE package installed: $($MDE_VERSION_CMD)"
+    local VERSION_BEFORE_UPDATE=$(get_mdatp_version)
+    log_info "[>] Current $VERSION_BEFORE_UPDATE"
 
     run_quietly "$PKG_MGR_INVOKER $1 mdatp" "Unable to upgrade MDE $?" $ERR_INSTALLATION_FAILED
-    log_info "[v] upgraded"
+
+    local VERSION_AFTER_UPDATE=$(get_mdatp_version)
+    if [ "$VERSION_BEFORE_UPDATE" == "$VERSION_AFTER_UPDATE" ]; then
+        log_info "[>] MDE is already up to date."
+    else
+        log_info "[v] upgraded"
+    fi
 }
 
 remove_mdatp()
@@ -752,11 +773,11 @@ rhel6_supported_version()
 {
     local SUPPORTED_RHEL6_VERSIONS=("6.7" "6.8" "6.9" "6.10")
     for version in ${SUPPORTED_RHEL6_VERSIONS[@]}; do
-        if [[ "$1" == "$version" ]]; then
+        if [[ "$1" == "$version" ]]; then 
             return 0
         fi
     done
-    return 1
+    return 1    
 }
 
 scale_version_id()
@@ -778,8 +799,14 @@ scale_version_id()
             SCALED_VERSION=7
         elif [[ $VERSION == 8* ]] || [ "$DISTRO" == "fedora" ]; then
             SCALED_VERSION=8
-	elif [[ $VERSION == 9* ]]; then
+        elif [[ $VERSION == 9* ]]; then
             SCALED_VERSION=9.0
+        else
+            script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
+        fi
+    elif [ "$DISTRO_FAMILY" == "mariner" ]; then
+        if [[ $VERSION == 2* ]]; then
+            SCALED_VERSION=2
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
@@ -791,14 +818,15 @@ scale_version_id()
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]]; then
+    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]]; then
         SCALED_VERSION=18.04
     else
-        # no problems with
+        # no problems with 
         SCALED_VERSION=$VERSION
     fi
     log_info "[>] scaled: $SCALED_VERSION"
 }
+
 
 onboard_device()
 {
@@ -814,10 +842,23 @@ onboard_device()
 
     if [[ $ONBOARDING_SCRIPT == *.py ]]; then
         # Make sure python is installed
-        PYTHON=$(which python 2>/dev/null || which python3 2>/dev/null)
+        PYTHON=$(which python || which python3)
 
         if [ -z $PYTHON ]; then
             script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
+        fi
+
+        #remove mdatp_offboard.json if present
+        mdatp_offboard_file=/etc/opt/microsoft/mdatp/mdatp_offboard.json
+        echo "$mdatp_offboard_file"
+        if [ -f "$mdatp_offboard_file" ]; then
+            echo "found mdatp_offboard file"
+            sudo rm -f $mdatp_offboard_file
+            if [ ! -f "$mdatp_offboard_file" ]; then
+                echo "removed mdatp_offboard file"
+            else
+                echo "failed to remove mdatp_offboard file"
+            fi
         fi
 
         # Run onboarding script
@@ -833,27 +874,51 @@ onboard_device()
     fi
 
     # validate onboarding
-    license_found=false
-    
-    for ((i = 1; i <= 10; i++)); do
-        sleep 15 # Delay for 15 seconds before checking the license status
-        
-        # Check if "No license found" is present in the output of the mdatp health command
-        if [[ $(mdatp health --field org_id | grep "No license found" -c) -gt 0 ]]; then
-        # If "No license found" is present, set the license_found variable to false
-            license_found=false
-        else
-        # If "No license found" is not present, exit the loop
-            license_found=true
-            break
-        fi
-    done
-    
-    if [[ $license_found == false ]]; then
-        script_exit "onboarding failed" $ERR_ONBOARDING_FAILED
+    sleep 3
+    if [[ $(mdatp health --field org_id | grep "No license found" -c) -gt 0 ]]; then
+        script_exit "onboarding failed...." $ERR_ONBOARDING_FAILED
     fi
-    
     log_info "[v] onboarded"
+}
+
+offboard_device()
+{
+    log_info "[>] offboarding script: $OFFBOARDING_SCRIPT"
+
+    if ! check_if_pkg_is_installed mdatp; then
+        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
+    fi
+
+    if [ ! -f $OFFBOARDING_SCRIPT ]; then
+        script_exit "error: offboarding script not found." $ERR_OFFBOARDING_NOT_FOUND
+    fi
+
+    if [[ $OFFBOARDING_SCRIPT == *.py ]]; then
+        # Make sure python is installed
+        PYTHON=$(which python || which python3)
+
+        if [ -z $PYTHON ]; then
+            script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
+        fi
+
+        # Run offboarding script
+        # echo "[>] running offboarding script..."
+        sleep 1
+        run_quietly "$PYTHON $OFFBOARDING_SCRIPT" "error: python offboarding failed" $ERR_OFFBOARDING_FAILED
+
+    elif [[ $OFFBOARDING_SCRIPT == *.sh ]]; then        
+        run_quietly "sh $OFFBOARDING_SCRIPT" "error: bash offboarding failed" $ERR_OFFBOARDING_FAILED
+
+    else
+        script_exit "error: unknown offboarding script type." $ERR_OFFBOARDING_FAILED
+    fi
+
+    # validate offboarding
+    sleep 3
+    if [[ $(mdatp health --field org_id | grep "No license found" -c) -eq 0 ]]; then
+        script_exit "offboarding failed" $ERR_OFFBOARDING_FAILED
+    fi
+    log_info "[v] offboarded"
 }
 
 set_epp_to_passive_mode()
@@ -892,14 +957,13 @@ set_device_tags()
 
             if [ $tag_exists -eq 0 ]; then
                 # echo "[>] setting tag: ($1, $2)"
-                local tag_value="\"${@:2}\""
-                retry_quietly 2 "mdatp edr tag set --name $1 --value $tag_value" "failed to set tag" $ERR_PARAMETER_SET_FAILED
+                retry_quietly 2 "mdatp edr tag set --name $1 --value $2" "failed to set tag" $ERR_PARAMETER_SET_FAILED
             fi
         else
             script_exit "invalid tag name: $1. supported tags: GROUP, SecurityWorkspaceId, AzureResourceId and SecurityAgentId" $ERR_TAG_NOT_SUPPORTED
         fi
     done
-    log_info "[v] tags set."
+    log_info "[v] tags set."   
 }
 
 usage()
@@ -911,13 +975,15 @@ usage()
     echo " -i|--install         install the product"
     echo " -r|--remove          remove the product"
     echo " -u|--upgrade         upgrade the existing product to a newer version if available"
-    echo " -o|--onboard         onboard/offboard the product with <onboarding_script>"
+    echo " -o|--onboard         onboard the product with <onboarding_script>"
+    echo " -o|--offboard        offboard the product with <offboarding_script>"
     echo " -p|--passive-mode    set EPP to passive mode"
     echo " -t|--tag             set a tag by declaring <name> and <value>. ex: -t GROUP Coders"
     echo " -m|--min_req         enforce minimum requirements"
     echo " -x|--skip_conflict   skip conflicting application verification"
     echo " -w|--clean           remove repo from package manager for a specific channel"
-    echo " -y|--yes             assume yes for all mid-process prompts (highly reccomended)"
+    echo " -y|--yes             assume yes for all mid-process prompts (default, depracated)"
+    echo " -n|--no              remove assume yes sign"
     echo " -s|--verbose         verbose output"
     echo " -v|--version         print out script version"
     echo " -d|--debug           set debug mode"
@@ -939,7 +1005,7 @@ do
         -c|--channel)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi
+            fi        
             CHANNEL=$2
             verify_channel
             shift 2
@@ -962,9 +1028,17 @@ do
         -o|--onboard)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi
+            fi        
             ONBOARDING_SCRIPT=$2
             verify_privileges "onboard"
+            shift 2
+            ;;
+        -off|--offboard)
+            if [ -z "$2" ]; then
+                script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
+            fi        
+            OFFBOARDING_SCRIPT=$2
+            verify_privileges "offboard"
             shift 2
             ;;
         -m|--min_req)
@@ -1001,6 +1075,10 @@ do
             ASSUMEYES=-y
             shift 1
             ;;
+        -n|--no)
+            ASSUMEYES=
+            shift 1
+            ;;            
         -s|--verbose)
             VERBOSE=1
             shift 1
@@ -1047,7 +1125,7 @@ do
     esac
 done
 
-if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && ${#tags[@]} -eq 0 ]]; then
+if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${OFFBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && ${#tags[@]} -eq 0 ]]; then
     script_exit "no installation mode specified. Specify --help for help" $ERR_INVALID_ARGUMENTS
 fi
 
@@ -1075,15 +1153,15 @@ if [ "$INSTALL_MODE" == "i" ]; then
     if [ -z $SKIP_CONFLICTING_APPS ]; then
         verify_conflicting_applications
     fi
-
+    
     if [ "$DISTRO_FAMILY" == "debian" ]; then
         install_on_debian
     elif [ "$DISTRO_FAMILY" == "fedora" ]; then
         install_on_fedora
+    elif [ "$DISTRO_FAMILY" == "mariner" ]; then
+        install_on_mariner
     elif [ "$DISTRO_FAMILY" = "sles" ]; then
         install_on_sles
-    elif [ "$DISTRO_FAMILY" = "mariner" ]; then
-        install_on_mariner
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
@@ -1095,11 +1173,11 @@ elif [ "$INSTALL_MODE" == "u" ]; then
         upgrade_mdatp "$ASSUMEYES install --only-upgrade"
     elif [ "$DISTRO_FAMILY" == "fedora" ]; then
         upgrade_mdatp "$ASSUMEYES update"
-    elif [ "$DISTRO_FAMILY" == "sles" ]; then
-        upgrade_mdatp "up $ASSUMEYES"
     elif [ "$DISTRO_FAMILY" == "mariner" ]; then
         upgrade_mdatp "$ASSUMEYES update"
-    else
+    elif [ "$DISTRO_FAMILY" == "sles" ]; then
+        upgrade_mdatp "up $ASSUMEYES"
+    else    
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
@@ -1120,6 +1198,10 @@ fi
 
 if [ ! -z $ONBOARDING_SCRIPT ]; then
     onboard_device
+fi
+
+if [ ! -z $OFFBOARDING_SCRIPT ]; then
+    offboard_device
 fi
 
 if [ ${#tags[@]} -gt 0 ]; then
