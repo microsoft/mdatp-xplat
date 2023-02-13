@@ -103,7 +103,7 @@ script_exit()
         exit $ERR_INTERNAL
     fi
 
-    if [ -n $DEBUG ]; then
+    if [ -n "$DEBUG" ]; then
         print_state
     fi
 
@@ -195,7 +195,7 @@ run_quietly()
     fi
     
     if [ "$exit_code" -ne 0 ]; then
-        if [ -n $DEBUG ]; then             
+        if [ -n "$DEBUG" ]; then             
             log_debug "[>] Running command: $1"
             log_debug "[>] Command output: $out"
             log_debug "[>] Command exit_code: $exit_code"
@@ -559,7 +559,7 @@ install_on_debian()
 
     packages=(curl apt-transport-https gnupg)
 
-    install_required_pkgs ${packages[@]}
+    install_required_pkgs "${packages[@]}"
 
     ### Configure the repository ###
     rm -f microsoft.list > /dev/null
@@ -630,7 +630,7 @@ install_on_fedora()
         packages=($packages deltarpm)
     fi
 
-    install_required_pkgs ${packages[@]}
+    install_required_pkgs "${packages[@]}"
 
     ### Configure the repo name from which package should be installed
     if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
@@ -673,7 +673,7 @@ install_on_sles()
     repo=packages-microsoft-com
     packages=(curl)
 
-    install_required_pkgs ${packages[@]}
+    install_required_pkgs "${packages[@]}"
 
     wait_for_package_manager_to_complete
 
@@ -772,7 +772,7 @@ remove_mdatp()
 rhel6_supported_version()
 {
     local SUPPORTED_RHEL6_VERSIONS=("6.7" "6.8" "6.9" "6.10")
-    for version in ${SUPPORTED_RHEL6_VERSIONS[@]}; do
+    for version in "${SUPPORTED_RHEL6_VERSIONS[@]}"; do
         if [[ "$1" == "$version" ]]; then 
             return 0
         fi
@@ -826,7 +826,6 @@ scale_version_id()
     fi
     log_info "[>] scaled: $SCALED_VERSION"
 }
-
 
 onboard_device()
 {
