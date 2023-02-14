@@ -119,7 +119,7 @@ script_exit()
         exit $ERR_INTERNAL
     else
         log_info "[*] exiting ($2)"
-	    exit $2
+	    exit "$2"
     fi
 }
 
@@ -135,7 +135,7 @@ get_python() {
 
 
 parse_uri() {
-   cat <<EOF | /usr/bin/env $(get_python)
+   cat <<EOF | /usr/bin/env "$(get_python)"
 import sys
 
 if sys.version_info < (3,):
@@ -174,7 +174,7 @@ get_rpm_proxy_params() {
           proxy_params="$proxy_params --ftpport $proxy_port"
        fi
     fi
-    echo $proxy_params
+    echo "$proxy_params"
 }
 
 run_quietly()
@@ -187,8 +187,10 @@ run_quietly()
         exit 1
     fi
 
-    local out=$(eval $1 2>&1; echo "$?")
-    local exit_code=$(echo "$out" | tail -n1)
+    local out
+    out=$(eval "$1" 2>&1; echo "$?")
+    local exit_code
+    exit_code=$(echo "$out" | tail -n1)
 
     if [ -n "$VERBOSE" ]; then
         log_info "$out"
@@ -202,13 +204,13 @@ run_quietly()
         fi
 
         if [ $# -eq 2 ]; then
-            log_error $2
+            log_error "$2"
         else
             script_exit "$2" "$3"
         fi
     fi
 
-    return $exit_code
+    return "$exit_code"
 }
 
 retry_quietly()
@@ -224,7 +226,7 @@ retry_quietly()
     local exit_code=
     local retries=$1
 
-    while [ $retries -gt 0 ]
+    while [ "$retries" -gt 0 ]
     do
 
         if run_quietly "$2" "$3"; then
@@ -251,7 +253,7 @@ retry_quietly()
 
 print_state()
 {
-    if [ -z $(which mdatp) ]; then
+    if [ -z "$(which mdatp)" ]; then
         log_warning "[S] MDE not installed."
     else
         log_info "[S] MDE installed."
@@ -356,7 +358,7 @@ verify_privileges()
         script_exit "Internal error. verify_privileges require a parameter" $ERR_INTERNAL
     fi
 
-    if [ $(id -u) -ne 0 ]; then
+    if [ "$(id -u)" -ne 0 ]; then
         script_exit "root privileges required to perform $1 operation" $ERR_INSUFFICIENT_PRIVILAGES
     fi
 }
@@ -365,18 +367,21 @@ verify_min_requirements()
 {
     # echo "[>] verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
     
-    local cores=$(nproc --all)
-    if [ $cores -lt $MIN_CORES ]; then
+    local cores
+    cores=$(nproc --all)
+    if [ "$cores" -lt $MIN_CORES ]; then
         script_exit "MDE requires $MIN_CORES cores or more to run, found $cores." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
-    local mem_mb=$(free -m | grep Mem | awk '{print $2}')
-    if [ $mem_mb -lt $MIN_MEM_MB ]; then
+    local mem_mb
+    mem_mb=$(free -m | grep Mem | awk '{print $2}')
+    if [ "$mem_mb" -lt $MIN_MEM_MB ]; then
         script_exit "MDE requires at least $MIN_MEM_MB MB of RAM to run. found $mem_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
-    local disk_space_mb=$(df -m . | tail -1 | awk '{print $4}')
-    if [ $disk_space_mb -lt $MIN_DISK_SPACE_MB ]; then
+    local disk_space_mb
+    disk_space_mb=$(df -m . | tail -1 | awk '{print $4}')
+    if [ "$disk_space_mb" -lt $MIN_DISK_SPACE_MB ]; then
         script_exit "MDE requires at least $MIN_DISK_SPACE_MB MB of free disk space for installation. found $disk_space_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
@@ -389,9 +394,9 @@ find_service()
         script_exit "INTERNAL ERROR. find_service requires an argument" $ERR_INTERNAL
     fi
 
-	lines=$(systemctl status $1 2>&1 | grep "Active: active" | wc -l)
+	lines=$(systemctl status "$1" 2>&1 | grep "Active: active" | wc -l)
 	
-    if [ $lines -eq 0 ]; then
+    if [ "$lines" -eq 0 ]; then
 		return 1
 	fi
 
@@ -403,18 +408,19 @@ verify_conflicting_applications()
     # echo "[>] identifying conflicting applications (fanotify mounts)"
 
     # find applications that are using fanotify
-    local conflicting_apps=$(timeout 5m find /proc/*/fdinfo/ -type f -print0 2>/dev/null | xargs -r0 grep -Fl "fanotify mnt_id" 2>/dev/null | xargs -I {} -r sh -c 'cat "$(dirname {})/../cmdline"')
+    local conflicting_apps
+    conflicting_apps=$(timeout 5m find /proc/*/fdinfo/ -type f -print0 2>/dev/null | xargs -r0 grep -Fl "fanotify mnt_id" 2>/dev/null | xargs -I {} -r sh -c 'cat "$(dirname {})/../cmdline"')
     
-    if [ ! -z $conflicting_apps ]; then
+    if [ -n "$conflicting_apps" ]; then
 
-        if [ $conflicting_apps == "/opt/microsoft/mdatp/sbin/wdavdaemon" ]; then
+        if [ "$conflicting_apps" == "/opt/microsoft/mdatp/sbin/wdavdaemon" ]; then
             op=$(command -v mdatp)
             #make sure mdatp is installed
-            if [ ! -z $op ]; then
+            if [ -n "$op" ]; then
                 #check if mdatp is onboarded or not
                 check_missing_license=$(mdatp health --field health_issues | grep "missing license" -c)
                 onboard_file=/etc/opt/microsoft/mdatp/mdatp_onboard.json
-                if ([ $check_missing_license -gt 0 ]) || ([ ! -f "$onboard_file" ]); then
+                if ([ "$check_missing_license" -gt 0 ]) || ([ ! -f "$onboard_file" ]); then
                     log_info "MDE already installed but not onboarded. Please use --onboard command to onboard the product."
                 else
                     mdatp_version=$($MDE_VERSION_CMD | tail -1)
@@ -441,9 +447,9 @@ verify_conflicting_applications()
     local conflicting_services=('ds_agent' 'falcon-sensor' 'cbsensor' 'MFEcma')
     for t in "${conflicting_services[@]}"
     do
-        set -- $t
+        set -- "$t"
         # echo "[>] locating service: $1"
-        if find_service $1; then
+        if find_service "$1"; then
             script_exit "found conflicting service: [$1], aborting" $ERR_CONFLICTING_APPS
         fi        
     done 
@@ -480,9 +486,9 @@ check_if_pkg_is_installed()
     fi
 
     if [ "$PKG_MGR" = "apt" ]; then
-        dpkg -s $1 2> /dev/null | grep Status | grep "install ok installed" 1> /dev/null
+        dpkg -s "$1" 2> /dev/null | grep Status | grep "install ok installed" 1> /dev/null
     else
-        rpm --quiet --query $(get_rpm_proxy_params) $1
+        rpm --quiet --query "$(get_rpm_proxy_params)" "$1"
     fi
 
     return $?
@@ -498,7 +504,7 @@ get_mdatp_version()
         PKG_VERSION=$(rpm -qi mdatp | grep -i version)
     fi
 
-    echo $PKG_VERSION
+    echo "$PKG_VERSION"
 }
 
 install_required_pkgs()
@@ -513,12 +519,12 @@ install_required_pkgs()
     packages=("$@")
     for pkg in "${packages[@]}"
     do
-        if  ! check_if_pkg_is_installed $pkg; then
+        if  ! check_if_pkg_is_installed "$pkg"; then
             pkgs_to_be_installed="$pkgs_to_be_installed $pkg"
         fi
     done
 
-    if [ ! -z "$pkgs_to_be_installed" ]; then
+    if [ -n "$pkgs_to_be_installed" ]; then
         log_info "[>] installing $pkgs_to_be_installed"
         run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY 
     else
@@ -549,7 +555,6 @@ install_on_debian()
 {
     local packages=
     local pkg_version=
-    local success=
 
     if check_if_pkg_is_installed mdatp; then
         pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
@@ -681,7 +686,7 @@ install_on_sles()
     # add repository if it does not exist
     lines=$($PKG_MGR_INVOKER lr | grep "packages-microsoft-com-$CHANNEL" | wc -l)
 
-    if [ $lines -eq 0 ]; then
+    if [ "$lines" -eq 0 ]; then
         run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n microsoft-$CHANNEL https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
     fi
 
@@ -713,7 +718,7 @@ remove_repo()
     fi
 
     # Remove configured packages.microsoft.com repository
-    if [ $DISTRO == 'sles' ] || [ "$DISTRO" = "sle-hpc" ]; then
+    if [ "$DISTRO" == 'sles' ] || [ "$DISTRO" = "sle-hpc" ]; then
         run_quietly "$PKG_MGR_INVOKER removerepo packages-microsoft-com-$CHANNEL" "failed to remove repo"
     
     elif [ "$DISTRO_FAMILY" == "fedora" ]; then
@@ -747,12 +752,14 @@ upgrade_mdatp()
         script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
     fi
 
-    local VERSION_BEFORE_UPDATE=$(get_mdatp_version)
+    local VERSION_BEFORE_UPDATE
+    VERSION_BEFORE_UPDATE=$(get_mdatp_version)
     log_info "[>] Current $VERSION_BEFORE_UPDATE"
 
     run_quietly "$PKG_MGR_INVOKER $1 mdatp" "Unable to upgrade MDE $?" $ERR_INSTALLATION_FAILED
 
-    local VERSION_AFTER_UPDATE=$(get_mdatp_version)
+    local VERSION_AFTER_UPDATE
+    VERSION_AFTER_UPDATE=$(get_mdatp_version)
     if [ "$VERSION_BEFORE_UPDATE" == "$VERSION_AFTER_UPDATE" ]; then
         log_info "[>] MDE is already up to date."
     else
@@ -784,8 +791,8 @@ scale_version_id()
 {
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
     if [ "$DISTRO_FAMILY" == "fedora" ]; then
-        if [[ $VERSION == 6* ]]; then
-            if rhel6_supported_version $VERSION; then # support versions 6.7+
+        if [[ "$VERSION" == 6* ]]; then
+            if rhel6_supported_version "$VERSION"; then # support versions 6.7+
                 if [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "rhel" ]; then
                     SCALED_VERSION=6
                 else
@@ -795,30 +802,30 @@ scale_version_id()
                script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
             fi
 
-        elif [[ $VERSION == 7* ]] || [ "$DISTRO" == "amzn" ]; then
+        elif [[ "$VERSION" == 7* ]] || [ "$DISTRO" == "amzn" ]; then
             SCALED_VERSION=7
-        elif [[ $VERSION == 8* ]] || [ "$DISTRO" == "fedora" ]; then
+        elif [[ "$VERSION" == 8* ]] || [ "$DISTRO" == "fedora" ]; then
             SCALED_VERSION=8
-        elif [[ $VERSION == 9* ]]; then
+        elif [[ "$VERSION" == 9* ]]; then
             SCALED_VERSION=9.0
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
     elif [ "$DISTRO_FAMILY" == "mariner" ]; then
-        if [[ $VERSION == 2* ]]; then
+        if [[ "$VERSION" == 2* ]]; then
             SCALED_VERSION=2
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
     elif [ "$DISTRO_FAMILY" == "sles" ]; then
-        if [[ $VERSION == 12* ]]; then
+        if [[ "$VERSION" == 12* ]]; then
             SCALED_VERSION=12
-        elif [[ $VERSION == 15* ]]; then
+        elif [[ "$VERSION" == 15* ]]; then
             SCALED_VERSION=15
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]]; then
+    elif [ "$DISTRO" == "ubuntu" ] && [[ "$VERSION" != "16.04" ]] && [[ "$VERSION" != "18.04" ]] && [[ "$VERSION" != "20.04" ]]; then
         SCALED_VERSION=18.04
     else
         # no problems with 
@@ -835,7 +842,7 @@ onboard_device()
         script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
     fi
 
-    if [ ! -f $ONBOARDING_SCRIPT ]; then
+    if [ ! -f "$ONBOARDING_SCRIPT" ]; then
         script_exit "error: onboarding script not found." $ERR_ONBOARDING_NOT_FOUND
     fi
 
@@ -843,7 +850,7 @@ onboard_device()
         # Make sure python is installed
         PYTHON=$(which python || which python3)
 
-        if [ -z $PYTHON ]; then
+        if [ -z "$PYTHON" ]; then
             script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
         fi
 
@@ -888,7 +895,7 @@ offboard_device()
         script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
     fi
 
-    if [ ! -f $OFFBOARDING_SCRIPT ]; then
+    if [ ! -f "$OFFBOARDING_SCRIPT" ]; then
         script_exit "error: offboarding script not found." $ERR_OFFBOARDING_NOT_FOUND
     fi
 
@@ -896,7 +903,7 @@ offboard_device()
         # Make sure python is installed
         PYTHON=$(which python || which python3)
 
-        if [ -z $PYTHON ]; then
+        if [ -z "$PYTHON" ]; then
             script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
         fi
 
@@ -926,7 +933,7 @@ set_epp_to_passive_mode()
         script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
     fi
 
-    if [ $(mdatp health --field passive_mode_enabled | tail -1) == "false" ]; then
+    if [ "$(mdatp health --field passive_mode_enabled | tail -1)" == "false" ]; then
         log_info "[>] setting MDE/EPP to passive mode"
         retry_quietly 3 "mdatp config passive-mode --value enabled" "failed to set MDE to passive-mode" $ERR_PARAMETER_SET_FAILED
     else
@@ -940,14 +947,17 @@ set_device_tags()
 {
     for t in "${tags[@]}"
     do
-        set -- $t
+        set -- "$t"
         if [ "$1" == "GROUP" ] || [ "$1" == "SecurityWorkspaceId" ] || [ "$1" == "AzureResourceId" ] || [ "$1" == "SecurityAgentId" ]; then
-            local set_tags=$(mdatp health --field edr_device_tags)
+            local set_tags
+            set_tags=$(mdatp health --field edr_device_tags)
             local tag_exists=0
 
-            local result=$(echo "$set_tags" | grep -q "\"key\":\"$1\""; echo "$?")
-            if [ $result -eq 0 ]; then
-                local value=$(echo "$set_tags" | grep -o "\"key\":\"$1\".*\"" | cut -d '"' -f 8)
+            local result
+            result=$(echo "$set_tags" | grep -q "\"key\":\"$1\""; echo "$?")
+            if [ "$result" -eq 0 ]; then
+                local value
+                value=$(echo "$set_tags" | grep -o "\"key\":\"$1\".*\"" | cut -d '"' -f 8)
                 if [ "$value" == "$2" ]; then
                     log_warning "[>] tag $1 already set to value $2."
                     tag_exists=1
@@ -1191,15 +1201,15 @@ elif [ "$INSTALL_MODE" == "c" ]; then
     fi
 fi
 
-if [ ! -z $PASSIVE_MODE ]; then
+if [ -n "$PASSIVE_MODE" ]; then
     set_epp_to_passive_mode
 fi
 
-if [ ! -z $ONBOARDING_SCRIPT ]; then
+if [ -n "$ONBOARDING_SCRIPT" ]; then
     onboard_device
 fi
 
-if [ ! -z $OFFBOARDING_SCRIPT ]; then
+if [ -n "$OFFBOARDING_SCRIPT" ]; then
     offboard_device
 fi
 
