@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.6.2"
+SCRIPT_VERSION="0.6.1"
 ASSUMEYES=-y
 CHANNEL=insiders-fast
 DISTRO=
@@ -26,7 +26,6 @@ PMC_URL=https://packages.microsoft.com/config
 SCALED_VERSION=
 VERSION=
 ONBOARDING_SCRIPT=
-OFFBOARDING_SCRIPT=
 MIN_REQUIREMENTS=
 SKIP_CONFLICTING_APPS=
 PASSIVE_MODE=
@@ -54,9 +53,7 @@ ERR_FAILED_REPO_SETUP=24
 ERR_INVALID_CHANNEL=25
 ERR_FAILED_REPO_CLEANUP=26
 ERR_ONBOARDING_NOT_FOUND=30
-ERR_OFFBOARDING_NOT_FOUND=31
-ERR_ONBOARDING_FAILED=35
-ERR_OFFBOARDING_FAILED=36
+ERR_ONBOARDING_FAILED=31
 ERR_TAG_NOT_SUPPORTED=40
 ERR_PARAMETER_SET_FAILED=41
 
@@ -852,18 +849,6 @@ onboard_device()
             script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
         fi
 
-        #remove mdatp_offboard.json if present
-        mdatp_offboard_file=/etc/opt/microsoft/mdatp/mdatp_offboard.json
-        if [ -f "$mdatp_offboard_file" ]; then
-            echo "found mdatp_offboard file"
-            sudo rm -f $mdatp_offboard_file
-            if [ ! -f "$mdatp_offboard_file" ]; then
-                echo "removed mdatp_offboard file"
-            else
-                echo "failed to remove mdatp_offboard file"
-            fi
-        fi
-
         # Run onboarding script
         # echo "[>] running onboarding script..."
         sleep 1
@@ -879,49 +864,9 @@ onboard_device()
     # validate onboarding
     sleep 3
     if [[ $(mdatp health --field org_id | grep "No license found" -c) -gt 0 ]]; then
-        script_exit "onboarding failed...." $ERR_ONBOARDING_FAILED
+        script_exit "onboarding failed" $ERR_ONBOARDING_FAILED
     fi
     log_info "[v] onboarded"
-}
-
-offboard_device()
-{
-    log_info "[>] offboarding script: $OFFBOARDING_SCRIPT"
-
-    if ! check_if_pkg_is_installed mdatp; then
-        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
-    fi
-
-    if [ ! -f $OFFBOARDING_SCRIPT ]; then
-        script_exit "error: offboarding script not found." $ERR_OFFBOARDING_NOT_FOUND
-    fi
-
-    if [[ $OFFBOARDING_SCRIPT == *.py ]]; then
-        # Make sure python is installed
-        PYTHON=$(which python || which python3)
-
-        if [ -z $PYTHON ]; then
-            script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
-        fi
-
-        # Run offboarding script
-        # echo "[>] running offboarding script..."
-        sleep 1
-        run_quietly "$PYTHON $OFFBOARDING_SCRIPT" "error: python offboarding failed" $ERR_OFFBOARDING_FAILED
-
-    elif [[ $OFFBOARDING_SCRIPT == *.sh ]]; then        
-        run_quietly "sh $OFFBOARDING_SCRIPT" "error: bash offboarding failed" $ERR_OFFBOARDING_FAILED
-
-    else
-        script_exit "error: unknown offboarding script type." $ERR_OFFBOARDING_FAILED
-    fi
-
-    # validate offboarding
-    sleep 3
-    if [[ $(mdatp health --field org_id | grep "No license found" -c) -eq 0 ]]; then
-        script_exit "offboarding failed" $ERR_OFFBOARDING_FAILED
-    fi
-    log_info "[v] offboarded"
 }
 
 set_epp_to_passive_mode()
@@ -978,8 +923,7 @@ usage()
     echo " -i|--install         install the product"
     echo " -r|--remove          remove the product"
     echo " -u|--upgrade         upgrade the existing product to a newer version if available"
-    echo " -o|--onboard         onboard the product with <onboarding_script>"
-    echo " -o|--offboard        offboard the product with <offboarding_script>"
+    echo " -o|--onboard         onboard/offboard the product with <onboarding_script>"
     echo " -p|--passive-mode    set EPP to passive mode"
     echo " -t|--tag             set a tag by declaring <name> and <value>. ex: -t GROUP Coders"
     echo " -m|--min_req         enforce minimum requirements"
@@ -1034,14 +978,6 @@ do
             fi        
             ONBOARDING_SCRIPT=$2
             verify_privileges "onboard"
-            shift 2
-            ;;
-        -off|--offboard)
-            if [ -z "$2" ]; then
-                script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi        
-            OFFBOARDING_SCRIPT=$2
-            verify_privileges "offboard"
             shift 2
             ;;
         -m|--min_req)
@@ -1128,7 +1064,7 @@ do
     esac
 done
 
-if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${OFFBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && ${#tags[@]} -eq 0 ]]; then
+if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && ${#tags[@]} -eq 0 ]]; then
     script_exit "no installation mode specified. Specify --help for help" $ERR_INVALID_ARGUMENTS
 fi
 
@@ -1201,10 +1137,6 @@ fi
 
 if [ ! -z $ONBOARDING_SCRIPT ]; then
     onboard_device
-fi
-
-if [ ! -z $OFFBOARDING_SCRIPT ]; then
-    offboard_device
 fi
 
 if [ ${#tags[@]} -gt 0 ]; then
