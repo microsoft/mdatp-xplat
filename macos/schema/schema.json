@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.71.18",
+    "__version": "101.97.94",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
     "options": {
@@ -281,6 +281,32 @@
                     "links": [
                         {
                             "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#degree-of-parallelism-for-on-demand-scans",
+                            "rel": "More information"
+                        }
+                    ]
+                },
+                "scanArchives": {
+                    "default": true,
+                    "title": "Scanning inside archive files",
+                    "type": "boolean",
+                    "propertyOrder": 140,
+                    "description": "If true, Defender will unpack archives and scan files inside them. Otherwise archive content will be skipped, that will improve scanning performance.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#scan-archives-on-demand-antivirus-scans-only",
+                            "rel": "More information"
+                        }
+                    ]
+                },
+                "enableFileHashComputation": {
+                    "default": false,
+                    "title": "Enable file hash computation",
+                    "type": "boolean",
+                    "propertyOrder": 150,
+                    "description": "Enables or disables file hash computation feature. When this feature is enabled Windows defender will compute hashes for files it scans. This will help in improving the accuracy of Custom Indicator matches. However, enabling EnableFileHashComputation may impact device performance.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#configure-file-hash-computation-feature",
                             "rel": "More information"
                         }
                     ]
