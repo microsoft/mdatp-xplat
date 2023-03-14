@@ -432,6 +432,7 @@ verify_conflicting_applications()
 
     fi
 
+
     # find known security services
     # | Vendor      | Service       |
     # |-------------|---------------|
