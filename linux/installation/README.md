@@ -51,6 +51,8 @@ This one-liner would:
 
 ## Additional details
 
+> [!NOTE] To onboard a device that was previously offboarded you must remove the mdatp_offboard.json file located at /etc/opt/microsoft/mdatp.
+
 The installer script can be used to (separatly or combined):
 
 * Install, upgrade or remove the product.
