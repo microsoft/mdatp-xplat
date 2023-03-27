@@ -303,7 +303,7 @@
                     "title": "Enable file hash computation",
                     "type": "boolean",
                     "propertyOrder": 150,
-                    "description": "Enables or disables file hash computation feature. When this feature is enabled Windows defender will compute hashes for files it scans. This will help in improving the accuracy of Custom Indicator matches. However, enabling EnableFileHashComputation may impact device performance.",
+                    "description": "Enables or disables file hash computation feature. When this feature is enabled Defender will compute hashes for files it scans. This will help in improving the accuracy of Custom Indicator matches. However, enabling EnableFileHashComputation may impact device performance.",
                     "links": [
                         {
                             "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#configure-file-hash-computation-feature",
