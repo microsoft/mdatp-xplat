@@ -14,8 +14,6 @@
     </dict>
     <key>features</key>
     <dict>
-        <key>systemExtensions</key>
-        <string>enabled</string>
         <key>dataLossPrevention</key>
         <string>enabled</string>
     </dict>
