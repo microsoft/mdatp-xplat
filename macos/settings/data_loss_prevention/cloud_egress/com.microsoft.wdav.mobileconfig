@@ -53,8 +53,6 @@
                 </dict>
                 <key>features</key>
                 <dict>
-                    <key>systemExtensions</key>
-                    <string>enabled</string>
                     <key>dataLossPrevention</key>
                     <string>enabled</string>
                 </dict>
@@ -65,6 +63,12 @@
                         <dict>
                             <key>name</key>
                             <string>DLP_browser_only_cloud_egress</string>
+                            <key>state</key>
+                            <string>enabled</string>
+                        </dict>
+                        <dict>
+                            <key>name</key>
+                            <string>DLP_ax_only_cloud_egress</string>
                             <key>state</key>
                             <string>enabled</string>
                         </dict>

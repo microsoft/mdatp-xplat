@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.47.27",
+    "__version": "101.97.94",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
     "options": {
@@ -197,10 +197,9 @@
                 },
                 "disallowedThreatActions": {
                     "type": "array",
-                    "description": "Restricts the actions that the local user of a device can take when threats are detected. The actions included in this list are not displayed in the user interface.",
+                    "description": "Restricts the actions that the local user of a device can take when threats are detected. The actions included in this list are not displayed in the user interface. Use unique values.",
                     "propertyOrder": 80,
                     "title": "Disallowed threat actions",
-                    "uniqueItems": true,
                     "links": [
                         {
                             "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#disallowed-threat-actions",
@@ -254,6 +253,60 @@
                     "links": [
                         {
                             "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#maximum-number-of-items-in-the-antivirus-scan-history",
+                            "rel": "More information"
+                        }
+                    ]
+                },
+                "scanAfterDefinitionUpdate": {
+                    "default": true,
+                    "title": "Run a scan after definitions are updated",
+                    "type": "boolean",
+                    "propertyOrder": 120,
+                    "description": "Specifies whether to start a process scan after new security intelligence updates are downloaded on the device. Enabling this setting will trigger an antivirus scan on the running processes of the device.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#run-a-scan-after-definitions-are-updated",
+                            "rel": "More information"
+                        }
+                    ]
+                },
+                "maximumOnDemandScanThreads": {
+                    "default": "2",
+                    "title": "Degree of parallelism for on-demand scans",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 64,
+                    "propertyOrder": 130,
+                    "description": "Specifies the degree of parallelism for on-demand scans. This corresponds to the number of threads used to perform the scan and impacts the CPU usage, as well as the duration of the on-demand scan.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#degree-of-parallelism-for-on-demand-scans",
+                            "rel": "More information"
+                        }
+                    ]
+                },
+                "scanArchives": {
+                    "default": true,
+                    "title": "Scanning inside archive files",
+                    "type": "boolean",
+                    "propertyOrder": 140,
+                    "description": "If true, Defender will unpack archives and scan files inside them. Otherwise archive content will be skipped, that will improve scanning performance.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#scan-archives-on-demand-antivirus-scans-only",
+                            "rel": "More information"
+                        }
+                    ]
+                },
+                "enableFileHashComputation": {
+                    "default": false,
+                    "title": "Enable file hash computation",
+                    "type": "boolean",
+                    "propertyOrder": 150,
+                    "description": "Enables or disables file hash computation feature. When this feature is enabled Defender will compute hashes for files it scans. This will help in improving the accuracy of Custom Indicator matches. However, enabling EnableFileHashComputation may impact device performance.",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#configure-file-hash-computation-feature",
                             "rel": "More information"
                         }
                     ]
@@ -355,6 +408,20 @@
                         }
                     ],
                     "enum": ["enabled", "disabled"]
+                },
+                "consumerExperience": {
+                    "default": "enabled",
+                    "title": "Control sign-in to consumer version",
+                    "type": "string",
+                    "propertyOrder": 30,
+                    "description": "Specify whether users can sign into the consumer version of Microsoft Defender",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#control-sign-in-to-consumer-version-of-microsoft-defender",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
                 }
             }
         },
@@ -398,24 +465,10 @@
         "features": {
             "title": "Features",
             "propertyOrder": 50,
-            "defaultProperties": [ "systemExtensions", "dataLossPrevention" ],
+            "defaultProperties": [ "dataLossPrevention" ],
             "properties": {
-                "systemExtensions": {
-                    "default": "enabled",
-                    "title": "Use System Extensions",
-                    "type": "string",
-                    "propertyOrder": 10,
-                    "description": "Whether system extensions are used on MacOS 10.15 (Catalina) or not.",
-                    "links": [
-                        {
-                            "href": "https://techcommunity.microsoft.com/t5/microsoft-defender-for-endpoint/microsoft-defender-atp-for-mac-is-moving-to-system-extensions/ba-p/1608736",
-                            "rel": "More information"
-                        }
-                    ],
-                    "enum": ["enabled", "disabled"]                
-                },
                 "dataLossPrevention": {
-                    "default": "enabled",
+                    "default": "disabled",
                     "title": "Use Data Loss Prevention",
                     "type": "string",
                     "propertyOrder": 20,
@@ -440,7 +493,7 @@
                     "default": "audit",
                     "type": "string",
                     "propertyOrder": 10,
-                    "description": "Specifies if network protection is disabled, in audit mode, or enforced",
+                    "description": "Specifies if tamper protection is disabled, in audit mode, or enforced",
                     "enum": ["disabled", "audit", "block"]
                 }
             }
@@ -465,6 +518,21 @@
                             "rel": "Schema"
                         }
                     ]
+                }
+            }
+        },
+        "networkProtection": {
+            "title": "Network protection",
+            "propertyOrder": 80,
+            "defaultProperties": [],
+            "properties": {
+                "enforcementLevel": {
+                    "title": "Enforcement level",
+                    "default": "audit",
+                    "type": "string",
+                    "propertyOrder": 10,
+                    "description": "Specifies if network protection is disabled, in audit mode, or enforced",
+                    "enum": ["disabled", "audit", "block"]
                 }
             }
         },

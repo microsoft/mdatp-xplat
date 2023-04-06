@@ -467,20 +467,6 @@
             "propertyOrder": 50,
             "defaultProperties": [],
             "properties": {
-                "systemExtensions": {
-                    "default": "disabled",
-                    "title": "Use System Extensions",
-                    "type": "string",
-                    "propertyOrder": 10,
-                    "description": "Whether system extensions are used on MacOS 10.15 (Catalina) or not.",
-                    "links": [
-                        {
-                            "href": "https://techcommunity.microsoft.com/t5/microsoft-defender-for-endpoint/microsoft-defender-atp-for-mac-is-moving-to-system-extensions/ba-p/1608736",
-                            "rel": "More information"
-                        }
-                    ],
-                    "enum": ["enabled", "disabled"]                
-                },
                 "dataLossPrevention": {
                     "default": "disabled",
                     "title": "Use Data Loss Prevention",
