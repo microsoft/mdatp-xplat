@@ -295,8 +295,8 @@ detect_distro()
         script_exit "unable to detect distro" $ERR_UNSUPPORTED_DISTRO
     fi
 
-    # change distro to ubuntu for linux mint support
-    if [ "$DISTRO" == "linuxmint" ]; then
+    # change distro to ubuntu for linux mint or Pop!_OS support
+    if [ "$DISTRO" == "linuxmint" ] || [ "$DISTRO" == "pop" ]; then
         DISTRO="ubuntu"
     fi
 
