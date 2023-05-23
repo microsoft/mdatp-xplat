@@ -487,14 +487,67 @@
             "title": "Tamper protection",
             "propertyOrder": 60,
             "defaultProperties": [],
+            "links": [
+                {
+                    "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/tamperprotection-macos",
+                    "rel": "Feature documentation"
+                }
+            ],
             "properties": {
                 "enforcementLevel": {
                     "title": "Enforcement level",
-                    "default": "audit",
+                    "default": "block",
                     "type": "string",
                     "propertyOrder": 10,
                     "description": "Specifies if tamper protection is disabled, in audit mode, or enforced",
                     "enum": ["disabled", "audit", "block"]
+                },
+                "exclusions": {
+                    "title": "Process exclusions",
+                    "type": "array",
+                    "propertyOrder": 20,
+                    "description": "Defines process that can interfere with Defender without considering it tampering",
+                    "items": {
+                        "title": "Process identity",
+                        "type": "object",
+                        "format": "grid",
+                        "links": [
+                            {
+                                "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/tamperprotection-macos#exclusions",
+                                "rel": "Tamper Protection exclusions"
+                            }
+                        ],
+                        "properties":  {
+                            "path": {
+                                "title": "Process path",
+                                "type": "string",
+                                "propertyOrder": 10,
+                                "description": "Full and exact path to the process binary"
+                            },
+                            "teamId": {
+                                "title": "Process's TeamIdentifier",
+                                "type": "string",
+                                "propertyOrder": 20,
+                                "description": "Code signature TeamIdentifier"
+                            },
+                            "signingId": {
+                                "title": "Process's Signing Identifier",
+                                "type": "string",
+                                "propertyOrder": 30,
+                                "description": "Code signature Identifier"
+                            },
+                            "args": {
+                                "title": "Process's arguments",
+                                "type": "array",
+                                "propertyOrder": 40,
+                                "description": "Command line arguments",
+                                "items": {
+                                    "title": "Argument",
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
