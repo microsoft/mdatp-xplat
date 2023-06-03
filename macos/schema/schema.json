@@ -346,6 +346,20 @@
                     ],
                     "enum": ["optional", "required"]
                 },
+                "cloudBlockLevel": {
+                    "default": "normal",
+                    "title": "Configure cloud block level",
+                    "type": "string",
+                    "propertyOrder": 20,
+                    "description": "This setting determines how aggressive Defender for Endpoint will be in blocking and scanning suspicious files. If this setting is on, Defender for Endpoint will be more aggressive when identifying suspicious files to block and scan; otherwise, it will be less aggressive and therefore block and scan with less frequency.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#configure-cloud-block-level",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["normal", "moderate","high", "high_plus", "zero_tolerance"]
+                },
                 "automaticSampleSubmission": {
                     "default": true,
                     "description": "Sends sample files to Microsoft to help protect device users and your organization from potential threats",
