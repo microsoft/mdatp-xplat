@@ -315,43 +315,6 @@ detect_distro()
     log_info "[>] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
 }
 
-verify_connectivity()
-{
-    if [ -z "$1" ]; then
-        script_exit "Internal error. verify_connectivity require a parameter" $ERR_INTERNAL
-    fi
-
-    if which wget; then
-        connect_command="wget -O - --quiet --no-verbose --timeout 2 https://cdn.x.cp.wd.microsoft.com/ping --no-check-certificate"
-    elif which curl; then
-        connect_command="curl --silent --connect-timeout 2 --insecure https://cdn.x.cp.wd.microsoft.com/ping"
-    else
-        script_exit "Unable to find wget/curl commands" $ERR_INTERNAL
-    fi
-
-    local connected=
-    local counter=3
-
-    while [ $counter -gt 0 ]
-    do
-        connected=$($connect_command)
-
-        if [[ "$connected" != "OK" ]]; then
-            sleep 1
-            ((counter--))
-        else
-            counter=0
-        fi
-    done
-
-    log_info "[final] connected=$connected"
-    
-    if [[ "$connected" != "OK" ]]; then
-        script_exit "internet connectivity needed for $1" $ERR_NO_INTERNET_CONNECTIVITY
-    fi
-    log_info "[v] connected"
-}
-
 verify_channel()
 {
     if [ "$CHANNEL" != "prod" ] && [ "$CHANNEL" != "insiders-fast" ] && [ "$CHANNEL" != "insiders-slow" ]; then
@@ -1163,7 +1126,6 @@ set_package_manager
 
 ### Act according to arguments ###
 if [ "$INSTALL_MODE" == "i" ]; then
-    verify_connectivity "package installation"
 
     if [ -z $SKIP_CONFLICTING_APPS ]; then
         verify_conflicting_applications
@@ -1182,7 +1144,6 @@ if [ "$INSTALL_MODE" == "i" ]; then
     fi
 
 elif [ "$INSTALL_MODE" == "u" ]; then
-    verify_connectivity "package update"
 
     if [ "$DISTRO_FAMILY" == "debian" ]; then
         upgrade_mdatp "$ASSUMEYES install --only-upgrade"
