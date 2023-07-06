@@ -12,9 +12,9 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.6.2"
+SCRIPT_VERSION="0.6.3"
 ASSUMEYES=-y
-CHANNEL=insiders-fast
+CHANNEL=
 DISTRO=
 DISTRO_FAMILY=
 PKG_MGR=
@@ -620,8 +620,15 @@ install_on_fedora()
         effective_distro="$DISTRO"
     fi
 
-    ### Configure the repository ###
-    run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
+    # Configure repository if it does not exist
+    yum repolist $repo-$CHANNEL | grep "$repo-$CHANNEL"
+    found_repo=$?
+    if [ $found_repo -eq 0 ]; then
+        log_info "[i] repository already configured"
+    else
+        log_info "[i] configure the repository"
+        run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
+    fi
 
     ### Fetch the gpg key ###
     run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
@@ -700,8 +707,13 @@ remove_repo()
         fi
 
         local repo_name="$repo-$CHANNEL"
-        run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
-        run_quietly "find /etc/yum.repos.d -exec grep -lqR \"\[$repo_name\]\" '{}' \; -delete" "Unable to remove repo ($?)" $ERR_FAILED_REPO_CLEANUP
+        yum repolist $repo_name | grep "$repo_name" &> /dev/null
+        if [ $? -eq 0 ]; then
+            run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
+            run_quietly "find /etc/yum.repos.d -exec grep -lqR \"\[$repo_name\]\" '{}' \; -delete" "Unable to remove repo ($?)" $ERR_FAILED_REPO_CLEANUP
+        else
+            log_info "[i] nothing to clean up"
+        fi
     
     elif [ "$DISTRO_FAMILY" == "debian" ]; then
         if [ -f "/etc/apt/sources.list.d/microsoft-$CHANNEL.list" ]; then
@@ -1102,6 +1114,10 @@ done
 
 if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${OFFBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && ${#tags[@]} -eq 0 ]]; then
     script_exit "no installation mode specified. Specify --help for help" $ERR_INVALID_ARGUMENTS
+fi
+
+if [[ "$INSTALL_MODE" == 'c' && -z "$CHANNEL" ]]; then
+    script_exit "Channel argument is required for clean mode" $ERR_INVALID_ARGUMENTS
 fi
 
 # echo "--- mde_installer.sh v$SCRIPT_VERSION ---"
