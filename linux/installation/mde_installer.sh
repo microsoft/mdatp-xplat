@@ -14,7 +14,7 @@
 
 SCRIPT_VERSION="0.6.3"
 ASSUMEYES=-y
-CHANNEL=insiders-fast
+CHANNEL=
 DISTRO=
 DISTRO_FAMILY=
 PKG_MGR=
@@ -314,6 +314,7 @@ detect_distro()
 
     log_info "[>] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
 }
+
 
 verify_channel()
 {
@@ -807,7 +808,7 @@ scale_version_id()
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]]; then
+    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]]; then
         SCALED_VERSION=18.04
     else
         # no problems with 
@@ -1116,8 +1117,14 @@ if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${OFFBOARDING_SCR
     script_exit "no installation mode specified. Specify --help for help" $ERR_INVALID_ARGUMENTS
 fi
 
+if [[ "$INSTALL_MODE" == 'i' && -z "$CHANNEL" ]]; then
+    log_info "[i] Specify the install channel using "--channel" argument. If not provided, mde will be installed for insiders-fast by default. Expected channel values: prod, insiders-slow, insiders-fast."
+    CHANNEL=insiders-fast
+fi
+
 if [[ "$INSTALL_MODE" == 'c' && -z "$CHANNEL" ]]; then
-    script_exit "Channel argument is required for clean mode" $ERR_INVALID_ARGUMENTS
+    log_info "[i] Specify the cleanup channel using "--channel" argument. If not provided, insiders-fast repo will be cleaned up by default. Expected channel values: prod, insiders-slow, insiders-fast."
+    CHANNEL=insiders-fast
 fi
 
 # echo "--- mde_installer.sh v$SCRIPT_VERSION ---"
