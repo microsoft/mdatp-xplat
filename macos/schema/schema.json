@@ -373,6 +373,20 @@
                     ],
                     "propertyOrder": 40,
                     "type": "boolean"
+                },
+                "cloudBlockLevel": {
+                    "default": "normal",
+                    "title": "Cloud Block Level",
+                    "type": "string",
+                    "propertyOrder": 50,
+                    "description": "Determines how aggressive Defender for Endpoint will be in blocking and scanning suspicious files.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#configure-cloud-block-level",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["normal", "moderate", "high", "high_plus", "zero_tolerance"]
                 }
             }
         },
