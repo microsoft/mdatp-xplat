@@ -621,7 +621,7 @@ install_on_fedora()
     fi
 
     # Configure repository if it does not exist
-    yum repolist $repo-$CHANNEL | grep "$repo-$CHANNEL"
+    yum -q repolist $repo-$CHANNEL | grep "$repo-$CHANNEL"
     found_repo=$?
     if [ $found_repo -eq 0 ]; then
         log_info "[i] repository already configured"
@@ -707,7 +707,7 @@ remove_repo()
         fi
 
         local repo_name="$repo-$CHANNEL"
-        yum repolist $repo_name | grep "$repo_name" &> /dev/null
+        yum -q repolist $repo_name | grep "$repo_name" &> /dev/null
         if [ $? -eq 0 ]; then
             run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
             run_quietly "find /etc/yum.repos.d -exec grep -lqR \"\[$repo_name\]\" '{}' \; -delete" "Unable to remove repo ($?)" $ERR_FAILED_REPO_CLEANUP
