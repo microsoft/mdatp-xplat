@@ -38,6 +38,20 @@ DLP monitors network traffic to determine the URLs processes are communicating w
 </dict>
 ```
 
-## Example
+## Examples
 
-This sample configuration profile sets both the Browser Only and AX Only flags for cloud egress: [com.microsoft.wdav.mobileconfig](./com.microsoft.wdav.mobileconfig)
+### Intune
+
+This sample configuration profile sets both the Browser Only and AX Only flags for cloud egress: [com.microsoft.wdav.mobileconfig](./com.microsoft.wdav.mobileconfig).
+
+### JAMF Pro
+
+**Using schema.json**
+
+Modify the existing MDE Prefereneces Configuration Profile to use the latest version of [schema.json](/macos/schema/schema.json). Then add the `Data Loss Prevention` key, and `Features` subkey.  Add the individual features here.
+
+![Add Settings in JAMF Pro](JAMF_Pro_MDE_Preferences.png)
+
+**Using plist**
+
+This sample plist sets both the Browser Only and AX Only flags for cloud egress: [com.microsoft.wdav.plist](./com.microsoft.wdav.plist).
