@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.6.3"
+SCRIPT_VERSION="0.6.4"
 ASSUMEYES=-y
 CHANNEL=
 DISTRO=
@@ -591,7 +591,7 @@ install_on_fedora()
 {
     local packages=
     local pkg_version=
-    local repo=
+    local repo=packages-microsoft-com
     local effective_distro=
 
     if check_if_pkg_is_installed mdatp; then
@@ -600,7 +600,6 @@ install_on_fedora()
         return
     fi
 
-    repo=packages-microsoft-com
     packages=(curl yum-utils)
 
     if [[ $SCALED_VERSION == 7* ]] && [ "$DISTRO" == "rhel" ]; then
@@ -610,8 +609,14 @@ install_on_fedora()
     install_required_pkgs ${packages[@]}
 
     ### Configure the repo name from which package should be installed
+    local repo_name=${repo}-${CHANNEL}
+
+    if [ "$CHANNEL" == "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+        repo_name=${repo}-slow-prod
+    fi
+
     if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
-        repo=packages-microsoft-com-prod
+        repo_name=packages-microsoft-com-prod
     fi
 
     if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
@@ -621,12 +626,12 @@ install_on_fedora()
     fi
 
     # Configure repository if it does not exist
-    yum -q repolist $repo-$CHANNEL | grep "$repo-$CHANNEL"
+    yum -q repolist $repo_name | grep "$repo_name"
     found_repo=$?
     if [ $found_repo -eq 0 ]; then
         log_info "[i] repository already configured"
     else
-        log_info "[i] configure the repository"
+        log_info "[i] configuring the repository"
         run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
     fi
 
@@ -636,7 +641,7 @@ install_on_fedora()
 
     ### Install MDE ###
     log_info "[>] installing MDE"
-    run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo-$CHANNEL install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     
     sleep 5
     log_info "[v] installed"
@@ -646,7 +651,7 @@ install_on_sles()
 {
     local packages=
     local pkg_version=
-    local repo=
+    local repo=packages-microsoft-com
 
     if check_if_pkg_is_installed mdatp; then
         pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
@@ -654,7 +659,6 @@ install_on_sles()
         return
     fi
 
-    repo=packages-microsoft-com
     packages=(curl)
 
     install_required_pkgs ${packages[@]}
@@ -662,11 +666,19 @@ install_on_sles()
     wait_for_package_manager_to_complete
 
     ### Configure the repository ###
+    local repo_name=${repo}-${CHANNEL}
+    if [ "$CHANNEL" == "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+        repo_name=${repo}-slow-prod
+    fi
+    
     # add repository if it does not exist
-    lines=$($PKG_MGR_INVOKER lr | grep "packages-microsoft-com-$CHANNEL" | wc -l)
+    lines=$($PKG_MGR_INVOKER lr | grep "$repo_name" | wc -l)
 
     if [ $lines -eq 0 ]; then
+        log_info "[i] configuring the repository"
         run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n microsoft-$CHANNEL https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
+    else
+        log_info "[i] repository already configured"
     fi
 
     ### Fetch the gpg key ###
@@ -677,7 +689,7 @@ install_on_sles()
     ### Install MDE ###
     log_info "[>] installing MDE"
 
-    run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES $repo-$CHANNEL:mdatp" "[!] failed to install MDE (1/2)"
+    run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp" "[!] failed to install MDE (1/2)"
     
     if ! check_if_pkg_is_installed mdatp; then
         log_warning "[r] retrying"
@@ -698,15 +710,25 @@ remove_repo()
 
     # Remove configured packages.microsoft.com repository
     if [ $DISTRO == 'sles' ] || [ "$DISTRO" = "sle-hpc" ]; then
-        run_quietly "$PKG_MGR_INVOKER removerepo packages-microsoft-com-$CHANNEL" "failed to remove repo"
+        local repo=packages-microsoft-com
+        local repo_name=${repo}-${CHANNEL}
+        if [ "$CHANNEL" == "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+            repo_name=${repo}-slow-prod
+        fi
+        run_quietly "$PKG_MGR_INVOKER removerepo $repo_name" "failed to remove repo"
     
     elif [ "$DISTRO_FAMILY" == "fedora" ]; then
         local repo=packages-microsoft-com
-        if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
-            repo=packages-microsoft-com-prod
+        local repo_name="$repo-$CHANNEL"
+
+        if [ "$CHANNEL" == "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+            repo_name=${repo}-slow-prod
         fi
 
-        local repo_name="$repo-$CHANNEL"
+        if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
+            repo_name=${repo}-prod
+        fi
+
         yum -q repolist $repo_name | grep "$repo_name" &> /dev/null
         if [ $? -eq 0 ]; then
             run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
@@ -958,7 +980,7 @@ usage()
     echo "mde_installer.sh v$SCRIPT_VERSION"
     echo "usage: $1 [OPTIONS]"
     echo "Options:"
-    echo " -c|--channel         specify the channel from which you want to install. Default: insiders-fast"
+    echo " -c|--channel         specify the channel(insiders-fast / insiders-slow / prod) from which you want to install. Default: insiders-fast"
     echo " -i|--install         install the product"
     echo " -r|--remove          remove the product"
     echo " -u|--upgrade         upgrade the existing product to a newer version if available"
