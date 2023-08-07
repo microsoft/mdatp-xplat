@@ -854,7 +854,7 @@ onboard_device()
         # Make sure python is installed
         PYTHON=$(which python || which python3)
 
-        if [ -z $PYTHON ]; then
+        if [ $? -ne 0 ]; then
             script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
         fi
 
@@ -906,7 +906,7 @@ offboard_device()
         # Make sure python is installed
         PYTHON=$(which python || which python3)
 
-        if [ -z $PYTHON ]; then
+        if [ $? -ne 0 ]; then
             script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
         fi
 
