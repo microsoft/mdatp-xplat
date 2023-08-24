@@ -7,27 +7,45 @@
 # Please copy the settings.json file to the same directory as this script, and update the details in the file correctly before running the script.
 # As of this version of the script (0.0.1), scheduled tasks for downloading update packages cannot be created, and only full signature packages can be downloaded (no delta packages). 
 # All possible signature update packages specified as part of the settings.json file are downloaded within a specific nested directory structure:
-#     /home/user/wdav-update/latest
-#     ├── linux
-#     │   ├── preview
-#     │   │   ├── arch_arm64
-#     │   │   └── arch_x86_64
-#     │   │       └── updates.zip
-#     │   └── production
-#     │       ├── arch_arm64
-#     │       └── arch_x86_64
-#     │           └── updates.zip
-#     └── mac
-#         ├── preview
-#         │   ├── arch_arm64
-#         │   │   └── updates.zip
-#         │   └── arch_x86_64
-#         │       └── updates.zip
-#         └── production
-#             ├── arch_arm64
-#             │   └── updates.zip
-#             └── arch_x86_64
-#                 └── updates.zip
+#   /home/user/wdav-update/latest
+#   ├── linux
+#   │   ├── preview
+#   │   │   ├── arch_arm64
+#   │   │   └── arch_x86_64
+#   │   │       └── updates.zip
+#   │   ├── preview_back
+#   │   │   ├── arch_arm64
+#   │   │   └── arch_x86_64
+#   │   │       └── updates.zip
+#   │   └── production
+#   │   │   ├── arch_arm64
+#   │   │   └── arch_x86_64
+#   │   │       └── updates.zip
+#   │   └── production_back
+#   │       ├── arch_arm64
+#   │       └── arch_x86_64
+#   │           └── updates.zip
+#   └── mac
+#   │   ├── preview
+#   │   │   ├── arch_arm64
+#   │   │   |   └── updates.zip
+#   │   │   └── arch_x86_64
+#   │   │       └── updates.zip
+#   │   ├── preview_back
+#   │   │   ├── arch_arm64
+#   │   │   |   └── updates.zip
+#   │   │   └── arch_x86_64
+#   │   │       └── updates.zip
+#   │   └── production
+#   │   │   ├── arch_arm64
+#   │   │   |   └── updates.zip
+#   │   │   └── arch_x86_64
+#   │   │       └── updates.zip
+#   │   └── production_back
+#   │       ├── arch_arm64
+#   │       |   └── updates.zip
+#   │       └── arch_x86_64
+#   │           └── updates.zip
 
 scriptVersion="0.0.1"
 defaultBaseUpdateUrl="https://go.microsoft.com/fwlink/"
@@ -91,8 +109,9 @@ function invoke_download_all_updates()
     local downloadPreviewUpdates=$2
     local baseUpdateUrl=$3
     local downloadFolder=$4
+    local backupPreviousUpdates=$5
     
-    echo "------------ Downloading $platform updates! ------------"
+    echo "------------ Downloading $platform updates! with $backupPreviousUpdates------------"
     
     package="updates.zip"
     previewRingArgs="&engRing=3&sigRing=1"
@@ -129,6 +148,19 @@ function invoke_download_all_updates()
             fi
             
             echo "Downloading from $url and saving to folder $path"
+            if [[ "$backupPreviousUpdates" == true ]]; then
+                backupPath="$downloadFolder/$platform/$ring"_back
+                echo "Backing up previous updates to $backupPath"
+                if [[ ! -d "$backupPath" ]]; then
+                    mkdir -p "$backupPath"
+                fi
+                if [[ -f "$savePath" ]]; then
+                    echo "copying from $path to $backupPath"
+                    cp -rf "$path" "$backupPath"
+                else
+                    echo "File does not exist"  
+                fi
+            fi
             curl -L -o "$savePath" "$url"
         done
     done
@@ -183,22 +215,28 @@ if [[ $downloadPreviewUpdates == "null" ]]; then
     downloadPreviewUpdates=false
 fi
 
+backupPreviousUpdates=$(echo "$settings" | jq -r '.backupPreviousUpdates')
+if [[ $backupPreviousUpdates == "null" ]]; then 
+    backupPreviousUpdates=false
+fi
+
 baseUpdateUrl="$defaultBaseUpdateUrl"
 
 echo "Using log file: $logFilePath"
 echo "Using base update url: $baseUpdateUrl"
 echo "Using download folder: $downloadFolder"
+echo "Using backup previous updates: $backupPreviousUpdates"
 
 clear_log_file "$logFilePath"
 
 write_log_message "$logFilePath" "Script started."
 
 if [[ "$downloadLinuxUpdates" == true ]]; then
-    invoke_download_all_updates "linux" "$downloadPreviewUpdates" "$baseUpdateUrl" "$downloadFolder"
+    invoke_download_all_updates "linux" "$downloadPreviewUpdates" "$baseUpdateUrl" "$downloadFolder" "$backupPreviousUpdates"
 fi
 
 if [[ "$downloadMacUpdates" == true ]]; then
-    invoke_download_all_updates "mac" "$downloadPreviewUpdates" "$baseUpdateUrl" "$downloadFolder"
+    invoke_download_all_updates "mac" "$downloadPreviewUpdates" "$baseUpdateUrl" "$downloadFolder" "$backupPreviousUpdates"
 fi
 
 write_log_message "$logFilePath" "Script completed."

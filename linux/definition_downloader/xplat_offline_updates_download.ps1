@@ -9,28 +9,46 @@
     The script does not take any command line arguments, but uses inputs from the settings.json file. Please update the details in the settings.json file correctly before running the script.
     As of this version of the script (0.0.1), scheduled tasks for downloading update packages cannot be created, and only full signature packages can be downloaded (no delta packages). 
     All possible signature update packages specified as part of the settings.json file are downloaded within a specific nested directory structure:
-        /home/user/wdav-update/latest
-        ├── linux
-        │   ├── preview
-        │   │   ├── arch_arm64
-        │   │   └── arch_x86_64
-        │   │       └── updates.zip
-        │   └── production
-        │       ├── arch_arm64
-        │       └── arch_x86_64
-        │           └── updates.zip
-        └── mac
-            ├── preview
-            │   ├── arch_arm64
-            │   │   └── updates.zip
-            │   └── arch_x86_64
-            │       └── updates.zip
-            └── production
-                ├── arch_arm64
-                │   └── updates.zip
-                └── arch_x86_64
-                    └── updates.zip
-
+     /home/user/wdav-update/latest
+     ├── linux
+     │   ├── preview
+     │   │   ├── arch_arm64
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
+     │   ├── preview_back
+     │   │   ├── arch_arm64
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
+     │   └── production
+     │   │   ├── arch_arm64
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
+     │   └── production_back
+     │       ├── arch_arm64
+     │       └── arch_x86_64
+     │           └── updates.zip
+     └── mac
+     │   ├── preview
+     │   │   ├── arch_arm64
+     │   │   |   └── updates.zip
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
+     │   ├── preview_back
+     │   │   ├── arch_arm64
+     │   │   |   └── updates.zip
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
+     │   └── production
+     │   │   ├── arch_arm64
+     │   │   |   └── updates.zip
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
+     │   └── production_back
+     │       ├── arch_arm64
+     │       |   └── updates.zip
+     │       └── arch_x86_64
+     │           └── updates.zip
+     
 #>
 
 $scriptVersion = "0.0.1"
@@ -148,6 +166,24 @@ Function Invoke-Download-All-Updates([string]$platform, [bool]$downloadPreviewUp
             }
 
             Write-Log-Message "Downloading from $url and saving to folder $path"
+            if ($backupPreviousUpdates)
+            {
+                $backupPath="$downloadFolder/$platform/$ring"+"_back"
+                Write-Log-Message "Backing up previous updates to folder $backupPath"
+                if (!(Test-Path -PathType container $backupPath))
+                {
+                    New-Item -ItemType Directory -Path $backupPath
+                }
+                if (Test-Path -PathType leaf $savePath)
+                {
+                    Copy-Item -Path $path -Destination $backupPath  -Recurse -Force
+                }
+                else
+                {
+                    Write-Log-Message "No previous updates found."
+                }
+
+            }
             Invoke-WebRequest -Uri "$url" -OutFile $savePath
         }
     }
@@ -169,10 +205,12 @@ try
     $downloadLinuxUpdates = Set-Bool-Param $settings "downloadLinuxUpdates"
     $downloadMacUpdates = Set-Bool-Param $settings "downloadMacUpdates"
     $downloadPreviewUpdates = Set-Bool-Param $settings "downloadPreviewUpdates"
+    $backupPreviousUpdates = Set-Bool-Param $settings "backupPreviousUpdates"
 
     Write-Output "Using log file: $global:logFilePath"
     Write-Output "Using base update url: $baseUpdateUrl"
     Write-Output "Using download folder: $downloadFolder"
+    Write-Output "Using backup previous updates: $backupPreviousUpdates"
 
     Clear-Log-File
 
@@ -180,12 +218,12 @@ try
     
     if ($downloadLinuxUpdates)
     {
-        Invoke-Download-All-Updates -platform "linux" -downloadPreviewUpdates $downloadPreviewUpdates -baseUpdateUrl $baseUpdateUrl -downloadFolder $downloadFolder | Out-Default
+        Invoke-Download-All-Updates -platform "linux" -downloadPreviewUpdates $downloadPreviewUpdates -baseUpdateUrl $baseUpdateUrl -downloadFolder $downloadFolder -backupPreviousUpdates $backupPreviousUpdates | Out-Default
     }
     
     if ($downloadMacUpdates)
     {
-        Invoke-Download-All-Updates -platform "mac" -downloadPreviewUpdates $downloadPreviewUpdates -baseUpdateUrl $baseUpdateUrl -downloadFolder $downloadFolder | Out-Default
+        Invoke-Download-All-Updates -platform "mac" -downloadPreviewUpdates $downloadPreviewUpdates -baseUpdateUrl $baseUpdateUrl -downloadFolder $downloadFolder -backupPreviousUpdates $backupPreviousUpdates | Out-Default
     } 
 
     Write-Log-Message "Script completed."
