@@ -20,7 +20,7 @@
                     "type": "string",
                     "propertyOrder": 5,
                     "description": "Antivirus engine enforcement mode",
-                    "enum": ["passive", "on_demand", "audit", "real_time"],
+                    "enum": ["passive", "on_demand", "real_time"],
                     "links": [
                         {
                             "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences#enforcement-level-for-antivirus-engine",
