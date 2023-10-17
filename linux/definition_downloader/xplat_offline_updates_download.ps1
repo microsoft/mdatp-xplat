@@ -7,33 +7,52 @@
 
     This script can be can be used to download Linux / macOS signature updates, by using pwsh, on Linux / macOS host machines. 
     The script does not take any command line arguments, but uses inputs from the settings.json file. Please update the details in the settings.json file correctly before running the script.
-    As of this version of the script (0.0.1), scheduled tasks for downloading update packages cannot be created, and only full signature packages can be downloaded (no delta packages). 
+    As of this version of the script (0.0.2), scheduled tasks for downloading update packages cannot be created, and only full signature packages can be downloaded (no delta packages). 
     All possible signature update packages specified as part of the settings.json file are downloaded within a specific nested directory structure:
-        /home/user/wdav-update/latest
-        ├── linux
-        │   ├── preview
-        │   │   ├── arch_arm64
-        │   │   └── arch_x86_64
-        │   │       └── updates.zip
-        │   └── production
-        │       ├── arch_arm64
-        │       └── arch_x86_64
-        │           └── updates.zip
-        └── mac
-            ├── preview
-            │   ├── arch_arm64
-            │   │   └── updates.zip
-            │   └── arch_x86_64
-            │       └── updates.zip
-            └── production
-                ├── arch_arm64
-                │   └── updates.zip
-                └── arch_x86_64
-                    └── updates.zip
-
+    /home/user/wdav-update/latest
+    ├── mac
+    │   ├── preview_back
+    │   │   ├── arch_arm64
+    │   │   └── arch_x86_64
+    │   ├── preview
+    │   │   ├── arch_arm64
+    │   │   │   ├── manifest.json
+    │   │   │   └── updates.zip
+    │   │   └── arch_x86_64
+    │   │       ├── manifest.json
+    │   │       └── updates.zip
+    │   ├── production_back
+    │   │   ├── arch_arm64
+    │   │   └── arch_x86_64
+    │   └── production
+    │       ├── arch_arm64
+    │       │   ├── manifest.json
+    │       │   └── updates.zip
+    │       └── arch_x86_64
+    │           ├── manifest.json
+    │           └── updates.zip
+    └── linux
+        ├── preview
+        │   ├── arch_x86_64
+        │   │   ├── manifest.json
+        │   │   └── updates.zip
+        │   ├── arch_arm64
+        ├── preview_back
+        │   ├── arch_x86_64
+        │   │   ├── manifest.json
+        │   │   └── updates.zip
+        ├── production
+        │   ├── arch_x86_64
+        │   │   ├── manifest.json
+        │   │   └── updates.zip
+        │   ├── arch_arm64
+        └── production_back
+            ├── arch_x86_64
+            │   ├── manifest.json
+            │   └── updates.zip 
 #>
 
-$scriptVersion = "0.0.1"
+$scriptVersion = "0.0.2"
 $defaultBaseUpdateUrl = "https://go.microsoft.com/fwlink/"
 $defaultDownloadFolder = "$env:HOME" + "/wdav-update"
 $defaultLogFilePath = "/tmp/mdatp_offline_updates.log"
@@ -102,6 +121,69 @@ Function Write-Log-Message([string]$message)
     "----------End of message----------" | Out-File $global:logFilePath -Append
 }
 
+# function to handle error from Invoke-WebRequest
+function Handle-Error([string]$errorMessage, [string]$updateFilePath, [string]$manifestPath)
+{
+
+    Write-Host "Error: $errorMessage"
+    # Add your custom error handling logic here, such as logging or exiting the script
+    $null = Remove-Item -Path $updateFilePath -Force -ErrorAction SilentlyContinue
+    $null = Remove-Item -Path $manifestPath -Force -ErrorAction SilentlyContinue
+    exit 1
+} 
+
+# Checks for new updates by comparing the engine and definition versions in the manifest file and the manifest url.
+function is_latest_update_downloaded([string]$manifestFile, [string]$manifestUrl)
+{
+    $tempFile = "temp.txt"
+    Write-Host "File path: $manifestFile"
+
+    # Read the JSON content from manifest.json
+    $jsonContent = Get-Content -Raw -Path $manifestFile | ConvertFrom-Json
+
+    # Extract the engine and definition versions from the JSON content
+    $engine_version_prev = $jsonContent.EngineVersion
+    $definition_version_prev = $jsonContent.DefinitionVersion
+
+
+
+    try
+    {
+        Invoke-WebRequest -Uri $manifestUrl -OutFile $tempFile
+        Write-Host "File downloaded successfully: $tempFile"
+    }
+    catch
+    {
+        Handle-Error -errorMessage "Failed to download file from $manifestUrl"
+    }
+
+    # Extract and log the engine version using regex
+    $engine_version = (Get-Content $tempFile | Select-String -Pattern "<engine>(.*?)<\/engine>").Matches.Groups[1].Value
+    # Extract and log the definition version using regex
+    $definition_version = [regex]::Match((Get-Content $tempFile), '<signatures date=".*?">(.*?)<\/signatures>').Groups[1].Value
+
+    # Print the extracted versions
+    Write-Host "Engine Version Prev: $engine_version_prev"
+    Write-Host "Definition Version Prev: $definition_version_prev"
+    Write-Host "Engine version: $engine_version"
+    Write-Host "Definition Version: $definition_version"
+
+    $null = Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
+
+    # Trim leading and trailing spaces from the versions
+    $engine_version = $engine_version.Trim()
+    $definition_version = $definition_version.Trim()
+    $engine_version_prev = $engine_version_prev.Trim()
+    $definition_version_prev = $definition_version_prev.Trim()
+
+    # Check for version match
+    if ($engine_version_prev -eq $engine_version -and $definition_version_prev -eq $definition_version) {
+        return $true
+    } else {
+        return $false
+    }
+}
+
 # Constructs the list of urls and downloads the signature updates.
 Function Invoke-Download-All-Updates([string]$platform, [bool]$downloadPreviewUpdates, [string]$baseUpdateUrl, [string]$downloadFolder)
 {
@@ -112,6 +194,7 @@ Function Invoke-Download-All-Updates([string]$platform, [bool]$downloadPreviewUp
     $armArchArgs = "&arch=arm64"
     $archs = @("x86_64", "arm64")
     $rings = @("production")
+    $json_file="manifest.json"
     if ($downloadPreviewUpdates)
     {
         $rings += ("preview")
@@ -121,34 +204,103 @@ Function Invoke-Download-All-Updates([string]$platform, [bool]$downloadPreviewUp
     {
         foreach ($arch in $archs)
         {
+            Write-Host "....... Start ........"
             $path = $downloadFolder + "/$platform/$ring/arch_$arch"
             $savePath = "$path/$package"
+            $tempSavePath="$savePath"+"_temp"
+            $currentManifestPath="$path/$json_file"
+            $downloadedManifestXML="$path/manifest.xml"
 
             if (!(Test-Path -PathType container $path))
             {
                 New-Item -ItemType Directory -Path $path
             }
-
             if (($platform -eq "linux") -and ($arch -eq "arm64"))
             {
                 continue # currently, we do not support linux arm64, so we skip the download step in this case
             }
-
             $linkid = Get-Link-Id $platform
             $url = $baseUpdateUrl + "?linkid=$linkid"
-
             if (($platform -eq "mac") -and ($arch -eq "arm64"))
             {
                 $url = $url + $armArchArgs
             }
-
             if ($ring -eq "preview")
             {
                 $url = $url + $previewRingArgs
             }
+            $manifestUrl = $url + "&action=info"
+            # Example usage:
+            if (Test-Path -PathType leaf $currentManifestPath)
+            {
+                $isUpdateDownloaded = is_latest_update_downloaded -manifestFile $currentManifestPath -manifestUrl $manifestUrl
+
+                if ($isUpdateDownloaded -eq $true) {
+                    Write-Host "Got value eq to 0 -eq $isUpdateDownloaded"
+                    continue;
+                }
+            }
+
+            if ($backupPreviousUpdates)
+            {
+                $backupPath="$downloadFolder/$platform/$ring"+"_back"+"/arch_$arch"
+                Write-Log-Message "Backing up previous updates to folder $backupPath"
+                if (!(Test-Path -PathType container $backupPath))
+                {
+                    New-Item -ItemType Directory -Path $backupPath
+                }
+                # Test if $savePath exists and is a file
+                $savePathExists = Test-Path -PathType Leaf $savePath
+                # Test if $currentManifestPath exists and is a file
+                $currentManifestExists = Test-Path -PathType Leaf $currentManifestPath
+                # Check both conditions
+                if ($savePathExists -and $currentManifestExists) {
+                    Copy-Item -Path $savePath -Destination $backupPath  -Recurse -Force
+                    Copy-Item -Path $currentManifestPath -Destination $backupPath  -Recurse -Force
+                }
+                else
+                {
+                    Write-Log-Message "No previous updates found."
+                }
+            }
 
             Write-Log-Message "Downloading from $url and saving to folder $path"
-            Invoke-WebRequest -Uri "$url" -OutFile $savePath
+            try
+            {
+                Invoke-WebRequest -Uri "$url" -OutFile $tempSavePath -ErrorAction Stop
+                Write-Host "File downloaded successfully: $tempSavePath"
+            }
+            catch
+            {
+                Handle-Error -errorMessage "Failed to download file from $url" -updateFilePath $tempSavePath  -manifestPath $downloadedManifestXML
+            }
+            try
+            {
+                Invoke-WebRequest -Uri "$manifestUrl" -OutFile $downloadedManifestXML
+                Write-Host "File downloaded successfully: $downloadedManifestXML"
+            }
+            catch
+            {
+                Handle-Error -errorMessage "Failed to download file from $manifestUrl" -updateFilePath $tempSavePath  -manifestPath $downloadedManifestXML
+            }
+
+            Move-Item -Path "$tempSavePath" -Destination "$savePath"  -Force
+
+            # Extract and log the engine version
+            $engine_version=$(awk -F'</?engine>' 'NF>1{print $2}' $downloadedManifestXML)
+            Write-Output "Engine version: $engine_version"
+
+            # Extract and log the definition version using sed
+            $definition_version=$(sed -n 's/.*<signatures date=".*">\([^<]*\)<\/signatures>.*/\1/p' $downloadedManifestXML)
+            Write-Output "Definition version: $definition_version"
+
+            # Create a PowerShell object to hold the versions
+            $versions = @{
+                "EngineVersion" = $engine_version
+                "DefinitionVersion" = $definition_version
+                }
+            $versions | ConvertTo-Json | Set-Content -Path $currentManifestPath
+            $null = Remove-Item -Path $downloadedManifestXML -Force -ErrorAction SilentlyContinue
         }
     }
 }
@@ -161,18 +313,25 @@ try
     Write-Output ""
     Write-Output "------ xplat_offline_updates_download.ps1 version: $scriptVersion ------"
     Write-Output ""
+    # Get the directory from which the script is being executed
+    $scriptDir = Split-Path -Path $MyInvocation.MyCommand.Path -Parent
 
-    $settings = Get-Content -Path settings.json | ConvertFrom-Json
+
+    Write-Host "The script is being executed from: $scriptDir"
+
+    $settings = Get-Content -Path $scriptDir"/settings.json" | ConvertFrom-Json
     $global:logFilePath = Set-String-Param $settings "logFilePath" $defaultLogFilePath
     $baseUpdateUrl = $defaultBaseUpdateUrl
     $downloadFolder = Set-String-Param $settings "downloadFolder" $defaultDownloadFolder
     $downloadLinuxUpdates = Set-Bool-Param $settings "downloadLinuxUpdates"
     $downloadMacUpdates = Set-Bool-Param $settings "downloadMacUpdates"
     $downloadPreviewUpdates = Set-Bool-Param $settings "downloadPreviewUpdates"
+    $backupPreviousUpdates = Set-Bool-Param $settings "backupPreviousUpdates"
 
     Write-Output "Using log file: $global:logFilePath"
     Write-Output "Using base update url: $baseUpdateUrl"
     Write-Output "Using download folder: $downloadFolder"
+    Write-Output "Using backup previous updates: $backupPreviousUpdates"
 
     Clear-Log-File
 
@@ -180,12 +339,12 @@ try
     
     if ($downloadLinuxUpdates)
     {
-        Invoke-Download-All-Updates -platform "linux" -downloadPreviewUpdates $downloadPreviewUpdates -baseUpdateUrl $baseUpdateUrl -downloadFolder $downloadFolder | Out-Default
+        Invoke-Download-All-Updates -platform "linux" -downloadPreviewUpdates $downloadPreviewUpdates -baseUpdateUrl $baseUpdateUrl -downloadFolder $downloadFolder -backupPreviousUpdates $backupPreviousUpdates | Out-Default
     }
     
     if ($downloadMacUpdates)
     {
-        Invoke-Download-All-Updates -platform "mac" -downloadPreviewUpdates $downloadPreviewUpdates -baseUpdateUrl $baseUpdateUrl -downloadFolder $downloadFolder | Out-Default
+        Invoke-Download-All-Updates -platform "mac" -downloadPreviewUpdates $downloadPreviewUpdates -baseUpdateUrl $baseUpdateUrl -downloadFolder $downloadFolder -backupPreviousUpdates $backupPreviousUpdates | Out-Default
     } 
 
     Write-Log-Message "Script completed."
