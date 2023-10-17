@@ -15,21 +15,39 @@ All possible signature update packages specified as part of the settings.json fi
      │   │   ├── arch_arm64
      │   │   └── arch_x86_64
      │   │       └── updates.zip
+     │   ├── preview_back
+     │   │   ├── arch_arm64
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
      │   └── production
+     │   │   ├── arch_arm64
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
+     │   └── production_back
      │       ├── arch_arm64
      │       └── arch_x86_64
      │           └── updates.zip
      └── mac
-         ├── preview
-         │   ├── arch_arm64
-         │   │   └── updates.zip
-         │   └── arch_x86_64
-         │       └── updates.zip
-         └── production
-             ├── arch_arm64
-             │   └── updates.zip
-             └── arch_x86_64
-                 └── updates.zip
+     │   ├── preview
+     │   │   ├── arch_arm64
+     │   │   |   └── updates.zip
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
+     │   ├── preview_back
+     │   │   ├── arch_arm64
+     │   │   |   └── updates.zip
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
+     │   └── production
+     │   │   ├── arch_arm64
+     │   │   |   └── updates.zip
+     │   │   └── arch_x86_64
+     │   │       └── updates.zip
+     │   └── production_back
+     │       ├── arch_arm64
+     │       |   └── updates.zip
+     │       └── arch_x86_64
+     │           └── updates.zip
 
 
 
@@ -39,7 +57,8 @@ Sample settings.json
   "downloadLinuxUpdates": true,
   "logFilePath": "/tmp/mdatp_offline_updates.log",
   "downloadMacUpdates": true,
-  "downloadPreviewUpdates": false
+  "downloadPreviewUpdates": false,
+  "backupPreviousUpdates": true 
 }
 
 

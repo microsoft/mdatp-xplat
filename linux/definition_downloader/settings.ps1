@@ -4,6 +4,7 @@ $settings = @{
     downloadLinuxUpdates      = $true
     downloadMacUpdates        = $true
     downloadPreviewUpdates    = $false
+    backupPreviousUpdates     = $true
     downloadFolder            = "/tmp/wdav-update"
     logFilePath               = "/tmp/mdatp_offline_updates.log"
 }

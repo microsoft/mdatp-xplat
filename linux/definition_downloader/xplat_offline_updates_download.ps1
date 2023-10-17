@@ -49,7 +49,7 @@
         └── production_back
             ├── arch_x86_64
             │   ├── manifest.json
-            │   └── updates.zip 
+            │   └── updates.zip
 #>
 
 $scriptVersion = "0.0.2"

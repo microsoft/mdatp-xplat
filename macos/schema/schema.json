@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.98.71",
+    "__version": "101.23062.0016",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
     "options": {
@@ -14,6 +14,20 @@
             "propertyOrder": 10,
             "defaultProperties": [],
             "properties": {
+                "enforcementLevel": {
+                    "title": "Enforcement level",
+                    "default": "realTime",
+                    "type": "string",
+                    "propertyOrder": 5,
+                    "description": "Antivirus engine enforcement mode",
+                    "enum": ["passive", "on_demand", "real_time"],
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences#enforcement-level-for-antivirus-engine",
+                            "rel": "More information"
+                        }
+                    ]
+                },
                 "enableRealTimeProtection": {
                     "default": true,
                     "description": "Locates and stops malware from installing or running on your device. You can turn off this setting for a short time before it turns back on automatically.",
