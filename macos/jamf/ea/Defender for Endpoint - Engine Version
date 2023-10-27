@@ -1,0 +1,10 @@
+#!/bin/sh
+# If Microsoft Defender for Endpoint is installed, then get engine version
+
+if [ -f "/usr/local/bin/mdatp" ]; then
+    result=$(sudo mdatp health --field engine_version)
+    engineversion=$(echo "$result" | sed 's/"//g')
+    echo "<result>$engineversion</result>"
+else
+    echo "<result>Not Installed</result>"
+fi
