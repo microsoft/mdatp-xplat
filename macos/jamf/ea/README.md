@@ -1,5 +1,3 @@
-# Microsoft-Defender-Extension-Attributes
-
 # Extension Attributes
 The following extension attributes are for tracking Microsoft Defender for Endpoint health in Jamf Pro
 
