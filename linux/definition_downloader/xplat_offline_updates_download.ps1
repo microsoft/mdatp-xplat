@@ -285,14 +285,10 @@ Function Invoke-Download-All-Updates([string]$platform, [bool]$downloadPreviewUp
             }
 
             Move-Item -Path "$tempSavePath" -Destination "$savePath"  -Force
-
-            # Extract and log the engine version
-            $engine_version=$(awk -F'</?engine>' 'NF>1{print $2}' $downloadedManifestXML)
-            Write-Output "Engine version: $engine_version"
-
-            # Extract and log the definition version using sed
-            $definition_version=$(sed -n 's/.*<signatures date=".*">\([^<]*\)<\/signatures>.*/\1/p' $downloadedManifestXML)
-            Write-Output "Definition version: $definition_version"
+            # Extract and log the engine version using regex
+            $engine_version = (Get-Content $downloadedManifestXML | Select-String -Pattern "<engine>(.*?)<\/engine>").Matches.Groups[1].Value
+            # Extract and log the definition version using regex
+            $definition_version = [regex]::Match((Get-Content $downloadedManifestXML), '<signatures date=".*?">(.*?)<\/signatures>').Groups[1].Value
 
             # Create a PowerShell object to hold the versions
             $versions = @{
