@@ -600,7 +600,13 @@ install_on_fedora()
         return
     fi
 
-    packages=(curl yum-utils)
+    # curl-minimal results into issues when present and trying to install curl, so skip installing
+    # the curl over Amazon Linux 2023
+    if [[ "$VERSION" == "2023" ]] && [[ "$DISTRO" == "amzn" ]] && $(check_if_pkg_is_installed curl-minimal); then
+        packages=(yum-utils)
+    else
+        packages=(curl yum-utils)
+    fi
 
     if [[ $SCALED_VERSION == 7* ]] && [ "$DISTRO" == "rhel" ]; then
         packages=($packages deltarpm)
