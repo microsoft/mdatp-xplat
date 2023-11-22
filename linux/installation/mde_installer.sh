@@ -302,7 +302,7 @@ detect_distro()
 
     if [ "$DISTRO" == "debian" ] || [ "$DISTRO" == "ubuntu" ]; then
         DISTRO_FAMILY="debian"
-    elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
+    elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ] || [ "$DISTRO" == "almalinux" ] || [ "$DISTRO" == "rocky" ]; then
         DISTRO_FAMILY="fedora"
     elif [ "$DISTRO" == "mariner" ]; then
         DISTRO_FAMILY="mariner"
@@ -619,7 +619,7 @@ install_on_fedora()
         repo_name=packages-microsoft-com-prod
     fi
 
-    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
+    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ] || [ "$DISTRO" == "almalinux" ] || [ "$DISTRO" == "rocky" ]; then
         effective_distro="rhel"
     else
         effective_distro="$DISTRO"
