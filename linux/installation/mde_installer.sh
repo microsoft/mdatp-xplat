@@ -563,30 +563,6 @@ install_on_debian()
     log_info "[v] installed"
 }
 
-install_on_mariner()
-{
-    local packages=
-    local pkg_version=
-    local repo=
-    local effective_distro=
-
-    if check_if_pkg_is_installed mdatp; then
-        pkg_version=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
-        log_info "[i] MDE already installed ($pkg_version)"
-        return
-    fi
-
-    ### Add Preview Repo File ###
-    tdnf -y install mariner-repos-extras-preview
-
-    ### Install MDE ###
-    log_info "[>] installing MDE"
-    run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
-
-    sleep 5
-    log_info "[v] installed"
-}
-
 install_on_fedora()
 {
     local packages=
@@ -627,6 +603,8 @@ install_on_fedora()
 
     if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ] || [ "$DISTRO" == "almalinux" ] || [ "$DISTRO" == "rocky" ]; then
         effective_distro="rhel"
+    elif [ "$DISTRO" == "mariner" ]; then
+        effective_distro="cbl-mariner"
     else
         effective_distro="$DISTRO"
     fi
@@ -651,6 +629,11 @@ install_on_fedora()
     
     sleep 5
     log_info "[v] installed"
+}
+
+install_on_mariner()
+{
+    install_on_fedora
 }
 
 install_on_sles()
@@ -723,7 +706,7 @@ remove_repo()
         fi
         run_quietly "$PKG_MGR_INVOKER removerepo $repo_name" "failed to remove repo"
     
-    elif [ "$DISTRO_FAMILY" == "fedora" ]; then
+    elif [ "$DISTRO_FAMILY" == "fedora" ] || [ "$DISTRO_FAMILY" == "mariner" ]; then
         local repo=packages-microsoft-com
         local repo_name="$repo-$CHANNEL"
 
@@ -823,7 +806,7 @@ scale_version_id()
         fi
     elif [ "$DISTRO_FAMILY" == "mariner" ]; then
         if [[ $VERSION == 2* ]]; then
-            SCALED_VERSION=2
+            SCALED_VERSION=2.0
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
