@@ -570,14 +570,22 @@ install_on_mariner()
     local repo=
     local effective_distro=
 
+    # default repo file for all preview rings (dogfood / insiders-fast / insiders-slow)
+    local repo_file=mariner-repos-extras-preview
+
     if check_if_pkg_is_installed mdatp; then
         pkg_version=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
         log_info "[i] MDE already installed ($pkg_version)"
         return
     fi
 
-    ### Add Preview Repo File ###
-    tdnf -y install mariner-repos-extras-preview
+    # set the correct repo file for prod
+    if [[ "$CHANNEL" = "prod" ]]; then
+        repo_file=mariner-repos-extras-prod
+    fi
+
+    ### Add Repo File ###
+    tdnf -y install "$repo_file"
 
     ### Install MDE ###
     log_info "[>] installing MDE"
@@ -823,7 +831,7 @@ scale_version_id()
         fi
     elif [ "$DISTRO_FAMILY" == "mariner" ]; then
         if [[ $VERSION == 2* ]]; then
-            SCALED_VERSION=2
+            SCALED_VERSION=2.0
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
