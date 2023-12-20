@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.6.6"
+SCRIPT_VERSION="0.6.7"
 ASSUMEYES=-y
 CHANNEL=
 DISTRO=
@@ -576,12 +576,22 @@ install_on_mariner()
         return
     fi
 
-    ### Add Preview Repo File ###
-    tdnf -y install mariner-repos-extras-preview
+    # To use config-manager plugin, install dnf-plugins-core package
+    run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
 
     ### Install MDE ###
     log_info "[>] installing MDE"
-    run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    if [ "$CHANNEL" = "prod" ]; then
+        run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras" "unable to install mariner-repos-extras"
+        run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras" "unable to enable extras repo"
+        run_quietly "$PKG_MGR_INVOKER config-manager --disable mariner-official-extras-preview" "unable to disable extras-preview repo"
+        run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    else
+        ### Add Preview Repo File ###
+        run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras-preview" "unable to install mariner-repos-extras-preview"
+        run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras-preview" "unable to enable extras-preview repo"
+        run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    fi
 
     sleep 5
     log_info "[v] installed"
