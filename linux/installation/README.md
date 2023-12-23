@@ -18,7 +18,8 @@ Options:
  -i|--install         install the product
  -r|--remove          remove the product
  -u|--upgrade         upgrade the existing product to a newer version if available
- -o|--onboard         onboard/offboard the product with <onboarding_script>
+ -o|--onboard         onboard the product with <onboarding_script>
+ -f|--offboard        offboard the product with <offboarding_script>
  -p|--passive-mode    set EPP to passive mode
  -t|--tag             set a tag by declaring <name> and <value>. ex: -t GROUP Coders
  -m|--min_req         enforce minimum requirements
