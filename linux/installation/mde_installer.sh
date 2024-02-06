@@ -635,8 +635,10 @@ install_on_fedora()
         repo_name=packages-microsoft-com-prod
     fi
 
-    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ] || [ "$DISTRO" == "almalinux" ] || [ "$DISTRO" == "rocky" ]; then
+    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
         effective_distro="rhel"
+    elif [ "$DISTRO" == "almalinux" ]; then
+        effective_distro="alma"
     else
         effective_distro="$DISTRO"
     fi
