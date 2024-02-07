@@ -649,7 +649,7 @@ install_on_fedora()
     if [ $found_repo -eq 0 ]; then
         log_info "[i] repository already configured"
     else
-        log_info "[i] configuring the repository"        
+        log_info "[i] configuring the repository"
         run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
     fi
 
