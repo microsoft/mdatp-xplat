@@ -113,6 +113,16 @@ class PayloadOnboardingInfo(Payload):
     def __str__(self):
         return '{}'.format(self.payload_type)
 
+class PayloadConfiguration(Payload):
+    def __init__(self, payload_type, payload):
+        Payload.__init__(self, payload_type, payload)
+
+    def get_ids(self):
+        return ()
+
+    def __str__(self):
+        return '{}'.format(self.payload_type)
+
 def print_warning(s):
     print('{}[WARNING]{} {}'.format(tc.yellow, tc.cancel, s))
 
@@ -170,12 +180,23 @@ def get_payloads(payload_type, content):
         for definition in content['NotificationSettings']:
             yield PayloadNotifications(payload_type, definition)
     elif payload_type == 'com.apple.ManagedClient.preferences':
-        if 'PayloadContentManagedPreferences' in content and 'com.microsoft.wdav.atp' in content['PayloadContentManagedPreferences']:
-            try:
-                onboarding_info = content['PayloadContentManagedPreferences']['com.microsoft.wdav.atp']['Forced'][0]['mcx_preference_settings']['OnboardingInfo']
-                yield PayloadOnboardingInfo(payload_type, onboarding_info)
-            except:
-                print_error("Probably malformed onboarding blob")
+        if 'PayloadContentManagedPreferences' in content:
+            preferences = content['PayloadContentManagedPreferences']
+
+            for domain, settings in preferences.items():
+                if 'Forced' in settings:
+                    forced = settings['Forced']
+
+                    for setting in forced:
+                        if 'mcx_preference_settings' in setting:
+                            mcx_preference_settings = setting['mcx_preference_settings']
+
+                            if domain == 'com.microsoft.wdav.atp':
+                                if 'OnboardingInfo' in mcx_preference_settings:
+                                    onboarding_info = mcx_preference_settings['OnboardingInfo']
+                                    yield PayloadOnboardingInfo(payload_type + '/' + domain, onboarding_info)
+                            elif domain == 'com.microsoft.wdav' or domain == 'com.microsoft.wdav.ext':
+                                yield PayloadConfiguration(payload_type + '/' + domain, mcx_preference_settings)
 
 def parse_profiles(path):
     result = {}
@@ -183,7 +204,6 @@ def parse_profiles(path):
 
     for level, profiles in plist.items():
         for profile in profiles:
-
             for item in profile['ProfileItems']:
                 payload_type = item['PayloadType']
                 content = item['PayloadContent']
@@ -250,6 +270,41 @@ def parse_tcc(path):
 def format_location(profile_data):
     return '{}, profile: "{}", deployed: {}'.format(profile_data['path'], profile_data['name'], profile_data['time'])
 
+def report_configurations(name, configs, is_ext):
+    if len(configs) == 1:
+        print_success("Configuration payload {} found".format(name))
+    elif len(configs) == 0:
+        if is_ext:
+            print_debug("Configuration payload {} not found".format(name))
+        else:
+            print_warning("Configuration payload {} not found".format(name))
+    elif len(configs) > 1:
+        print_warning("Multiple payloads {} found".format(name))
+        settings_map = {}
+
+        i = 1
+        for config in configs:
+            print_debug("  {}: {}".format(i, config))
+
+            for k, v in config['payload'].payload.items():
+                if k in settings_map:
+                    settings_list = settings_map[k]
+                    settings_list.append({'settings': v, 'config': config})
+                else:
+                    settings_list = []                   
+                    settings_list.append({'settings': v, 'config': config})
+                    settings_map[k] = settings_list
+
+            i += 1
+
+        for k, values in settings_map.items():
+            if len(values) > 1:
+                print_error("Conflicting configuration payloads {}, setting {} will be lost fully or partially".format(name, k))
+                i = 1
+                for v in values:
+                    print_debug("  {}: {} -> {}".format(i, v['config'], v['settings']))
+                    i += 1
+
 def report(path_profiles, path_expected, path_tcc):
     map_profiles = parse_profiles(path_profiles)
     list_expected = parse_expected(path_expected)
@@ -302,19 +357,30 @@ def report(path_profiles, path_expected, path_tcc):
 
     # 'com.apple.ManagedClient.preferences'
     onboarding_infos = []
+    configs = []
+    configs_ext = []
     for k, v in map_profiles.items():
-        if k.payload_type == 'com.apple.ManagedClient.preferences':
+        if k.payload_type == 'com.apple.ManagedClient.preferences/com.microsoft.wdav.atp':
             onboarding_infos += v
+        elif k.payload_type == 'com.apple.ManagedClient.preferences/com.microsoft.wdav':
+            print(v)
+            configs += v
+        elif k.payload_type == 'com.apple.ManagedClient.preferences/com.microsoft.wdav.ext':
+            configs_ext += v
 
     if len(onboarding_infos) == 1:
         print_success("Onboarding info found")
     elif len(onboarding_infos) == 0:
         print_error("Onboarding info not found")
     else:
-        print_error("Multiple onboarding info found")
+        print_error("Conflicting onboarding info profiles found")
         i = 1
         for info in onboarding_infos:
             print_debug("  {}: {}".format(i, info))
+            i += 1
+
+    report_configurations('com.microsoft.wdav', configs, False)
+    report_configurations('com.microsoft.wdav.ext', configs_ext, True)
 
 parser = argparse.ArgumentParser(description = "Validates MDM profiles for Defender")
 parser.add_argument("--template", type=str, help = "Template file from https://github.com/microsoft/mdatp-xplat/blob/master/macos/mobileconfig/combined/mdatp.mobileconfig")
