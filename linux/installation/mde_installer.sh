@@ -627,7 +627,7 @@ install_on_fedora()
     ### Configure the repo name from which package should be installed
     local repo_name=${repo}-${CHANNEL}
 
-    if [ "$CHANNEL" == "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+    if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ]; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
         repo_name=${repo}-slow-prod
     fi
 
@@ -635,8 +635,10 @@ install_on_fedora()
         repo_name=packages-microsoft-com-prod
     fi
 
-    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ] || [ "$DISTRO" == "almalinux" ] || [ "$DISTRO" == "rocky" ]; then
+    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
         effective_distro="rhel"
+    elif [ "$DISTRO" == "almalinux" ]; then
+        effective_distro="alma"
     else
         effective_distro="$DISTRO"
     fi
@@ -825,9 +827,17 @@ scale_version_id()
         elif [[ $VERSION == 7* ]] || [ "$DISTRO" == "amzn" ]; then
             SCALED_VERSION=7
         elif [[ $VERSION == 8* ]] || [ "$DISTRO" == "fedora" ]; then
-            SCALED_VERSION=8
+            if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" ]]; then
+                SCALED_VERSION=8
+            else
+                SCALED_VERSION=8.0
+            fi
         elif [[ $VERSION == 9* ]]; then
-            SCALED_VERSION=9.0
+            if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" ]]; then
+                SCALED_VERSION=9
+            else
+                SCALED_VERSION=9.0
+            fi
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
