@@ -827,11 +827,7 @@ scale_version_id()
         elif [[ $VERSION == 7* ]] || [ "$DISTRO" == "amzn" ]; then
             SCALED_VERSION=7
         elif [[ $VERSION == 8* ]] || [ "$DISTRO" == "fedora" ]; then
-            if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" ]]; then
-                SCALED_VERSION=8
-            else
-                SCALED_VERSION=8.0
-            fi
+            SCALED_VERSION=8
         elif [[ $VERSION == 9* ]]; then
             if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" ]]; then
                 SCALED_VERSION=9
