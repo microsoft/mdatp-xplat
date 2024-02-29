@@ -487,6 +487,18 @@
                             }
                         }
                     }
+                },
+                "groupIds": {
+                    "title": "Group identifier",
+                    "type": "string",
+                    "propertyOrder": 30,
+                    "description": "",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#group-identifiers",
+                            "rel": "More information"
+                        }
+                    ]
                 }
             }
         },
