@@ -154,19 +154,25 @@ def get_SystemPolicyAllFiles(definition):
 
 def get_payloads(payload_type, content):
     if payload_type == 'com.apple.TCC.configuration-profile-policy':
-        for service_type, definition_array in content['Services'].items():
-            for definition in definition_array:
-                if service_type == 'SystemPolicyAllFiles':
-                    yield get_SystemPolicyAllFiles(definition)
-                else:
-                    print_warning('Unexpected payload type: {}, {}'.format(payload_type, service_type))
+        if 'Services' in content:
+            for service_type, definition_array in content['Services'].items():
+                for definition in definition_array:
+                    if service_type == 'SystemPolicyAllFiles':
+                        yield get_SystemPolicyAllFiles(definition)
+                    else:
+                        print_warning('Unexpected payload type: {}, {}'.format(payload_type, service_type))
+        else:
+            print_warning('Profile contains com.apple.TCC.configuration-profile-policy policy but no Services.')
     elif payload_type == 'com.apple.syspolicy.kernel-extension-policy':
         for id in content["AllowedTeamIdentifiers"]:
             yield PayloadKEXT(payload_type, id)
     elif payload_type == 'com.apple.system-extension-policy':
-        for team_id, bundle_ids in content['AllowedSystemExtensions'].items():
-            for bundle_id in bundle_ids:
-                yield PayloadSysExt(payload_type, team_id, bundle_id)
+        if 'AllowedSystemExtensions' in content:
+            for team_id, bundle_ids in content['AllowedSystemExtensions'].items():
+                for bundle_id in bundle_ids:
+                    yield PayloadSysExt(payload_type, team_id, bundle_id)
+        else:
+            print_warning('Profile contains com.apple.system-extension-policy policy but no AllowedSystemExtensions.')
     elif payload_type == 'com.apple.webcontent-filter':
         yield PayloadWebContentFilter(payload_type, {
             'FilterType': content.get('FilterType'),
