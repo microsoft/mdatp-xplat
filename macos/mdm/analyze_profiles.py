@@ -146,10 +146,10 @@ def read_plist(path):
 
 def get_SystemPolicyAllFiles(definition):
     return PayloadSystemPolicyAllFiles('com.apple.TCC.configuration-profile-policy', 'SystemPolicyAllFiles', {
-                        'Allowed': definition['Allowed'],
-                        'CodeRequirement': definition['CodeRequirement'],
-                        'IdentifierType': definition['IdentifierType'],
-                        'Identifier': definition['Identifier'],
+                        'Allowed': definition.get('Allowed'),
+                        'CodeRequirement': definition.get('CodeRequirement'),
+                        'IdentifierType': definition.get('IdentifierType'),
+                        'Identifier': definition.get('Identifier'),
                     })
 
 def get_payloads(payload_type, content):
@@ -265,10 +265,10 @@ def parse_tcc(path):
                 d = get_SystemPolicyAllFiles(definition)
                 definition['CodeRequirementData']
                 result[d] = {
-                    'CodeRequirement': definition['CodeRequirement'],
-                    'IdentifierType': definition['IdentifierType'],
-                    'Identifier': definition['Identifier'],
-                    'Allowed': definition['Allowed'],
+                    'CodeRequirement': definition.get('CodeRequirement'),
+                    'IdentifierType': definition.get('IdentifierType'),
+                    'Identifier': definition.get('Identifier'),
+                    'Allowed': definition.get('Allowed'),
                 }
 
     return result
