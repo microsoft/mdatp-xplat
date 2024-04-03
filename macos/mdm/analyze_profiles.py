@@ -42,7 +42,7 @@ class Payload():
     def __repr__(self):
         return self.__str__()
 
-class PayloadSystemPolicyAllFiles(Payload):
+class PayloadTCC(Payload):
     def __init__(self, payload_type, service_type, payload):
         Payload.__init__(self, payload_type, payload)
         self.service_type = service_type
@@ -102,6 +102,17 @@ class PayloadNotifications(Payload):
 
     def __str__(self):
         return '{} ({})'.format(self.payload_type, self.id)
+    
+class PayloadServiceManagement(Payload):
+    def __init__(self, payload_type, payload):
+        Payload.__init__(self, payload_type, payload)
+        self.id = '{}={}'.format(payload['RuleType'], payload['RuleValue'])
+
+    def get_ids(self):
+        return (self.id,)
+
+    def __str__(self):
+        return '{} ({})'.format(self.payload_type, self.id)
 
 class PayloadOnboardingInfo(Payload):
     def __init__(self, payload_type, payload):
@@ -144,25 +155,27 @@ def read_plist(path):
     else:
         return plistlib.readPlist(path)
 
-def get_SystemPolicyAllFiles(definition):
-    return PayloadSystemPolicyAllFiles('com.apple.TCC.configuration-profile-policy', 'SystemPolicyAllFiles', {
+def get_TCC(definition, service_type):
+    return PayloadTCC('com.apple.TCC.configuration-profile-policy', service_type, {
                         'Allowed': definition.get('Allowed'),
                         'CodeRequirement': definition.get('CodeRequirement'),
                         'IdentifierType': definition.get('IdentifierType'),
                         'Identifier': definition.get('Identifier'),
+                        'StaticCode': definition.get('StaticCode'),
                     })
 
-def get_payloads(payload_type, content):
+def get_payloads(payload_type, content, profile):
+    profile_description = ' in profile "{}" ({})'.format(profile['ProfileDisplayName'], profile['ProfileIdentifier']) if profile else ''
     if payload_type == 'com.apple.TCC.configuration-profile-policy':
         if 'Services' in content:
             for service_type, definition_array in content['Services'].items():
                 for definition in definition_array:
-                    if service_type == 'SystemPolicyAllFiles':
-                        yield get_SystemPolicyAllFiles(definition)
+                    if service_type == 'SystemPolicyAllFiles' or service_type == 'Accessibility':
+                        yield get_TCC(definition, service_type)
                     else:
-                        print_warning('Unexpected payload type: {}, {}'.format(payload_type, service_type))
+                        print_warning('Unexpected payload type: {}, {}{}'.format(payload_type, service_type, profile_description))
         else:
-            print_warning('Profile contains com.apple.TCC.configuration-profile-policy policy but no Services.')
+            print_warning('Profile contains com.apple.TCC.configuration-profile-policy policy but no Services{}'.format(profile_description))
     elif payload_type == 'com.apple.syspolicy.kernel-extension-policy':
         for id in content["AllowedTeamIdentifiers"]:
             yield PayloadKEXT(payload_type, id)
@@ -172,7 +185,7 @@ def get_payloads(payload_type, content):
                 for bundle_id in bundle_ids:
                     yield PayloadSysExt(payload_type, team_id, bundle_id)
         else:
-            print_warning('Profile contains com.apple.system-extension-policy policy but no AllowedSystemExtensions.')
+            print_warning('Profile contains com.apple.system-extension-policy policy but no AllowedSystemExtensions{}'.format(profile_description))
     elif payload_type == 'com.apple.webcontent-filter':
         yield PayloadWebContentFilter(payload_type, {
             'FilterType': content.get('FilterType'),
@@ -185,6 +198,9 @@ def get_payloads(payload_type, content):
     elif payload_type == 'com.apple.notificationsettings':
         for definition in content['NotificationSettings']:
             yield PayloadNotifications(payload_type, definition)
+    elif payload_type == 'com.apple.servicemanagement':
+        for definition in content['Rules']:
+            yield PayloadServiceManagement(payload_type, definition)
     elif payload_type == 'com.apple.ManagedClient.preferences':
         if 'PayloadContentManagedPreferences' in content:
             preferences = content['PayloadContentManagedPreferences']
@@ -214,7 +230,7 @@ def parse_profiles(path):
                 payload_type = item['PayloadType']
                 content = item['PayloadContent']
 
-                for payload in get_payloads(payload_type, content):
+                for payload in get_payloads(payload_type, content, profile):
                     if payload in result:
                         result_payloads = result[payload]
                     else:
@@ -237,7 +253,7 @@ def parse_expected(path):
 
     for item in read_plist(path)['PayloadContent']:
         payload_type = item['PayloadType']
-        payloads = list(get_payloads(payload_type, item))
+        payloads = list(get_payloads(payload_type, item, None))
 
         if len(payloads) == 0:
             print_warning('Unexpected payload type: {}, {}'.format(payload_type, item))
@@ -262,7 +278,7 @@ def parse_tcc(path):
         for service in tcc.values():
             if 'kTCCServiceSystemPolicyAllFiles' in service:
                 definition = service['kTCCServiceSystemPolicyAllFiles']
-                d = get_SystemPolicyAllFiles(definition)
+                d = get_TCC(definition, 'SystemPolicyAllFiles')
                 definition['CodeRequirementData']
                 result[d] = {
                     'CodeRequirement': definition.get('CodeRequirement'),
