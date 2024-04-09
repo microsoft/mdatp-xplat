@@ -9,7 +9,7 @@
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>E1E0D3F7-546F-4867-B655-669E1361ABE5</string>
+<string>com.microsoft.wdav.notification</string>
 <key>PayloadDisplayName</key>
 <string>Defender - Notifications</string>
 <key>PayloadDescription</key>

@@ -9,7 +9,7 @@
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>12D26F60-96F3-4E52-936F-CA96EEAE2C65</string>
+<string>com.microsoft.wdav.kext</string>
 <key>PayloadDisplayName</key>
 <string>Defender - KEXT</string>
 <key>PayloadDescription</key>
