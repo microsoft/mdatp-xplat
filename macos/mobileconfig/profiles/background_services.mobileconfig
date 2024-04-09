@@ -11,7 +11,7 @@
 <key>PayloadIdentifier</key>
 <string>com.microsoft.wdav.background</string>
 <key>PayloadDisplayName</key>
-<string>Background Service Configuration Profile</string>
+<string>Defender - Background Services</string>
 <key>PayloadDescription</key>
 <string/>
 <key>PayloadVersion</key>
