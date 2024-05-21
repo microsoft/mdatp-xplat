@@ -697,6 +697,98 @@
                     }
                 }
             }
+        },
+        "scheduledScan": {
+            "title": "ScheduledScan",
+            "propertyOrder": 100,
+            "defaultProperties": [],
+            "properties": {
+                "ignoreExclusions": {
+                    "title": "ignoreExclusions",
+                    "description": "ignoreExclusions",
+                    "propertyOrder": 10,
+                    "type": "boolean",
+                    "default": "false"
+                },
+                "lowPriorityScheduledScan":{
+                    "title": "lowPriorityScheduledScan",
+                    "description": "lowPriorityScheduledScan",
+                    "propertyOrder": 20,
+                    "type": "boolean",
+                    "default": "false"
+                },
+                "dailyConfiguration":{
+                    "title": "dailyConfiguration",
+                    "propertyOrder": 30,
+                    "defaultProperties": [],
+                    "properties": {
+                        "timeOfDay":{
+                            "title": "timeOfDay",
+                            "description": "Specifies the time of day, as the number of minutes after midnight, to perform a scheduled scan.",
+                            "propertyOrder": 10,
+                            "type": "integer",
+                            "default": "0"
+                        },
+                        "interval":{
+                            "title": "interval",
+                            "description": "0 (never), every 1 (hour) to 24 (hours, 1 scan per day)",
+                            "propertyOrder": 30,
+                            "type": "integer",
+                            "default": "0"
+                        },
+                        "randomizeScanStartTime":{
+                            "title": "randomizeScanStartTime",
+                            "description": "Only applicable for daily quick scans or weekly quick/full scans. Randomize the start time of the scan by up to specified number of hours.",
+                            "propertyOrder": 40,
+                            "type": "integer",
+                            "default": "0"
+                        }
+                    }
+                },
+                "weeklyConfiguration":{
+                    "title": "weeklyConfiguration",
+                    "propertyOrder": 40,
+                    "defaultProperties": [],
+                    "properties": {
+                        "dayOfWeek":{
+                            "title": "dayOfWeek",
+                            "description": "The range is between 0 and 8. 0:Everyday, 1-7:Sunday to Saturday, 8:Never",
+                            "propertyOrder": 10,
+                            "type": "integer",
+                            "default": "8"
+                        },
+                        "timeOfDay":{
+                            "title": "timeOfDay",
+                            "description": "Specifies the time of day, as the number of minutes after midnight, to perform a scheduled scan.",
+                            "propertyOrder": 20,
+                            "type": "integer",
+                            "default": "0"
+                        },
+                        "scanType":{
+                            "title": "scanType",
+                            "description": "quick or full.",
+                            "propertyOrder": 30,
+                            "type": "string",
+                            "default": "quick",
+                            "enum": ["quick", "full"]
+                        },
+                        "interval":{
+                            "title": "interval",
+                            "description": "0 (never), every 1 (hour) to 24 (hours, 1 scan per day)",
+                            "propertyOrder": 40,
+                            "type": "integer",
+                            "default": "0"
+                        },
+                        "randomizeScanStartTime":{
+                            "title": "randomizeScanStartTime",
+                            "description": "Only applicable for daily quick scans or weekly quick/full scans. Randomize the start time of the scan by up to specified number of hours.",
+                            "propertyOrder": 50,
+                            "type": "integer",
+                            "default": "0"
+                        }
+                    }
+                }
+            }
         }
     }
 }
