@@ -283,7 +283,7 @@ if ! [ -x "$(command -v curl)" ]; then
     exit 0
 fi
 
-if [ -f "settings.json" ]; then
+if [ -f "$scriptDir/settings.json" ]; then
     echo "Reading input parameters from settings.json file"
 else
     echo "Exiting script since settings.json file does not exist. Please copy the settings.json file to the same directory as the script and then re-run the script."
