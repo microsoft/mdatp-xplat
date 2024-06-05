@@ -30,6 +30,7 @@ OFFBOARDING_SCRIPT=
 MIN_REQUIREMENTS=
 SKIP_CONFLICTING_APPS=
 PASSIVE_MODE=
+RTP_MODE=
 MIN_CORES=2
 MIN_MEM_MB=2048
 MIN_DISK_SPACE_MB=1280
@@ -984,6 +985,22 @@ set_epp_to_passive_mode()
     log_info "[v] passive mode set"
 }
 
+set_epp_to_rtp_mode()
+{
+    if ! check_if_pkg_is_installed mdatp; then
+        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
+    fi
+
+    if [[ $(mdatp health --field real_time_protection_enabled | tail -1) == "false" ]]; then
+        log_info "[>] setting MDE/EPP to real time protection mode"
+        retry_quietly 3 "mdatp config real-time-protection --value enabled" "failed to set MDE to rtp-mode" $ERR_PARAMETER_SET_FAILED
+    else
+        log_info "[>] MDE/EPP already in real time protection mode"
+    fi
+
+    log_info "[v] real time protection mode set"
+}
+
 set_device_tags()
 {
     for t in "${tags[@]}"
@@ -1025,6 +1042,7 @@ usage()
     echo " -o|--onboard         onboard the product with <onboarding_script>"
     echo " -f|--offboard        offboard the product with <offboarding_script>"
     echo " -p|--passive-mode    set EPP to passive mode"
+    echo " -r|--rtp-mode        set EPP to real time protection mode. passive-mode and rtp-mode are mutually exclusive"
     echo " -t|--tag             set a tag by declaring <name> and <value>. ex: -t GROUP Coders"
     echo " -m|--min_req         enforce minimum requirements"
     echo " -x|--skip_conflict   skip conflicting application verification"
@@ -1101,6 +1119,11 @@ do
             PASSIVE_MODE=1
             shift 1
             ;;
+        --rtp-mode)
+            verify_privileges "rtp-mode"
+            RTP_MODE=1
+            shift 1
+            ;;
         -t|--tag)
             if [[ -z "$2" || -z "$3" ]]; then
                 script_exit "$1 option requires two arguments" $ERR_INVALID_ARGUMENTS
@@ -1172,8 +1195,15 @@ do
     esac
 done
 
-if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${OFFBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && ${#tags[@]} -eq 0 ]]; then
+if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${OFFBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && -z "${RTP_MODE}" && ${#tags[@]} -eq 0 ]]; then
     script_exit "no installation mode specified. Specify --help for help" $ERR_INVALID_ARGUMENTS
+fi
+
+# Check for mutually exclusive options
+if [ ! -z "$PASSIVE_MODE" ] && [ ! -z "$RTP_MODE" ]; then
+    echo "Options -p and --rtp-mode are mutually exclusive."
+    usage
+    exit 1
 fi
 
 if [[ "$INSTALL_MODE" == 'i' && -z "$CHANNEL" ]]; then
@@ -1252,6 +1282,8 @@ fi
 
 if [ ! -z $PASSIVE_MODE ]; then
     set_epp_to_passive_mode
+elif [ ! -z $RTP_MODE ]; then
+    set_epp_to_rtp_mode
 fi
 
 if [ ! -z $ONBOARDING_SCRIPT ]; then
