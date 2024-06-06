@@ -1,0 +1,12 @@
+#!/bin/sh
+# If Defender for Endpoint is installed, then get health status
+
+if [ -f "/usr/local/bin/mdatp" ]; then
+    result=`sudo mdatp health --field healthy`
+    health= `echo '$result' | sed 's/"//g'`
+    
+    
+    echo "<result>$result</result>"
+else
+    echo "<result>Not Installed</result>"
+fi

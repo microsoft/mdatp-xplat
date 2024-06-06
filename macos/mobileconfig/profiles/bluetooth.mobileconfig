@@ -3,15 +3,15 @@
 <plist version="1">
 <dict>
 <key>PayloadUUID</key>
-<string>12D26F60-96F3-4E52-936F-CA96EEAE2C65</string>
+<string>596ECC4F-8CE3-4DB0-9277-3B60FF6209E0</string>
 <key>PayloadType</key>
 <string>Configuration</string>
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>com.microsoft.wdav.kext</string>
+<string>com.microsoft.wdav.tcc.bluetooth</string>
 <key>PayloadDisplayName</key>
-<string>Defender - KEXT</string>
+<string>Defender - Bluetooth</string>
 <key>PayloadDescription</key>
 <string/>
 <key>PayloadVersion</key>
@@ -26,29 +26,39 @@
 <array>
 <dict>
 <key>PayloadUUID</key>
-<string>43C579BA-CFF0-44F6-ABF4-DCC879B4100E</string>
+<string>03BC21D4-4EDE-4AB9-9785-87ACBCCE3593</string>
 <key>PayloadType</key>
-<string>com.apple.syspolicy.kernel-extension-policy</string>
+<string>com.apple.TCC.configuration-profile-policy</string>
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>43C579BA-CFF0-44F6-ABF4-DCC879B4100E</string>
+<string>03BC21D4-4EDE-4AB9-9785-87ACBCCE3593</string>
 <key>PayloadDisplayName</key>
-<string>Approved Kernel Extensions</string>
+<string>Privacy Preferences Policy Control</string>
 <key>PayloadDescription</key>
 <string/>
 <key>PayloadVersion</key>
 <integer>1</integer>
 <key>PayloadEnabled</key>
 <true/>
-<key>AllowUserOverrides</key>
-<false/>
-<key>AllowNonAdminUserApprovals</key>
-<false/>
-<key>AllowedTeamIdentifiers</key>
+<key>Services</key>
+<dict>
+<key>BluetoothAlways</key>
 <array>
-<string>UBF8T346G9</string>
+<dict>
+<key>Identifier</key>
+<string>com.microsoft.dlp.agent</string>
+<key>CodeRequirement</key>
+<string>identifier "com.microsoft.dlp.agent" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = UBF8T346G9</string>
+<key>IdentifierType</key>
+<string>bundleID</string>
+<key>StaticCode</key>
+<integer>0</integer>
+<key>Allowed</key>
+<integer>1</integer>
+</dict>
 </array>
+</dict>
 </dict>
 </array>
 </dict>

@@ -9,9 +9,9 @@
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>69DD9825-067B-4C6C-8B54-EDA83C7F179D</string>
+<string>com.microsoft.wdav.background</string>
 <key>PayloadDisplayName</key>
-<string>Background Service Configuration Profile</string>
+<string>Defender - Background Services</string>
 <key>PayloadDescription</key>
 <string/>
 <key>PayloadVersion</key>

@@ -42,7 +42,7 @@ class Payload():
     def __repr__(self):
         return self.__str__()
 
-class PayloadSystemPolicyAllFiles(Payload):
+class PayloadTCC(Payload):
     def __init__(self, payload_type, service_type, payload):
         Payload.__init__(self, payload_type, payload)
         self.service_type = service_type
@@ -102,8 +102,29 @@ class PayloadNotifications(Payload):
 
     def __str__(self):
         return '{} ({})'.format(self.payload_type, self.id)
+    
+class PayloadServiceManagement(Payload):
+    def __init__(self, payload_type, payload):
+        Payload.__init__(self, payload_type, payload)
+        self.id = '{}={}'.format(payload['RuleType'], payload['RuleValue'])
+
+    def get_ids(self):
+        return (self.id,)
+
+    def __str__(self):
+        return '{} ({})'.format(self.payload_type, self.id)
 
 class PayloadOnboardingInfo(Payload):
+    def __init__(self, payload_type, payload):
+        Payload.__init__(self, payload_type, payload)
+
+    def get_ids(self):
+        return ()
+
+    def __str__(self):
+        return '{}'.format(self.payload_type)
+
+class PayloadConfiguration(Payload):
     def __init__(self, payload_type, payload):
         Payload.__init__(self, payload_type, payload)
 
@@ -134,29 +155,37 @@ def read_plist(path):
     else:
         return plistlib.readPlist(path)
 
-def get_SystemPolicyAllFiles(definition):
-    return PayloadSystemPolicyAllFiles('com.apple.TCC.configuration-profile-policy', 'SystemPolicyAllFiles', {
-                        'Allowed': definition['Allowed'],
-                        'CodeRequirement': definition['CodeRequirement'],
-                        'IdentifierType': definition['IdentifierType'],
-                        'Identifier': definition['Identifier'],
+def get_TCC(definition, service_type):
+    return PayloadTCC('com.apple.TCC.configuration-profile-policy', service_type, {
+                        'Allowed': definition.get('Allowed'),
+                        'CodeRequirement': definition.get('CodeRequirement'),
+                        'IdentifierType': definition.get('IdentifierType'),
+                        'Identifier': definition.get('Identifier'),
+                        'StaticCode': definition.get('StaticCode'),
                     })
 
-def get_payloads(payload_type, content):
+def get_payloads(payload_type, content, profile):
+    profile_description = ' in profile "{}" ({})'.format(profile['ProfileDisplayName'], profile['ProfileIdentifier']) if profile else ''
     if payload_type == 'com.apple.TCC.configuration-profile-policy':
-        for service_type, definition_array in content['Services'].items():
-            for definition in definition_array:
-                if service_type == 'SystemPolicyAllFiles':
-                    yield get_SystemPolicyAllFiles(definition)
-                else:
-                    print_warning('Unexpected payload type: {}, {}'.format(payload_type, service_type))
+        if 'Services' in content:
+            for service_type, definition_array in content['Services'].items():
+                for definition in definition_array:
+                    if service_type == 'SystemPolicyAllFiles' or service_type == 'Accessibility':
+                        yield get_TCC(definition, service_type)
+                    else:
+                        print_warning('Unexpected payload type: {}, {}{}'.format(payload_type, service_type, profile_description))
+        else:
+            print_warning('Profile contains com.apple.TCC.configuration-profile-policy policy but no Services{}'.format(profile_description))
     elif payload_type == 'com.apple.syspolicy.kernel-extension-policy':
         for id in content["AllowedTeamIdentifiers"]:
             yield PayloadKEXT(payload_type, id)
     elif payload_type == 'com.apple.system-extension-policy':
-        for team_id, bundle_ids in content['AllowedSystemExtensions'].items():
-            for bundle_id in bundle_ids:
-                yield PayloadSysExt(payload_type, team_id, bundle_id)
+        if 'AllowedSystemExtensions' in content:
+            for team_id, bundle_ids in content['AllowedSystemExtensions'].items():
+                for bundle_id in bundle_ids:
+                    yield PayloadSysExt(payload_type, team_id, bundle_id)
+        else:
+            print_warning('Profile contains com.apple.system-extension-policy policy but no AllowedSystemExtensions{}'.format(profile_description))
     elif payload_type == 'com.apple.webcontent-filter':
         yield PayloadWebContentFilter(payload_type, {
             'FilterType': content.get('FilterType'),
@@ -169,13 +198,27 @@ def get_payloads(payload_type, content):
     elif payload_type == 'com.apple.notificationsettings':
         for definition in content['NotificationSettings']:
             yield PayloadNotifications(payload_type, definition)
+    elif payload_type == 'com.apple.servicemanagement':
+        for definition in content['Rules']:
+            yield PayloadServiceManagement(payload_type, definition)
     elif payload_type == 'com.apple.ManagedClient.preferences':
-        if 'PayloadContentManagedPreferences' in content and 'com.microsoft.wdav.atp' in content['PayloadContentManagedPreferences']:
-            try:
-                onboarding_info = content['PayloadContentManagedPreferences']['com.microsoft.wdav.atp']['Forced'][0]['mcx_preference_settings']['OnboardingInfo']
-                yield PayloadOnboardingInfo(payload_type, onboarding_info)
-            except:
-                print_error("Probably malformed onboarding blob")
+        if 'PayloadContentManagedPreferences' in content:
+            preferences = content['PayloadContentManagedPreferences']
+
+            for domain, settings in preferences.items():
+                if 'Forced' in settings:
+                    forced = settings['Forced']
+
+                    for setting in forced:
+                        if 'mcx_preference_settings' in setting:
+                            mcx_preference_settings = setting['mcx_preference_settings']
+
+                            if domain == 'com.microsoft.wdav.atp':
+                                if 'OnboardingInfo' in mcx_preference_settings:
+                                    onboarding_info = mcx_preference_settings['OnboardingInfo']
+                                    yield PayloadOnboardingInfo(payload_type + '/' + domain, onboarding_info)
+                            elif domain == 'com.microsoft.wdav' or domain == 'com.microsoft.wdav.ext':
+                                yield PayloadConfiguration(payload_type + '/' + domain, mcx_preference_settings)
 
 def parse_profiles(path):
     result = {}
@@ -183,12 +226,11 @@ def parse_profiles(path):
 
     for level, profiles in plist.items():
         for profile in profiles:
-
             for item in profile['ProfileItems']:
                 payload_type = item['PayloadType']
                 content = item['PayloadContent']
 
-                for payload in get_payloads(payload_type, content):
+                for payload in get_payloads(payload_type, content, profile):
                     if payload in result:
                         result_payloads = result[payload]
                     else:
@@ -211,7 +253,7 @@ def parse_expected(path):
 
     for item in read_plist(path)['PayloadContent']:
         payload_type = item['PayloadType']
-        payloads = list(get_payloads(payload_type, item))
+        payloads = list(get_payloads(payload_type, item, None))
 
         if len(payloads) == 0:
             print_warning('Unexpected payload type: {}, {}'.format(payload_type, item))
@@ -236,19 +278,54 @@ def parse_tcc(path):
         for service in tcc.values():
             if 'kTCCServiceSystemPolicyAllFiles' in service:
                 definition = service['kTCCServiceSystemPolicyAllFiles']
-                d = get_SystemPolicyAllFiles(definition)
+                d = get_TCC(definition, 'SystemPolicyAllFiles')
                 definition['CodeRequirementData']
                 result[d] = {
-                    'CodeRequirement': definition['CodeRequirement'],
-                    'IdentifierType': definition['IdentifierType'],
-                    'Identifier': definition['Identifier'],
-                    'Allowed': definition['Allowed'],
+                    'CodeRequirement': definition.get('CodeRequirement'),
+                    'IdentifierType': definition.get('IdentifierType'),
+                    'Identifier': definition.get('Identifier'),
+                    'Allowed': definition.get('Allowed'),
                 }
 
     return result
 
 def format_location(profile_data):
     return '{}, profile: "{}", deployed: {}'.format(profile_data['path'], profile_data['name'], profile_data['time'])
+
+def report_configurations(name, configs, is_ext):
+    if len(configs) == 1:
+        print_success("Configuration payload {} found".format(name))
+    elif len(configs) == 0:
+        if is_ext:
+            print_debug("Configuration payload {} not found".format(name))
+        else:
+            print_warning("Configuration payload {} not found".format(name))
+    elif len(configs) > 1:
+        print_warning("Multiple payloads {} found".format(name))
+        settings_map = {}
+
+        i = 1
+        for config in configs:
+            print_debug("  {}: {}".format(i, config))
+
+            for k, v in config['payload'].payload.items():
+                if k in settings_map:
+                    settings_list = settings_map[k]
+                    settings_list.append({'settings': v, 'config': config})
+                else:
+                    settings_list = []                   
+                    settings_list.append({'settings': v, 'config': config})
+                    settings_map[k] = settings_list
+
+            i += 1
+
+        for k, values in settings_map.items():
+            if len(values) > 1:
+                print_error("Conflicting configuration payloads {}, setting {} will be lost fully or partially".format(name, k))
+                i = 1
+                for v in values:
+                    print_debug("  {}: {} -> {}".format(i, v['config'], v['settings']))
+                    i += 1
 
 def report(path_profiles, path_expected, path_tcc):
     map_profiles = parse_profiles(path_profiles)
@@ -302,19 +379,30 @@ def report(path_profiles, path_expected, path_tcc):
 
     # 'com.apple.ManagedClient.preferences'
     onboarding_infos = []
+    configs = []
+    configs_ext = []
     for k, v in map_profiles.items():
-        if k.payload_type == 'com.apple.ManagedClient.preferences':
+        if k.payload_type == 'com.apple.ManagedClient.preferences/com.microsoft.wdav.atp':
             onboarding_infos += v
+        elif k.payload_type == 'com.apple.ManagedClient.preferences/com.microsoft.wdav':
+            print(v)
+            configs += v
+        elif k.payload_type == 'com.apple.ManagedClient.preferences/com.microsoft.wdav.ext':
+            configs_ext += v
 
     if len(onboarding_infos) == 1:
         print_success("Onboarding info found")
     elif len(onboarding_infos) == 0:
         print_error("Onboarding info not found")
     else:
-        print_error("Multiple onboarding info found")
+        print_error("Conflicting onboarding info profiles found")
         i = 1
         for info in onboarding_infos:
             print_debug("  {}: {}".format(i, info))
+            i += 1
+
+    report_configurations('com.microsoft.wdav', configs, False)
+    report_configurations('com.microsoft.wdav.ext', configs_ext, True)
 
 parser = argparse.ArgumentParser(description = "Validates MDM profiles for Defender")
 parser.add_argument("--template", type=str, help = "Template file from https://github.com/microsoft/mdatp-xplat/blob/master/macos/mobileconfig/combined/mdatp.mobileconfig")

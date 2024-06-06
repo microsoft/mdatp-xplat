@@ -1,0 +1,10 @@
+#!/bin/sh
+# If Microsoft Defender for Endpoint is installed, then get MDE product expiration date
+
+if [ -f "/usr/local/bin/mdatp" ]; then
+    result=`sudo mdatp health --field product_expiration`
+    dateresult=`date -j -f "%b %d, %Y at %H:%M:%S %p" "$result" +"%Y-%m-%d"`
+    echo "<result>$dateresult</result>"
+else
+    echo "<result>Not Installed</result>"
+fi

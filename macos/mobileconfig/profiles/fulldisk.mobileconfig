@@ -9,7 +9,7 @@
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>186DB26E-B96F-4D1B-9C80-6AD7EFF87D01</string>
+<string>com.microsoft.wdav.tcc.fulldiskaccess</string>
 <key>PayloadDisplayName</key>
 <string>Defender - Full Disk Access</string>
 <key>PayloadDescription</key>

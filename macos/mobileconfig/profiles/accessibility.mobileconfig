@@ -9,7 +9,7 @@
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>1C146304-DF5B-41F2-8AD4-17EA9A95D095</string>
+<string>com.microsoft.wdav.tcc.accessibility</string>
 <key>PayloadDisplayName</key>
 <string>Defender - Accessibility Access</string>
 <key>PayloadDescription</key>

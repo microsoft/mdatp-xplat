@@ -1,0 +1,8 @@
+{
+  "downloadFolder": "/tmp/wdav-update",
+  "downloadLinuxUpdates": true,
+  "logFilePath": "/tmp/mdatp_offline_updates.log",
+  "downloadMacUpdates": true,
+  "downloadPreviewUpdates": false,
+  "backupPreviousUpdates": true 
+}

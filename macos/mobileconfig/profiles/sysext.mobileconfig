@@ -9,7 +9,7 @@
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>7311F510-F319-4ED5-BC36-24B037124AFD</string>
+<string>com.microsoft.wdav.sysext</string>
 <key>PayloadDisplayName</key>
 <string>Defender - System Extensions</string>
 <key>PayloadDescription</key>

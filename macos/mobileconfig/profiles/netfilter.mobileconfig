@@ -9,7 +9,7 @@
 <key>PayloadOrganization</key>
 <string>Microsoft Corporation</string>
 <key>PayloadIdentifier</key>
-<string>1A853DDB-37AB-4D4F-B74D-15197FEF6423</string>
+<string>com.microsoft.wdav.webcontentfilter</string>
 <key>PayloadDisplayName</key>
 <string>Defender - Network Filter</string>
 <key>PayloadDescription</key>
