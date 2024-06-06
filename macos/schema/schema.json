@@ -361,19 +361,19 @@
                     ],
                     "enum": ["optional", "required"]
                 },
-                "automaticSampleSubmission": {
-                    "default": true,
+                "automaticSampleSubmissionConsent": {
+                    "default": "safe",
+                    "title": "Automatic sample submission Consent",
+                    "type": "string",
+                    "propertyOrder": 30,
                     "description": "Sends sample files to Microsoft to help protect device users and your organization from potential threats",
-                    "format": "checkbox",
                     "links": [
                         {
                             "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#enable--disable-automatic-sample-submissions",
                             "rel": "More information"
                         }
                     ],
-                    "propertyOrder": 30,
-                    "title": "Automatic sample submissions",
-                    "type": "boolean"
+                    "enum": ["none", "safe", "all"]
                 },
                 "automaticDefinitionUpdateEnabled": {
                     "default": true,
