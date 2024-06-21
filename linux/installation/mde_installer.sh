@@ -5,7 +5,7 @@
 #  Copyright (c) 2021 Microsoft Corporation.  All rights reserved.
 #
 #  Abstract:
-#    MDE installation script 
+#    MDE installation script
 #    - Fingerprinting OS and manually installs MDE as described in the online documentation
 #      https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/linux-install-manually?view=o365-worldwide
 #    - Runs additional optional checks: minimal requirements, fanotify subscribers, etc.
@@ -111,7 +111,7 @@ script_exit()
     if [ "$2" = "0" ]; then
         log_info "[v] $1"
     else
-	    log_error "[x] $1"
+        log_error "[x] $1"
     fi
 
     if [ -z "$2" ]; then
@@ -120,7 +120,7 @@ script_exit()
         exit $ERR_INTERNAL
     else
         log_info "[*] exiting ($2)"
-	    exit $2
+        exit $2
     fi
 }
 
@@ -154,12 +154,12 @@ EOF
 get_rpm_proxy_params() {
     proxy_params=""
     if [ -n "$http_proxy" ]; then
-	    proxy_host=$(parse_uri "$http_proxy" | sed -n '2p')
+        proxy_host=$(parse_uri "$http_proxy" | sed -n '2p')
         if [ -n "$proxy_host" ];then
            proxy_params="$proxy_params --httpproxy $proxy_host"
         fi
 
-	    proxy_port=$(parse_uri "$http_proxy" | sed -n '3p')
+        proxy_port=$(parse_uri "$http_proxy" | sed -n '3p')
         if [ -n "$proxy_port" ]; then
            proxy_params="$proxy_params --httpport $proxy_port"
         fi
@@ -194,9 +194,9 @@ run_quietly()
     if [ -n "$VERBOSE" ]; then
         log_info "$out"
     fi
-    
+
     if [ "$exit_code" -ne 0 ]; then
-        if [ -n $DEBUG ]; then             
+        if [ -n $DEBUG ]; then
             log_debug "[>] Running command: $1"
             log_debug "[>] Command output: $out"
             log_debug "[>] Command exit_code: $exit_code"
@@ -216,7 +216,7 @@ retry_quietly()
 {
     # retry_quietly <retries> <command> <error_msg> [<error_code>]
     # use error_code for script_exit
-    
+
     if [ $# -lt 3 ] || [ $# -gt 4 ]; then
         log_error "[!] INTERNAL ERROR. retry_quietly requires 3 or 4 arguments"
         exit 1
@@ -233,7 +233,7 @@ retry_quietly()
         else
             exit_code=1
         fi
-        
+
         if [ $exit_code -ne 0 ]; then
             sleep 1
             ((retries--))
@@ -252,7 +252,7 @@ retry_quietly()
 
 print_state()
 {
-    if [ -z $(which mdatp) ]; then
+    if [ -z $(which mdatp 2> /dev/null) ]; then
         log_warning "[S] MDE not installed."
     else
         log_info "[S] MDE installed."
@@ -336,7 +336,7 @@ verify_privileges()
 verify_min_requirements()
 {
     # echo "[>] verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
-    
+
     local cores=$(nproc --all)
     if [ $cores -lt $MIN_CORES ]; then
         script_exit "MDE requires $MIN_CORES cores or more to run, found $cores." $ERR_INSUFFICIENT_REQUIREMENTS
@@ -361,13 +361,13 @@ find_service()
         script_exit "INTERNAL ERROR. find_service requires an argument" $ERR_INTERNAL
     fi
 
-	lines=$(systemctl status $1 2>&1 | grep "Active: active" | wc -l)
-	
-    if [ $lines -eq 0 ]; then
-		return 1
-	fi
+    lines=$(systemctl status $1 2>&1 | grep "Active: active" | wc -l)
 
-	return 0
+    if [ $lines -eq 0 ]; then
+        return 1
+    fi
+
+    return 0
 }
 
 verify_mdatp_installed()
@@ -382,7 +382,7 @@ verify_mdatp_installed()
             log_info "[i] MDE already installed but not onboarded. Please use --onboard command to onboard the product."
         else
             mdatp_version=$($MDE_VERSION_CMD | tail -1)
-            org_id=$(mdatp health --field org_id | tail -1)           
+            org_id=$(mdatp health --field org_id | tail -1)
             log_info "[i] Found MDE already installed and onboarded with org_id $org_id and app_version $mdatp_version. Either try to upgrade your MDE version using --upgrade option or Please verify that the onboarded linux server appears in Microsoft 365 Defender."
         fi
     else
@@ -396,11 +396,11 @@ verify_conflicting_applications()
 
     # find applications that are using fanotify
     local conflicting_apps=$(timeout 5m find /proc/*/fdinfo/ -type f -print0 2>/dev/null | xargs -r0 grep -Fl "fanotify mnt_id" 2>/dev/null | xargs -I {} -r sh -c 'cat "$(dirname {})/../cmdline"')
-    
+
     if [ ! -z $conflicting_apps ]; then
 
         if [ $conflicting_apps == "/opt/microsoft/mdatp/sbin/wdavdaemon" ]; then
-            verify_mdatp_installed 
+            verify_mdatp_installed
         else
             script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
         fi
@@ -422,8 +422,8 @@ verify_conflicting_applications()
         # echo "[>] locating service: $1"
         if find_service $1; then
             script_exit "found conflicting service: [$1], aborting" $ERR_CONFLICTING_APPS
-        fi        
-    done 
+        fi
+    done
 
     log_info "[v] no conflicting applications found"
 }
@@ -443,7 +443,7 @@ set_package_manager()
         DISTRO="sles"
         PKG_MGR="zypper"
         PKG_MGR_INVOKER="zypper --non-interactive"
-    else    
+    else
         script_exit "unsupported distro", $ERR_UNSUPPORTED_DISTRO
     fi
 
@@ -497,7 +497,7 @@ install_required_pkgs()
 
     if [ ! -z "$pkgs_to_be_installed" ]; then
         log_info "[>] installing $pkgs_to_be_installed"
-        run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY 
+        run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY
     else
         log_info "[v] required pkgs are installed"
     fi
@@ -660,7 +660,7 @@ install_on_fedora()
     ### Install MDE ###
     log_info "[>] installing MDE"
     run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
-    
+
     sleep 5
     log_info "[v] installed"
 }
@@ -688,7 +688,7 @@ install_on_sles()
     if [ "$CHANNEL" == "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
         repo_name=${repo}-slow-prod
     fi
-    
+
     # add repository if it does not exist
     lines=$($PKG_MGR_INVOKER lr | grep "$repo_name" | wc -l)
 
@@ -701,14 +701,14 @@ install_on_sles()
 
     ### Fetch the gpg key ###
     run_quietly "rpm $(get_rpm_proxy_params) --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-    
+
     wait_for_package_manager_to_complete
 
     ### Install MDE ###
     log_info "[>] installing MDE"
 
     run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp" "[!] failed to install MDE (1/2)"
-    
+
     if ! check_if_pkg_is_installed mdatp; then
         log_warning "[r] retrying"
         sleep 2
@@ -734,7 +734,7 @@ remove_repo()
             repo_name=${repo}-slow-prod
         fi
         run_quietly "$PKG_MGR_INVOKER removerepo $repo_name" "failed to remove repo"
-    
+
     elif [ "$DISTRO_FAMILY" == "fedora" ]; then
         local repo=packages-microsoft-com
         local repo_name="$repo-$CHANNEL"
@@ -754,7 +754,7 @@ remove_repo()
         else
             log_info "[i] nothing to clean up"
         fi
-    
+
     elif [ "$DISTRO_FAMILY" == "debian" ]; then
         if [ -f "/etc/apt/sources.list.d/microsoft-$CHANNEL.list" ]; then
             run_quietly "rm -f '/etc/apt/sources.list.d/microsoft-$CHANNEL.list'" "unable to remove repo list ($?)" $ERR_FAILED_REPO_CLEANUP
@@ -802,11 +802,11 @@ rhel6_supported_version()
 {
     local SUPPORTED_RHEL6_VERSIONS=("6.7" "6.8" "6.9" "6.10")
     for version in ${SUPPORTED_RHEL6_VERSIONS[@]}; do
-        if [[ "$1" == "$version" ]]; then 
+        if [[ "$1" == "$version" ]]; then
             return 0
         fi
     done
-    return 1    
+    return 1
 }
 
 scale_version_id()
@@ -854,7 +854,7 @@ scale_version_id()
     elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]]; then
         SCALED_VERSION=18.04
     else
-        # no problems with 
+        # no problems with
         SCALED_VERSION=$VERSION
     fi
     log_info "[>] scaled: $SCALED_VERSION"
@@ -897,7 +897,7 @@ onboard_device()
         sleep 1
         run_quietly "$PYTHON $ONBOARDING_SCRIPT" "error: python onboarding failed" $ERR_ONBOARDING_FAILED
 
-    elif [[ $ONBOARDING_SCRIPT == *.sh ]]; then        
+    elif [[ $ONBOARDING_SCRIPT == *.sh ]]; then
         run_quietly "sh $ONBOARDING_SCRIPT" "error: bash onboarding failed" $ERR_ONBOARDING_FAILED
 
     else
@@ -953,7 +953,7 @@ offboard_device()
         sleep 1
         run_quietly "$PYTHON $OFFBOARDING_SCRIPT" "error: python offboarding failed" $ERR_OFFBOARDING_FAILED
 
-    elif [[ $OFFBOARDING_SCRIPT == *.sh ]]; then        
+    elif [[ $OFFBOARDING_SCRIPT == *.sh ]]; then
         run_quietly "sh $OFFBOARDING_SCRIPT" "error: bash offboarding failed" $ERR_OFFBOARDING_FAILED
 
     else
@@ -980,7 +980,7 @@ set_epp_to_passive_mode()
     else
         log_info "[>] MDE/EPP already in passive mode"
     fi
-    
+
     log_info "[v] passive mode set"
 }
 
@@ -1010,7 +1010,7 @@ set_device_tags()
             script_exit "invalid tag name: $1. supported tags: GROUP, SecurityWorkspaceId, AzureResourceId and SecurityAgentId" $ERR_TAG_NOT_SUPPORTED
         fi
     done
-    log_info "[v] tags set."   
+    log_info "[v] tags set."
 }
 
 usage()
@@ -1052,7 +1052,7 @@ do
         -c|--channel)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi        
+            fi
             CHANNEL=$2
             verify_channel
             shift 2
@@ -1075,7 +1075,7 @@ do
         -o|--onboard)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi        
+            fi
             ONBOARDING_SCRIPT=$2
             verify_privileges "onboard"
             shift 2
@@ -1083,7 +1083,7 @@ do
         -f|--offboard)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi        
+            fi
             OFFBOARDING_SCRIPT=$2
             verify_privileges "offboard"
             shift 2
@@ -1125,7 +1125,7 @@ do
         -n|--no)
             ASSUMEYES=
             shift 1
-            ;;            
+            ;;
         -s|--verbose)
             VERBOSE=1
             shift 1
@@ -1166,8 +1166,7 @@ do
             shift 2
             ;;
         *)
-            echo "use -h or --help for details"
-            script_exit "unknown argument" $ERR_INVALID_ARGUMENTS
+            script_exit "unknown argument '$1', use -h or --help for details" $ERR_INVALID_ARGUMENTS
             ;;
     esac
 done
@@ -1212,7 +1211,7 @@ if [ "$INSTALL_MODE" == "i" ]; then
     if [ -z $SKIP_CONFLICTING_APPS ]; then
         verify_conflicting_applications
     fi
-    
+
     if [ "$DISTRO_FAMILY" == "debian" ]; then
         install_on_debian
     elif [ "$DISTRO_FAMILY" == "fedora" ]; then
@@ -1235,7 +1234,7 @@ elif [ "$INSTALL_MODE" == "u" ]; then
         upgrade_mdatp "$ASSUMEYES update"
     elif [ "$DISTRO_FAMILY" == "sles" ]; then
         upgrade_mdatp "up $ASSUMEYES"
-    else    
+    else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
