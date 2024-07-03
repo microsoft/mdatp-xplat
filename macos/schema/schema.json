@@ -698,6 +698,110 @@
                     }
                 }
             }
+        },
+        "scheduledScan": {
+            "title": "Scheduled scan configuration",
+            "propertyOrder": 100,
+            "defaultProperties": [],
+            "properties": {
+                "checkForDefinitionsUpdate": {
+                    "title": "Check for definitions update",
+                    "description": "Check for definitions update before initiating a scheduled scan",
+                    "propertyOrder": 10,
+                    "type": "boolean",
+                    "default": false
+                },
+                "dailyConfiguration": {
+                    "title": "Daily and Hourly quick scan configuration",
+                    "description": "Check for definitions update before initiating a scheduled scan",
+                    "propertyOrder": 20,
+                    "type": "object",
+                    "properties": {
+                        "timeOfDay": {
+                            "title": "Time of day",
+                            "description": "Specifies the time of day, as the number of minutes after midnight, to perform a daily quick scan.",
+                            "propertyOrder": 10,
+                            "type": "number",
+                            "default": 0,
+                            "minimum": 0,
+                            "maximum": 1440
+                        },
+                        "interval": {
+                            "title": "Start time",
+                            "description": "Specify how many hours should elapse before the next hourly quick scan. 0 indicates no hourly quick scan. 1 indicates a scan every hour. 24 indicates a scan once a day.",
+                            "propertyOrder": 20,
+                            "type": "number",
+                            "default": 0,
+                            "minimum": 0,
+                            "maximum": 24
+                        }
+                    }
+                },
+                "ignoreExclusions": {
+                    "title": "Ignore exclusions",
+                    "description": "Should exclusions be ignored during a scheduled scan",
+                    "propertyOrder": 30,
+                    "type": "boolean",
+                    "default": false
+                },
+                "lowPriorityScheduledScan":{
+                    "title": "Low priority scheduled scan",
+                    "description": "Should scheduled scan be run with low priority. (Scan might take longer to complete).",
+                    "propertyOrder": 40,
+                    "type": "boolean",
+                    "default": false
+                },
+                "randomizeScanStartTime":{
+                    "title": "Randomize scheduled scan start time",
+                    "description": "Randomize the start time of a daily and weekly scheduled scan to any interval from 0 to 23 hours.",
+                    "propertyOrder": 50,
+                    "type": "number",
+                    "default": 0,
+                    "minimum": 0,
+                    "maximum": 23
+                },
+                "runScanWhenIdle":{
+                    "title": "Run scheduled scan when idle",
+                    "description": "Run scheduled scan when the device is idle. Only applicable for weekly full scans.",
+                    "propertyOrder": 60,
+                    "type": "boolean",
+                    "default": false
+                },
+                "weeklyConfiguration":{
+                    "title": "Weekly scheduled scan configuration",
+                    "description": "Should scheduled scan be run with low priority. (Scan might take longer to complete).",
+                    "propertyOrder": 70,
+                    "type": "object",
+                    "properties": {
+                        "scanType": {
+                            "title": "Scan type",
+                            "description": "Specifies the type of scan to perform.",
+                            "propertyOrder": 10,
+                            "type": "string",
+                            "default": "quick",
+                            "enum": ["quick", "full"]
+                        },
+                        "dayOfWeek": {
+                            "title": "Day of week",
+                            "description": "Specifies the day of the week to perform a weekly scan. 0 indicates never. 1-7 indicates Sunday - Saturday. 8 indicates every day.",
+                            "propertyOrder": 10,
+                            "type": "number",
+                            "default": 0,
+                            "minimum": 0,
+                            "maximum": 8
+                        },
+                        "timeOfDay": {
+                            "title": "Time of day",
+                            "description": "Specifies the time of day, as the number of minutes after midnight, to perform a weekly scan.",
+                            "propertyOrder": 20,
+                            "type": "number",
+                            "default": 0,
+                            "minimum": 0,
+                            "maximum": 1440
+                        }
+                    }
+                }
+            }
         }
     }
 }
