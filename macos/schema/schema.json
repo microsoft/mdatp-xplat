@@ -521,6 +521,20 @@
                         }
                     ],
                     "enum": ["enabled", "disabled"]                
+                },
+                "scheduledScan":{
+                    "default": "enabled",
+                    "title": "Scheduled Scan",
+                    "type": "string",
+                    "propertyOrder": 30,
+                    "description": "Schedule scans with Microsoft Defender for Endpoint.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-schedule-scan",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]   
                 }
             }
         },
@@ -703,6 +717,12 @@
             "title": "Scheduled scan configuration",
             "propertyOrder": 100,
             "defaultProperties": [],
+            "links": [
+                {
+                    "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-schedule-scan",
+                    "rel": "More information"
+                }
+            ],
             "properties": {
                 "checkForDefinitionsUpdate": {
                     "title": "Check for definitions update",
