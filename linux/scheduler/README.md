@@ -1,6 +1,6 @@
 # Scripts
 
-Two script are available to help with creating cron tasks related to MDE.
+Two scripts are available to help with creating cron tasks related to MDE.
 
 ## schedule_scan.py
 
