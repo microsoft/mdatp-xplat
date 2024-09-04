@@ -65,7 +65,7 @@ if __name__ == "__main__":
         type=int,
         default=2,
         choices=range(0,24),
-        help="A Number representint the hour of the day: 0-23 (0 being midnight). Default: 2 (2am)")
+        help="A Number representing the hour of the day: 0-23 (0 being midnight). Default: 2 (2am)")
     parser.add_argument("-D", "--day",
         action="store",
         dest="day",
