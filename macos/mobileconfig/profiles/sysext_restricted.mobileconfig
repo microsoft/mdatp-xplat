@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1">
+<dict>
+<key>PayloadUUID</key>
+<string>7311F510-F319-4ED5-BC36-24B037124AFD</string>
+<key>PayloadType</key>
+<string>Configuration</string>
+<key>PayloadOrganization</key>
+<string>Microsoft Corporation</string>
+<key>PayloadIdentifier</key>
+<string>com.microsoft.wdav.sysext</string>
+<key>PayloadDisplayName</key>
+<string>Defender - System Extensions</string>
+<key>PayloadDescription</key>
+<string/>
+<key>PayloadVersion</key>
+<integer>1</integer>
+<key>PayloadEnabled</key>
+<true/>
+<key>PayloadRemovalDisallowed</key>
+<true/>
+<key>PayloadScope</key>
+<string>System</string>
+<key>PayloadContent</key>
+<array>
+<dict>
+<key>PayloadUUID</key>
+<string>605B85D6-5CE9-49C9-A10F-6B12B4D0B84E</string>
+<key>PayloadType</key>
+<string>com.apple.system-extension-policy</string>
+<key>PayloadOrganization</key>
+<string>Microsoft Corporation</string>
+<key>PayloadIdentifier</key>
+<string>605B85D6-5CE9-49C9-A10F-6B12B4D0B84E</string>
+<key>PayloadDisplayName</key>
+<string>System Extensions</string>
+<key>PayloadDescription</key>
+<string/>
+<key>PayloadVersion</key>
+<integer>1</integer>
+<key>PayloadEnabled</key>
+<true/>
+<key>AllowUserOverrides</key>
+<true/>
+<key>AllowedSystemExtensions</key>
+<dict>
+<key>UBF8T346G9</key>
+<array>
+<string>com.microsoft.wdav.epsext</string>
+<string>com.microsoft.wdav.netext</string>
+</array>
+</dict>
+<key>NonRemovableSystemExtensions</key>
+<dict>
+<key>UBF8T346G9</key>
+<array>
+<string>com.microsoft.wdav.epsext</string>
+<string>com.microsoft.wdav.netext</string>
+</array>
+</dict>
+</dict>
+</array>
+</dict>
+</plist>
