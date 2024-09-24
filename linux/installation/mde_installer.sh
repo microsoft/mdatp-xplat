@@ -545,7 +545,11 @@ install_on_debian()
     run_quietly "mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
 
     ### Fetch the gpg key ###
-    run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+    if [[ $VERSION = "22.04" ]] || [[ $VERSION = "24.04" ]]; then
+        run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+    else 
+        run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+    fi
     run_quietly "apt-get update" "[!] unable to refresh the repos properly"
 
     ### Install MDE ###
@@ -852,7 +856,7 @@ scale_version_id()
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]]; then
+    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]] && [[ $VERSION != "24.04" ]]; then
         SCALED_VERSION=18.04
     else
         # no problems with 
