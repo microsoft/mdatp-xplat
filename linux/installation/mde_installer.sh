@@ -529,14 +529,18 @@ validate_mde_version()
 
     #script_exit "Invalid channel: $CHANNEL. Please provide valid channel. Available channels are prod, insiders-fast, insiders-slow" $ERR_INVALID_CHANNEL
     local sep='_'
+    local suffix='-1'
+    local prefix='-'
     if [ "$DISTRO_FAMILY" = "debian" ]; then
         sep='-'
+        suffix=''
+        prefix='='
     fi
     local version
     if [ "$CHANNEL" = "insiders-fast" ]; then
-        version="${MDE_VERSION}${sep}insiderfast"
+        version="${MDE_VERSION}${sep}insiderfast${suffix}"
     elif [ "$CHANNEL" = "insiders-slow" ]; then
-        version="${MDE_VERSION}${sep}external"
+        version="${MDE_VERSION}${sep}external${suffix}"
     else
         version="$MDE_VERSION"
     fi
@@ -554,7 +558,7 @@ validate_mde_version()
 
     eval $search_command
     if [ $? -eq 0 ]; then
-        echo "=$version"
+        echo "${prefix}${version}"
     else
         echo ""
     fi
