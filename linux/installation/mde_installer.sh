@@ -15,6 +15,7 @@
 SCRIPT_VERSION="0.6.8"
 ASSUMEYES=-y
 CHANNEL=
+MDE_VERSION=
 DISTRO=
 DISTRO_FAMILY=
 PKG_MGR=
@@ -523,6 +524,42 @@ wait_for_package_manager_to_complete()
     log_info "[!] pkg_mgr blocked"
 }
 
+validate_mde_version()
+{
+
+    #script_exit "Invalid channel: $CHANNEL. Please provide valid channel. Available channels are prod, insiders-fast, insiders-slow" $ERR_INVALID_CHANNEL
+    local sep='_'
+    if [ "$DISTRO_FAMILY" = "debian" ]; then
+        sep='-'
+    fi
+    local version
+    if [ "$CHANNEL" = "insiders-fast" ]; then
+        version="${MDE_VERSION}${sep}insiderfast"
+    elif [ "$CHANNEL" = "insiders-slow" ]; then
+        version="${MDE_VERSION}${sep}external"
+    else
+        version="$MDE_VERSION"
+    fi
+
+    local search_command
+    if [ "$PKG_MGR" = "apt" ]; then
+        search_command='apt policy mdatp 2>/dev/null | grep "$version" &> /dev/null'
+    elif [ "$PKG_MGR" = "yum" ]; then
+        search_command='yum -v list mdatp --showduplicates 2>/dev/null | grep "$version"  &> /dev/null'
+    elif [ "$PKG_MGR" = "dnf" ]; then
+        search_command='dnf search --showduplicates mdatp -y 2>/dev/null | grep "$version"  &> /dev/null'
+    elif [ "$PKG_MGR" = "zypper" ]; then
+        search_command='zypper search -s mdatp 2>/dev/null | grep "$version"  &> /dev/null'
+    fi
+
+    eval $search_command
+    if [ $? -eq 0 ]; then
+        echo "=$version"
+    else
+        echo ""
+    fi
+}
+
 install_on_debian()
 {
     local packages=
@@ -531,7 +568,7 @@ install_on_debian()
 
     if check_if_pkg_is_installed mdatp; then
         pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
-        log_info "[i] MDE already installed ($pkg_version)"
+        log_info "[i] MDE already installed ($pkg_version). For upgrade use the --upgrade argument."
         return
     fi
 
@@ -548,16 +585,25 @@ install_on_debian()
     run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
     run_quietly "apt-get update" "[!] unable to refresh the repos properly"
 
+    local version=""
+    if [ ! -z "$MDE_VERSION" ]; then
+        echo "*************checking version*****************"
+        version=$(validate_mde_version)
+        if [ -z "$version" ]; then
+            echo "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Installing the latest version"
+        fi
+    fi
+
     ### Install MDE ###
     log_info "[>] installing MDE"
     if [ "$CHANNEL" = "prod" ]; then
         if [[ -z "$VERSION_NAME" ]]; then
-            run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+            run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
         else
-            run_quietly "$PKG_MGR_INVOKER -t $VERSION_NAME install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+            run_quietly "$PKG_MGR_INVOKER -t $VERSION_NAME install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
         fi
     else
-        run_quietly "$PKG_MGR_INVOKER -t $CHANNEL install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+        run_quietly "$PKG_MGR_INVOKER -t $CHANNEL install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     fi
 
     sleep 5
@@ -586,12 +632,28 @@ install_on_mariner()
         run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras" "unable to install mariner-repos-extras"
         run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras" "unable to enable extras repo"
         run_quietly "$PKG_MGR_INVOKER config-manager --disable mariner-official-extras-preview" "unable to disable extras-preview repo"
-        run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+        local version=""
+        if [ ! -z "$MDE_VERSION" ]; then
+            echo "*************checking version*****************"
+            version=$(validate_mde_version)
+            if [ -z "$version" ]; then
+                echo "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Installing the latest version"
+            fi
+        fi
+        run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     else
         ### Add Preview Repo File ###
         run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras-preview" "unable to install mariner-repos-extras-preview"
         run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras-preview" "unable to enable extras-preview repo"
-        run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+        local version=""
+        if [ ! -z "$MDE_VERSION" ]; then
+            echo "*************checking version*****************"
+            version=$(validate_mde_version)
+            if [ -z "$version" ]; then
+                echo "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Installing the latest version"
+            fi
+        fi
+        run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     fi
 
     sleep 5
@@ -658,9 +720,18 @@ install_on_fedora()
     run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
     run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
 
+    local version=""
+    if [ ! -z "$MDE_VERSION" ]; then
+        echo "*************checking version*****************"
+        version=$(validate_mde_version)
+        if [ -z "$version" ]; then
+            echo "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Installing the latest version"
+        fi
+    fi
+
     ### Install MDE ###
     log_info "[>] installing MDE"
-    run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     
     sleep 5
     log_info "[v] installed"
@@ -708,7 +779,16 @@ install_on_sles()
     ### Install MDE ###
     log_info "[>] installing MDE"
 
-    run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp" "[!] failed to install MDE (1/2)"
+    local version=""
+    if [ ! -z "$MDE_VERSION" ]; then
+        echo "*************checking version*****************"
+        version=$(validate_mde_version)
+        if [ -z "$version" ]; then
+            echo "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Installing the latest version"
+        fi
+    fi
+
+    run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp$version" "[!] failed to install MDE (1/2)"
     
     if ! check_if_pkg_is_installed mdatp; then
         log_warning "[r] retrying"
@@ -1037,13 +1117,13 @@ usage()
     echo "Options:"
     echo " -c|--channel         specify the channel(insiders-fast / insiders-slow / prod) from which you want to install. Default: insiders-fast"
     echo " -i|--install         install the product"
-    echo " -r|--remove          remove the product"
+    echo " -r|--remove          uninstall the product"
     echo " -u|--upgrade         upgrade the existing product to a newer version if available"
     echo " -o|--onboard         onboard the product with <onboarding_script>"
     echo " -f|--offboard        offboard the product with <offboarding_script>"
-    echo " -p|--passive-mode    set EPP to passive mode"
-    echo " -r|--rtp-mode        set EPP to real time protection mode. passive-mode and rtp-mode are mutually exclusive"
-    echo " -t|--tag             set a tag by declaring <name> and <value>. ex: -t GROUP Coders"
+    echo " -p|--passive-mode    set realtime protection to passive mode"
+    echo " -r|--rtp-mode        set real time protection mode to active mode. passive-mode and rtp-mode are mutually exclusive"
+    echo " -t|--tag             set a tag by declaring <name> and <value>, e.g: -t GROUP Coders"
     echo " -m|--min_req         enforce minimum requirements"
     echo " -x|--skip_conflict   skip conflicting application verification"
     echo " -w|--clean           remove repo from package manager for a specific channel"
@@ -1056,6 +1136,7 @@ usage()
     echo " --http-proxy <URL>   set http proxy"
     echo " --https-proxy <URL>  set https proxy"
     echo " --ftp-proxy <URL>    set ftp proxy"
+    echo " --mde-version      specific version of mde to be installed. will use the latest if not provided"
     echo " -h|--help            display help"
 }
 
@@ -1188,6 +1269,15 @@ do
             export log_path=$2
             shift 2
             ;;
+        --mde-version)
+            echo "********ZEEINFO**************"
+            echo $2
+            if [[ -z "$2" ]]; then
+                script_exit "$1 option requires two arguments" $ERR_INVALID_ARGUMENTS
+            fi
+            export MDE_VERSION=$2
+            shift 2
+            ;;
         *)
             echo "use -h or --help for details"
             script_exit "unknown argument" $ERR_INVALID_ARGUMENTS
@@ -1216,6 +1306,11 @@ if [[ "$INSTALL_MODE" == 'c' && -z "$CHANNEL" ]]; then
     CHANNEL=insiders-fast
 fi
 
+if [[ ! -z "$MDATP_VERSION" && ( "$INSTALL_MODE" = 'i' || "$INSTALL_MODE" = 'u' ) ]]; then
+    log_info "[i] Specify the version to be installed using "--mde-version" argument. If not provided, latest mde will be installed by default."
+fi
+
+
 # echo "--- mde_installer.sh v$SCRIPT_VERSION ---"
 log_info "--- mde_installer.sh v$SCRIPT_VERSION ---"
 
@@ -1235,6 +1330,9 @@ scale_version_id
 
 ### Set package manager ###
 set_package_manager
+
+### Validate mde_version to be installed.
+#validate_mde_version
 
 ### Act according to arguments ###
 if [ "$INSTALL_MODE" == "i" ]; then
