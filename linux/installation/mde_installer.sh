@@ -698,8 +698,9 @@ install_on_fedora()
         repo_name=packages-microsoft-com-prod-${CHANNEL}
     fi
 
-    if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ]; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
-        repo_name=${repo}-slow-prod
+    if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ] && ! { [ "$DISTRO" == "rhel" ] && [[ "$SCALED_VERSION" == 9* ]]; }; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
+        #repo_name=${repo}-slow-prod
+        repo_name=packages-microsoft-com-insiders-slow
     fi
 
     if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
