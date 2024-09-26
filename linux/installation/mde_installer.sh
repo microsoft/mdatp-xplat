@@ -690,12 +690,12 @@ install_on_fedora()
     ### Configure the repo name from which package should be installed
     local repo_name=${repo}-${CHANNEL}
 
-    if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ]; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
-        repo_name=${repo}-slow-prod
+    if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
+        repo_name=packages-microsoft-com-prod-${CHANNEL}
     fi
 
-    if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
-        repo_name=packages-microsoft-com-prod
+    if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ]; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
+        repo_name=${repo}-slow-prod
     fi
 
     if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
