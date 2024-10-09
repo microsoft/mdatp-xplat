@@ -1,0 +1,14 @@
+- name: Release From Quarantine
+  hosts: all
+  vars_prompt:
+    - name: filepath
+      prompt: What is the path of the file to release?
+      private: false
+  tasks:
+    - name: Print filepath
+      debug:
+        msg: 'Releasing file {{ filepath }}'
+    - name: Restore Quarantined File
+      become: yes
+      command:
+        cmd: mdatp threat quarantine restore threat-path --path {{ filepath }}
