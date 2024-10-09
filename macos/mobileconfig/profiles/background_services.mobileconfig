@@ -45,6 +45,12 @@
 <key>RuleValue</key>
 <string>com.microsoft.dlp</string>
 </dict>
+<dict>
+<key>RuleType</key>
+<string>LabelPrefix</string>
+<key>RuleValue</key>
+<string>com.microsoft.wdav</string>
+</dict>
 </array>
 <key>PayloadType</key>
 <string>com.apple.servicemanagement</string>
