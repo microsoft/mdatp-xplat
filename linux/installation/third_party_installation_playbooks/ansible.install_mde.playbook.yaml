@@ -1,0 +1,27 @@
+- name: Install and Onboard MDE
+  hosts: myhosts
+  tasks:
+   - name: Create a directory if it does not exist
+     ansible.builtin.file:
+       path: /tmp/mde_install
+       state: directory
+       mode: '0755'
+
+   - name: Copy Onboarding script
+     ansible.builtin.copy:
+       src: "{{ onboarding_script }}"
+       dest: /tmp/mde_install/MicrosoftDefenderATPOnboardingLinuxServer.py
+
+   - name: Install MDE on host
+     ansible.builtin.script: "{{ mde_installer_script }} --install --channel {{ channel | default('prod') }} --onboard /tmp/mde_install/MicrosoftDefenderATPOnboardingLinuxServer.py"
+     register: script_output
+     args:
+       executable: sudo
+
+   - name: Display the installation output
+     debug:
+       msg: "Return code [{{ script_output.rc }}] {{ script_output.stdout }}"
+
+   - name: Display any installation errors
+     debug:
+       msg: "{{ script_output.stderr }}"
