@@ -535,6 +535,107 @@
                         }
                     ],
                     "enum": ["enabled", "disabled"]   
+                },
+                "behaviorMonitoring": {
+                    "default": "disabled",
+                    "title": "Behavior Monitoring",
+                    "type": "string",
+                    "propertyOrder": 40,
+                    "description": "Behavior Monitoring detections with Microsoft Defender for Endpoint.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/behavior-monitor-macos",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
+                },
+                "behaviorMonitoringConfigurations": {
+                    "title": "Behavior Monitoring Configurations",
+                    "propertyOrder": 50,
+                    "defaultProperties": [],
+                    "properties": {
+                        "blockExecution" : {
+                            "title": "Block Execution",
+                            "type": "string",
+                            "default": "disabled",
+                            "propertyOrder": 10,
+                            "enum": ["enabled", "disabled"],
+                            "description": "Synchronously block execution of a process when a Behavior Monitoring detection is triggered."
+                        },
+                        "notifyForks": {
+                            "title": "Notify Forks",
+                            "type": "string",
+                            "default": "disabled",
+                            "propertyOrder": 20,
+                            "enum": ["enabled", "disabled"],
+                            "description": "Send fork events to the Behavior Monitoring engine for more accurate detections."
+                        },
+                        "forwardRtpToBm": {
+                            "title": "Forward RTP to BM",
+                            "type": "string",
+                            "default": "disabled",
+                            "propertyOrder": 30,
+                            "enum": ["enabled", "disabled"],
+                            "description": "Performance optimization to de-duplicate Behavior Monitoring events."
+                        },
+                        "avoidOpenCache": {
+                            "title": "Avoid Open Event Caching",
+                            "type": "string",
+                            "default": "disabled",
+                            "propertyOrder": 40,
+                            "enum": ["enabled", "disabled"],
+                            "description": "Do not cache open events at the OS level for files monitored by Behavior Monitoring."
+                        },
+                        "enhancedNetworkContentScanning": {
+                            "title": "Enhanced Network Content Scanning",
+                            "type": "string",
+                            "default": "disabled",
+                            "propertyOrder": 50,
+                            "enum": ["enabled", "disabled"],
+                            "description": "Scan network metadata and packet contents for malware with Behavior Monitoring."
+                        },
+                        "chownChmodEvents": {
+                            "title": "Chown/Chmod Events",
+                            "type": "string",
+                            "default": "disabled",
+                            "propertyOrder": 60,
+                            "enum": ["enabled", "disabled"],
+                            "description": "Send chown and chmod events to the Behavior Monitoring engine for detections."
+                        },
+                        "deleteExattrEvents": {
+                            "title": "Delete Exattr Events",
+                            "type": "string",
+                            "default": "disabled",
+                            "propertyorder": 70,
+                            "enum": ["enabled", "disabled"],
+                            "description": "Send delete exattr events to the Behavior Monitoring engine for detections."
+                        },
+                        "setFileFlagsEvents": {
+                            "title": "Set File Flags Events",
+                            "type": "string",
+                            "default": "disabled",
+                            "propertyorder": 80,
+                            "enum": ["enabled", "disabled"],
+                            "description": "Send set file flags events to the Behavior Monitoring engine for detections."
+                        },
+                        "fileUtimesEvents": {
+                            "title": "File Utimes Events",
+                            "type": "string",
+                            "default": "disabled",
+                            "propertyorder": 90,
+                            "enum": ["enabled", "disabled"],
+                            "description": "Send set file utimes events to the Behavior Monitoring engine for detections."
+                        },
+                        "aggressiveMadvise": {
+                            "title": "Aggressive Mdavise",
+                            "type": "string",
+                            "default": "disabled",
+                            "propertyorder": 100,
+                            "enum": ["enabled", "disabled"],
+                            "description": "Tweak malloc settings to more aggressively use madvise for memory optimization."
+                        }
+                    }
                 }
             }
         },
