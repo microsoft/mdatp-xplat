@@ -1,0 +1,15 @@
+- name: Install and Onboard MDE
+  hosts: myhosts
+  tasks:
+   - name: Uninstall MDATP
+     apt:
+       name: mdatp
+       state: absent
+     when: ansible_os_family == "Debian"
+
+   - name: Uninstall MDATP
+     dnf:
+       name: mdatp
+       state: absent
+     when: ansible_os_family == "RedHat"
+
