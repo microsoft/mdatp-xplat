@@ -1,0 +1,16 @@
+- name: Uninstall MDE
+  hosts: myhosts
+  tasks:
+   - name: Uninstall MDE
+     ansible.builtin.script: "{{ mde_installer_script }} --remove"
+     register: script_output
+     args:
+       executable: sudo
+
+   - name: Display the installation output
+     debug:
+       msg: "Return code [{{ script_output.rc }}] {{ script_output.stdout }}"
+
+   - name: Display any installation errors
+     debug:
+       msg: "{{ script_output.stderr }}"
