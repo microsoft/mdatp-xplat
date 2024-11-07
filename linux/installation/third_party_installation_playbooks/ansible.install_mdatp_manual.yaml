@@ -35,7 +35,7 @@
        file: microsoft-prod
        baseurl: https://packages.microsoft.com/rhel/9/prod/
        gpgcheck: yes
-       enabled: Yes
+       enabled: yes
      when: ansible_os_family == "RedHat"
 
    - name: Install MDATP
