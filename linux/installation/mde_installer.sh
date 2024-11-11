@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.6.8"
+SCRIPT_VERSION="0.6.9"
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -876,6 +876,15 @@ upgrade_mdatp()
         fi
     fi
 
+    local current_version=$(echo "$VERSION_BEFORE_UPDATE" | sed 's/^[ \t\n]*//;s/[ \t\n]*$//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+    local requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+
+    if [[ "$INSTALL_MODE" == "d" && "$current_version" -lt "$requested_version" ]]; then
+        script_exit "For downgrade the requested version[$MDE_VERSION] should be older than current version[$VERSION_BEFORE_UPDATE]"
+    elif [[ "$INSTALL_MODE" == "u" && ! -z "$MDE_VERSION" && "$current_version" -gt "$requested_version" ]]; then
+        script_exit "For upgrade the requested version[$MDE_VERSION] should be newer than current version[$VERSION_BEFORE_UPDATE]. If you want to move to an older version instead, retry with --downgrade flag"
+    fi
+
     run_quietly "$PKG_MGR_INVOKER $1 mdatp$version" "Unable to upgrade MDE $?" $ERR_INSTALLATION_FAILED
 
     local VERSION_AFTER_UPDATE=$(get_mdatp_version)
@@ -1135,6 +1144,7 @@ usage()
     echo " -i|--install         install the product"
     echo " -r|--remove          uninstall the product"
     echo " -u|--upgrade         upgrade the existing product to a newer version if available"
+    echo " -l|--downgrade       downgrade the existing product to a older version if available"
     echo " -o|--onboard         onboard the product with <onboarding_script>"
     echo " -f|--offboard        offboard the product with <offboarding_script>"
     echo " -p|--passive-mode    set real time protection to passive mode"
@@ -1180,6 +1190,11 @@ do
         -u|--upgrade|--update)
             INSTALL_MODE="u"
             verify_privileges "upgrade"
+            shift 1
+            ;;
+        -l|--downgrade)
+            INSTALL_MODE="d"
+            verify_privileges "downgrade"
             shift 1
             ;;
         -r|--remove)
@@ -1320,8 +1335,12 @@ if [[ "$INSTALL_MODE" == 'c' && -z "$CHANNEL" ]]; then
     CHANNEL=prod
 fi
 
-if [[ ! -z "$MDATP_VERSION" && ( "$INSTALL_MODE" = 'i' || "$INSTALL_MODE" = 'u' ) ]]; then
-    log_info "[i] Specify the version to be installed using "--mde-version" argument. If not provided, latest mde will be installed by default."
+if [[ "$INSTALL_MODE" == 'd' && -z "$MDE_VERSION" ]]; then
+    script_exit "Specify the mdatp version using --mdatp argument when using --downgrade option" $ERR_INVALID_ARGUMENTS
+fi
+
+if [[ -z "$MDE_VERSION" && ( "$INSTALL_MODE" == 'i' || "$INSTALL_MODE" == 'u' ) ]]; then
+    log_info "[i] Specify the version to be installed using "--mdatp" argument. If not provided, latest mde will be installed by default."
 fi
 
 
@@ -1375,6 +1394,20 @@ elif [ "$INSTALL_MODE" == "u" ]; then
     elif [ "$DISTRO_FAMILY" == "sles" ]; then
         upgrade_mdatp "up $ASSUMEYES"
     else    
+        script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
+    fi
+
+elif [ "$INSTALL_MODE" == "d" ]; then
+
+    if [ "$DISTRO_FAMILY" == "debian" ]; then
+        upgrade_mdatp "$ASSUMEYES install --allow-downgrades"
+    elif [ "$DISTRO_FAMILY" == "fedora" ]; then
+        upgrade_mdatp "$ASSUMEYES downgrade"
+    elif [ "$DISTRO_FAMILY" == "mariner" ]; then
+        upgrade_mdatp "$ASSUMEYES downgrade"
+    elif [ "$DISTRO_FAMILY" == "sles" ]; then
+        upgrade_mdatp "install --oldpackage $ASSUMEYES"
+    else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
