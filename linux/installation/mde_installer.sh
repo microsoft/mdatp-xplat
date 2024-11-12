@@ -389,9 +389,25 @@ verify_mdatp_installed()
         if ([ $check_missing_license -gt 0 ]) || ([ ! -f "$onboard_file" ]); then
             log_info "[i] MDE already installed but not onboarded. Please use --onboard command to onboard the product."
         else
-            mdatp_version=$($MDE_VERSION_CMD | tail -1)
+            current_mdatp_version=$($MDE_VERSION_CMD | tail -1)
             org_id=$(mdatp health --field org_id | tail -1)           
-            log_info "[i] Found MDE already installed and onboarded with org_id $org_id and app_version $mdatp_version. Either try to upgrade your MDE version using --upgrade option or Please verify that the onboarded linux server appears in Microsoft 365 Defender."
+            if [ ! -z "$MDE_VERSION" ]; then
+                local current_version=$(echo "$current_mdatp_version" | sed 's/"//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+                local requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+                echo "[$current_mdatp_version]"
+                echo "[$current_version]"
+                echo "[$requested_version]"
+
+                if [[ "$current_version" -lt "$requested_version" ]]; then
+                    log_info "[i] Found MDE version $current_mdatp_version already installed and onboarded with org_id $org_id. To install newer version please use --upgrade option"
+                elif [[ "$current_version" -gt "$requested_version" ]]; then
+                    log_info "[i] Found MDE version $current_mdatp_version already installed and onboarded with org_id $org_id. To install older version please use --downgrade option"
+                else
+                    log_info "[i] The requested MDE version $current_mdatp_version already installed and onboarded with org_id $org_id."
+                fi
+            else
+                log_info "[i] Found MDE already installed and onboarded with org_id $org_id and app_version $current_mdatp_version. Either try to upgrade/downgrade your MDE version using --upgrade/--downgrade option or Please verify that the onboarded linux server appears in Microsoft 365 Defender."
+            fi
         fi
     else
         script_exit "Seems like, previous version of MDE is corrupted. Please, first try to uninstall the previous version of MDE using --remove option, aborting" $ERR_CORRUPT_MDE_INSTALLED
@@ -587,7 +603,7 @@ install_on_debian()
 
     if check_if_pkg_is_installed mdatp; then
         pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
-        log_info "[i] MDE already installed ($pkg_version). For upgrade use the --upgrade argument."
+        log_info "[i] MDE already installed ($pkg_version)."
         return
     fi
 
@@ -990,7 +1006,7 @@ onboard_device()
         mdatp_offboard_file=/etc/opt/microsoft/mdatp/mdatp_offboard.json
         if [ -f "$mdatp_offboard_file" ]; then
             echo "found mdatp_offboard file"
-            sudo rm -f $mdatp_offboard_file
+            run_quietly "rm -f $mdatp_offboard_file" "error: failed to remove offboarding blob" $ERR_ONBOARDING_FAILED
             if [ ! -f "$mdatp_offboard_file" ]; then
                 echo "removed mdatp_offboard file"
             else
@@ -1006,6 +1022,13 @@ onboard_device()
     elif [[ $ONBOARDING_SCRIPT == *.sh ]]; then        
         run_quietly "sh $ONBOARDING_SCRIPT" "error: bash onboarding failed" $ERR_ONBOARDING_FAILED
 
+    elif [[ $ONBOARDING_SCRIPT == *.json ]]; then
+        local onboarding_dir=/etc/opt/microsoft/mdatp/
+        if [ -d "$onboarding_dir" ]; then
+            run_quietly "cp $ONBOARDING_SCRIPT $onboarding_dir/mdatp_onboard.json" "error: JSON onboarding failed" $ERR_ONBOARDING_FAILED
+        else
+            script_exit "error: JSON onboarding failed. mdatp is not installed or installation failed." $ERR_ONBOARDING_FAILED
+        fi
     else
         script_exit "error: unknown onboarding script type." $ERR_ONBOARDING_FAILED
     fi
