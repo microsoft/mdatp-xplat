@@ -15,13 +15,14 @@ chmod +x /mde_installer.sh
 
 ```bash
 ❯ ./mde_installer.sh --help
-mde_installer.sh v0.6.8
+mde_installer.sh v0.6.9
 usage: basename ./mde_installer.sh [OPTIONS]
 Options:
  -c|--channel         specify the channel(insiders-fast / insiders-slow / prod) from which you want to install. Default: prod
  -i|--install         install the product
  -r|--remove          uninstall the product
  -u|--upgrade         upgrade the existing product to a newer version if available
+ -l|--downgrade       downgrade the existing product to a older version if available
  -o|--onboard         onboard the product with <onboarding_script>
  -f|--offboard        offboard the product with <offboarding_script>
  -p|--passive-mode    set real time protection to passive mode
