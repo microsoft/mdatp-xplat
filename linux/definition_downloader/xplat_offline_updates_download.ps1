@@ -37,8 +37,13 @@
         │   │   ├── manifest.json
         │   │   └── updates.zip
         │   ├── arch_arm64
+        │   │   ├── manifest.json
+        │   │   └── updates.zip
         ├── preview_back
         │   ├── arch_x86_64
+        │   │   ├── manifest.json
+        │   │   └── updates.zip
+        │   ├── arch_arm64
         │   │   ├── manifest.json
         │   │   └── updates.zip
         ├── production
@@ -46,10 +51,15 @@
         │   │   ├── manifest.json
         │   │   └── updates.zip
         │   ├── arch_arm64
+        │   │   ├── manifest.json
+        │   │   └── updates.zip
         └── production_back
             ├── arch_x86_64
             │   ├── manifest.json
             │   └── updates.zip 
+            └── arch_arm64
+                ├── manifest.json
+                └── updates.zip
 #>
 
 $scriptVersion = "0.0.2"
