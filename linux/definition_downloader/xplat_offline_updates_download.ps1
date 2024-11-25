@@ -215,13 +215,9 @@ Function Invoke-Download-All-Updates([string]$platform, [bool]$downloadPreviewUp
             {
                 New-Item -ItemType Directory -Path $path
             }
-            if (($platform -eq "linux") -and ($arch -eq "arm64"))
-            {
-                continue # currently, we do not support linux arm64, so we skip the download step in this case
-            }
             $linkid = Get-Link-Id $platform
             $url = $baseUpdateUrl + "?linkid=$linkid"
-            if (($platform -eq "mac") -and ($arch -eq "arm64"))
+            if ($arch -eq "arm64")
             {
                 $url = $url + $armArchArgs
             }

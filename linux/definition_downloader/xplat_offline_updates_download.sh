@@ -198,14 +198,10 @@ function invoke_download_all_updates()
                 mkdir -p "$path"
             fi
             
-            if [[ ( "$platform" == "linux" ) && ( "$arch" == "arm64" ) ]]; then
-                continue  # Currently, we do not support Linux ARM64, so we skip the download step in this case.
-            fi
-            
             linkid=$(get_link_id "$platform")
             url="$baseUpdateUrl?linkid=$linkid"
             
-            if [[ ( "$platform" == "mac" ) && ( "$arch" == "arm64" ) ]]; then
+            if [[ "$arch" == "arm64" ]]; then
                 url="$url$armArchArgs"
             fi
             
