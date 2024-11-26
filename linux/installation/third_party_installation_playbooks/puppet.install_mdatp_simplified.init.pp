@@ -18,19 +18,19 @@ class install_mdatp (
   }
 
   # Copy the onboarding script to the destination
-  file { '/tmp/mde_install/MicrosoftDefenderATPOnboardingLinuxServer.py':
+  file { '/tmp/mde_install/mdatp_onboard.json':
     ensure => file,
-    source => 'puppet:///modules/install_mdatp/MicrosoftDefenderATPOnboardingLinuxServer.py',
+    source => 'puppet:///modules/install_mdatp/mdatp_onboard.json',
     mode   => '0777',
   }
 
   #Install MDE on the host using an external script
   exec { 'install_mde':
-    command     => "/tmp/mde_install/mde_installer.sh --install --channel ${channel} --onboard /tmp/mde_install/MicrosoftDefenderATPOnboardingLinuxServer.py",
+    command     => "/tmp/mde_install/mde_installer.sh --install --channel ${channel} --onboard /tmp/mde_install/mdatp_onboard.json",
     path        => '/bin:/usr/bin',
     user        => 'root',
     logoutput   => true,
-    require     => File['/tmp/mde_install/mde_installer.sh', '/tmp/mde_install/MicrosoftDefenderATPOnboardingLinuxServer.py'], # Ensure the script is copied before running the installer
+    require     => File['/tmp/mde_install/mde_installer.sh', '/tmp/mde_install/mdatp_onboard.json'], # Ensure the script is copied before running the installer
   }
 
 }

@@ -53,7 +53,7 @@
 
    - name: Copy Onboarding script
      ansible.builtin.copy:
-       src: "{{ onboarding_script }}"
+       src: "{{ onboarding_json }}"
        dest: /etc/opt/microsoft/mdatp/mdatp_onboard.json
        mode: 0600
        owner: root
