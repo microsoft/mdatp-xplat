@@ -15,7 +15,7 @@ chmod +x /mde_installer.sh
 
 ```bash
 ❯ ./mde_installer.sh --help
-mde_installer.sh v0.6.9
+mde_installer.sh v0.7.0
 usage: basename ./mde_installer.sh [OPTIONS]
 Options:
  -c|--channel         specify the channel(insiders-fast / insiders-slow / prod) from which you want to install. Default: prod
@@ -43,6 +43,8 @@ Options:
  --mdatp              specific version of mde to be installed. will use the latest if not provided
  -h|--help            display help
 ```
+
+> [!NOTE] ARM64 release is only available on insiders-slow channel
 
 ## Sample use case
 
