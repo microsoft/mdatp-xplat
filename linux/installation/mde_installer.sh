@@ -616,8 +616,8 @@ install_on_debian()
     run_quietly "curl -s -o microsoft.list $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list" "unable to fetch repo list" $ERR_FAILED_REPO_SETUP
     run_quietly "mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
 
-    ### Fetch the gpg key ###
-    run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+    # Fetch and add GPG key using gpg
+    run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/microsoft.gpg" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
     run_quietly "apt-get update" "[!] unable to refresh the repos properly"
 
     local version=""
