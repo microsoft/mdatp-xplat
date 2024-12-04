@@ -704,6 +704,7 @@ install_on_mariner()
     log_info "[v] installed"
 }
 
+
 install_on_fedora()
 {
     local packages=
@@ -743,12 +744,20 @@ install_on_fedora()
         repo_name=packages-microsoft-com-insiders-slow
     fi
 
-    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
+    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ]; then
         effective_distro="rhel"
+    elif [ "$DISTRO" == "amzn" ]; then
+        effective_distro="amazonlinux"
+        SCALED_VERSION=$VERSION
     elif [ "$DISTRO" == "almalinux" ]; then
         effective_distro="alma"
     else
         effective_distro="$DISTRO"
+    fi
+
+    if [ "$ARCHITECTURE" == "aarch64" ]; then
+        log_info "[i] configuring the repository for ARM architecture"
+        run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
     fi
 
     # Configure repository if it does not exist
@@ -775,8 +784,13 @@ install_on_fedora()
 
     ### Install MDE ###
     log_info "[>] installing MDE"
-    run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
-    
+
+    if [ "$ARCHITECTURE" == "aarch64" ]; then
+        run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    else
+        run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    fi
+
     sleep 5
     log_info "[v] installed"
 }
