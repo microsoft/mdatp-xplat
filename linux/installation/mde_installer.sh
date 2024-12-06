@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.7.0"
+SCRIPT_VERSION="0.7.0" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -331,10 +331,15 @@ check_arm_distro_support()
         fi
     fi
 
-    ### ARM is released only on insiders slow channel
-    CHANNEL="insiders-slow"
-
-    log_info "[>] Your distribution is supported by MDE for ARM Linux"
+    ### ARM is released only on insiders slow channel channel
+    if [ "$OPT_FOR_MDE_ARM_PREVIEW" == "true" ] || [ "$OPT_FOR_MDE_ARM_PREVIEW" == "1" ]; then
+        CHANNEL="insiders-slow"
+        log_info "[>] Your distribution is supported by MDE for ARM Linux"
+    elif [ "$CHANNEL" == "insiders-slow" ]; then
+        log_info "[>] Your distribution is supported by MDE for ARM Linux"
+    else
+        script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
+    fi
 
 }
 
@@ -703,7 +708,6 @@ install_on_mariner()
     sleep 5
     log_info "[v] installed"
 }
-
 
 install_on_fedora()
 {
@@ -1414,7 +1418,7 @@ detect_arch
 ### Detect the distro and version number ###
 detect_distro
 
-### Check for ARM preview 
+### Check for ARM preview
 if [ "$ARCHITECTURE" == "aarch64" ]; then
     check_arm_distro_support
 fi
