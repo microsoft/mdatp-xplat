@@ -32,10 +32,8 @@ MIN_REQUIREMENTS=
 SKIP_CONFLICTING_APPS=
 PASSIVE_MODE=
 RTP_MODE=
-MIN_CORES=2
-PREFERRED_MIN_CORES=4
+MIN_CORES=1
 MIN_MEM_MB=1024
-PREFERRED_MIN_MEM_MB=4096
 MIN_DISK_SPACE_MB=2048
 declare -a tags
 
@@ -344,15 +342,11 @@ verify_min_requirements()
     local cores=$(nproc --all)
     if [ $cores -lt $MIN_CORES ]; then
         script_exit "MDE requires $MIN_CORES cores or more to run, found $cores." $ERR_INSUFFICIENT_REQUIREMENTS
-    elif [ $cores -lt $PREFERRED_MIN_CORES ]; then
-        log_warning "MDE recommends $PREFERRED_MIN_CORES cores or more to run all the features seamlessly, found $cores."
     fi
 
     local mem_mb=$(free -m | grep Mem | awk '{print $2}')
     if [ $mem_mb -lt $MIN_MEM_MB ]; then
         script_exit "MDE requires at least $MIN_MEM_MB MB of RAM to run. found $mem_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
-    elif [ $mem_mb -lt $PREFERRED_MIN_MEM_MB ]; then
-        log_warning "MDE recommends at least $PREFERRED_MIN_MEM_MB of RAM to run all the features seamlessly. found $mem_mb MB."
     fi
 
     local disk_space_mb=$(df -m . | tail -1 | awk '{print $4}')
