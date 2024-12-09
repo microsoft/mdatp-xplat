@@ -748,11 +748,8 @@ install_on_fedora()
         repo_name=packages-microsoft-com-insiders-slow
     fi
 
-    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ]; then
+    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
         effective_distro="rhel"
-    elif [ "$DISTRO" == "amzn" ]; then
-        effective_distro="amazonlinux"
-        SCALED_VERSION=$VERSION
     elif [ "$DISTRO" == "almalinux" ]; then
         effective_distro="alma"
     else
@@ -760,6 +757,10 @@ install_on_fedora()
     fi
 
     if [ "$ARCHITECTURE" == "aarch64" ]; then
+        if [ "$DISTRO" == "amzn" ]; then
+            effective_distro="amazonlinux"
+            SCALED_VERSION=$VERSION
+        fi
         log_info "[i] configuring the repository for ARM architecture"
         run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
     fi
