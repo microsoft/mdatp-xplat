@@ -319,6 +319,8 @@ detect_distro()
 
 check_arm_distro_support()
 {
+    source /etc/mde.arm.d/mde.conf
+    log_info "[>] OPT_FOR_MDE_ARM_PREVIEW: $OPT_FOR_MDE_ARM_PREVIEW"
     if [ "$ARCHITECTURE" == "aarch64" ]; then
         if [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "amzn" ]; then
             script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
