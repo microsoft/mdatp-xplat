@@ -7,17 +7,18 @@
 #  Abstract:
 #    MDE installation script 
 #    - Fingerprinting OS and manually installs MDE as described in the online documentation
-#      https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/linux-install-manually?view=o365-worldwide
+#      https://learn.microsoft.com/en-us/defender-endpoint/linux-install-manually?view=o365-worldwide
 #    - Runs additional optional checks: minimal requirements, fanotify subscribers, etc.
 #
 #============================================================================
 
-SCRIPT_VERSION="0.6.9"
+SCRIPT_VERSION="0.7.0" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
 DISTRO=
 DISTRO_FAMILY=
+ARCHITECTURE=
 PKG_MGR=
 INSTALL_MODE=
 DEBUG=
@@ -272,9 +273,8 @@ print_state()
 detect_arch()
 {
     arch=$(uname -m)
-    if  [[ "$arch" =~ arm* ]]; then
-        script_exit "ARM architecture is not yet supported by the script" $ERR_UNSUPPORTED_ARCH
-    fi
+    ARCHITECTURE=$arch
+    log_info "[>] detected: $ARCHITECTURE architecture"
 }
 
 detect_distro()
@@ -315,6 +315,30 @@ detect_distro()
     fi
 
     log_info "[>] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
+}
+
+check_arm_distro_support()
+{
+    if [ "$ARCHITECTURE" == "aarch64" ]; then
+        if [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "amzn" ]; then
+            script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "ubuntu" ] && [ "$VERSION" != "20.04" ] && [ "$VERSION" != "22.04" ]; then
+            script_exit "ARM architecture is not supported on Ubuntu versions other than 20.04 or 22.04" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "amzn" ] && [ "$VERSION" != "2" ] && [ "$VERSION" != "2023" ]; then
+            script_exit "ARM architecture is not supported on Amazon Linux versions other than 2 or 2023" $ERR_UNSUPPORTED_ARCH
+        fi
+    fi
+
+    ### ARM is released only on insiders slow channel channel
+    if [ "$OPT_FOR_MDE_ARM_PREVIEW" == "true" ] || [ "$OPT_FOR_MDE_ARM_PREVIEW" == "1" ]; then
+        CHANNEL="insiders-slow"
+        log_info "[>] Your distribution is supported by MDE for ARM Linux"
+    elif [ "$CHANNEL" == "insiders-slow" ]; then
+        log_info "[>] Your distribution is supported by MDE for ARM Linux"
+    else
+        script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
+    fi
+
 }
 
 verify_channel()
@@ -726,6 +750,15 @@ install_on_fedora()
         effective_distro="$DISTRO"
     fi
 
+    if [ "$ARCHITECTURE" == "aarch64" ]; then
+        if [ "$DISTRO" == "amzn" ]; then
+            effective_distro="amazonlinux"
+            SCALED_VERSION=$VERSION
+        fi
+        log_info "[i] configuring the repository for ARM architecture"
+        run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
+    fi
+
     # Configure repository if it does not exist
     yum -q repolist $repo_name | grep "$repo_name"
     found_repo=$?
@@ -750,8 +783,13 @@ install_on_fedora()
 
     ### Install MDE ###
     log_info "[>] installing MDE"
-    run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
-    
+
+    if [ "$ARCHITECTURE" == "aarch64" ]; then
+        run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    else
+        run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    fi
+
     sleep 5
     log_info "[v] installed"
 }
@@ -1374,6 +1412,11 @@ detect_arch
 
 ### Detect the distro and version number ###
 detect_distro
+
+### Check for ARM preview
+if [ "$ARCHITECTURE" == "aarch64" ]; then
+    check_arm_distro_support
+fi
 
 ### Scale the version number according to repos avaiable on pmc ###
 scale_version_id
