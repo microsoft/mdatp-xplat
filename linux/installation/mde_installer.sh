@@ -319,7 +319,10 @@ detect_distro()
 
 check_arm_distro_support()
 {
-    . /etc/mde.arm.d/mde.conf
+    FILE="/etc/mde.arm.d/mde.conf"
+    if [ -f $FILE ]; then
+        . "$FILE"
+    fi
     log_info "[>] OPT_FOR_MDE_ARM_PREVIEW: $OPT_FOR_MDE_ARM_PREVIEW"
     if [ "$ARCHITECTURE" == "aarch64" ]; then
         if [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "amzn" ]; then
