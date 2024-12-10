@@ -319,6 +319,11 @@ detect_distro()
 
 check_arm_distro_support()
 {
+    FILE="/etc/mde.arm.d/mde.conf"
+    if [ -f $FILE ]; then
+        . "$FILE"
+    fi
+    log_info "[>] OPT_FOR_MDE_ARM_PREVIEW: $OPT_FOR_MDE_ARM_PREVIEW"
     if [ "$ARCHITECTURE" == "aarch64" ]; then
         if [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "amzn" ]; then
             script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
@@ -757,21 +762,26 @@ install_on_fedora()
         fi
         log_info "[i] configuring the repository for ARM architecture"
         run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
-    fi
 
-    # Configure repository if it does not exist
-    yum -q repolist $repo_name | grep "$repo_name"
-    found_repo=$?
-    if [ $found_repo -eq 0 ]; then
-        log_info "[i] repository already configured"
+        ### Fetch the gpg key ###
+        run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+        run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
     else
-        log_info "[i] configuring the repository"
-        run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
-    fi
 
-    ### Fetch the gpg key ###
-    run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-    run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+        # Configure repository if it does not exist
+        yum -q repolist $repo_name | grep "$repo_name"
+        found_repo=$?
+        if [ $found_repo -eq 0 ]; then
+            log_info "[i] repository already configured"
+        else
+            log_info "[i] configuring the repository"
+            run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
+        fi
+
+        ### Fetch the gpg key ###
+        run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+        run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+    fi
 
     local version=""
     if [ ! -z "$MDE_VERSION" ]; then
