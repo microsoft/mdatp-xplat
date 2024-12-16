@@ -37,8 +37,13 @@
         │   │   ├── manifest.json
         │   │   └── updates.zip
         │   ├── arch_arm64
+        │   │   ├── manifest.json
+        │   │   └── updates.zip
         ├── preview_back
         │   ├── arch_x86_64
+        │   │   ├── manifest.json
+        │   │   └── updates.zip
+        │   ├── arch_arm64
         │   │   ├── manifest.json
         │   │   └── updates.zip
         ├── production
@@ -46,10 +51,15 @@
         │   │   ├── manifest.json
         │   │   └── updates.zip
         │   ├── arch_arm64
+        │   │   ├── manifest.json
+        │   │   └── updates.zip
         └── production_back
             ├── arch_x86_64
             │   ├── manifest.json
             │   └── updates.zip 
+            └── arch_arm64
+                ├── manifest.json
+                └── updates.zip
 #>
 
 $scriptVersion = "0.0.2"
@@ -215,13 +225,9 @@ Function Invoke-Download-All-Updates([string]$platform, [bool]$downloadPreviewUp
             {
                 New-Item -ItemType Directory -Path $path
             }
-            if (($platform -eq "linux") -and ($arch -eq "arm64"))
-            {
-                continue # currently, we do not support linux arm64, so we skip the download step in this case
-            }
             $linkid = Get-Link-Id $platform
             $url = $baseUpdateUrl + "?linkid=$linkid"
-            if (($platform -eq "mac") -and ($arch -eq "arm64"))
+            if ($arch -eq "arm64")
             {
                 $url = $url + $armArchArgs
             }

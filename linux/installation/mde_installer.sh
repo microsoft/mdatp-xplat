@@ -7,16 +7,18 @@
 #  Abstract:
 #    MDE installation script 
 #    - Fingerprinting OS and manually installs MDE as described in the online documentation
-#      https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/linux-install-manually?view=o365-worldwide
+#      https://learn.microsoft.com/en-us/defender-endpoint/linux-install-manually?view=o365-worldwide
 #    - Runs additional optional checks: minimal requirements, fanotify subscribers, etc.
 #
 #============================================================================
 
-SCRIPT_VERSION="0.6.8"
+SCRIPT_VERSION="0.7.0" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
+MDE_VERSION=
 DISTRO=
 DISTRO_FAMILY=
+ARCHITECTURE=
 PKG_MGR=
 INSTALL_MODE=
 DEBUG=
@@ -31,9 +33,9 @@ MIN_REQUIREMENTS=
 SKIP_CONFLICTING_APPS=
 PASSIVE_MODE=
 RTP_MODE=
-MIN_CORES=2
-MIN_MEM_MB=2048
-MIN_DISK_SPACE_MB=1280
+MIN_CORES=1
+MIN_MEM_MB=1024
+MIN_DISK_SPACE_MB=2048
 declare -a tags
 
 # Error codes
@@ -271,9 +273,8 @@ print_state()
 detect_arch()
 {
     arch=$(uname -m)
-    if  [[ "$arch" =~ arm* ]]; then
-        script_exit "ARM architecture is not yet supported by the script" $ERR_UNSUPPORTED_ARCH
-    fi
+    ARCHITECTURE=$arch
+    log_info "[>] detected: $ARCHITECTURE architecture"
 }
 
 detect_distro()
@@ -314,6 +315,35 @@ detect_distro()
     fi
 
     log_info "[>] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
+}
+
+check_arm_distro_support()
+{
+    FILE="/etc/mde.arm.d/mde.conf"
+    if [ -f $FILE ]; then
+        . "$FILE"
+    fi
+    log_info "[>] OPT_FOR_MDE_ARM_PREVIEW: $OPT_FOR_MDE_ARM_PREVIEW"
+    if [ "$ARCHITECTURE" == "aarch64" ]; then
+        if [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "amzn" ]; then
+            script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "ubuntu" ] && [ "$VERSION" != "20.04" ] && [ "$VERSION" != "22.04" ]; then
+            script_exit "ARM architecture is not supported on Ubuntu versions other than 20.04 or 22.04" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "amzn" ] && [ "$VERSION" != "2" ] && [ "$VERSION" != "2023" ]; then
+            script_exit "ARM architecture is not supported on Amazon Linux versions other than 2 or 2023" $ERR_UNSUPPORTED_ARCH
+        fi
+    fi
+
+    ### ARM is released only on insiders slow channel channel
+    if [ "$OPT_FOR_MDE_ARM_PREVIEW" == "true" ] || [ "$OPT_FOR_MDE_ARM_PREVIEW" == "1" ]; then
+        CHANNEL="insiders-slow"
+        log_info "[>] Your distribution is supported by MDE for ARM Linux"
+    elif [ "$CHANNEL" == "insiders-slow" ]; then
+        log_info "[>] Your distribution is supported by MDE for ARM Linux"
+    else
+        script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
+    fi
+
 }
 
 verify_channel()
@@ -382,9 +412,25 @@ verify_mdatp_installed()
         if ([ $check_missing_license -gt 0 ]) || ([ ! -f "$onboard_file" ]); then
             log_info "[i] MDE already installed but not onboarded. Please use --onboard command to onboard the product."
         else
-            mdatp_version=$($MDE_VERSION_CMD | tail -1)
+            current_mdatp_version=$($MDE_VERSION_CMD | tail -1)
             org_id=$(mdatp health --field org_id | tail -1)           
-            log_info "[i] Found MDE already installed and onboarded with org_id $org_id and app_version $mdatp_version. Either try to upgrade your MDE version using --upgrade option or Please verify that the onboarded linux server appears in Microsoft 365 Defender."
+            if [ ! -z "$MDE_VERSION" ]; then
+                local current_version=$(echo "$current_mdatp_version" | sed 's/"//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+                local requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+                echo "[$current_mdatp_version]"
+                echo "[$current_version]"
+                echo "[$requested_version]"
+
+                if [[ "$current_version" -lt "$requested_version" ]]; then
+                    log_info "[i] Found MDE version $current_mdatp_version already installed and onboarded with org_id $org_id. To install newer version please use --upgrade option"
+                elif [[ "$current_version" -gt "$requested_version" ]]; then
+                    log_info "[i] Found MDE version $current_mdatp_version already installed and onboarded with org_id $org_id. To install older version please use --downgrade option"
+                else
+                    log_info "[i] The requested MDE version $current_mdatp_version already installed and onboarded with org_id $org_id."
+                fi
+            else
+                log_info "[i] Found MDE already installed and onboarded with org_id $org_id and app_version $current_mdatp_version. Either try to upgrade/downgrade your MDE version using --upgrade/--downgrade option or Please verify that the onboarded linux server appears in Microsoft 365 Defender."
+            fi
         fi
     else
         script_exit "Seems like, previous version of MDE is corrupted. Please, first try to uninstall the previous version of MDE using --remove option, aborting" $ERR_CORRUPT_MDE_INSTALLED
@@ -523,6 +569,55 @@ wait_for_package_manager_to_complete()
     log_info "[!] pkg_mgr blocked"
 }
 
+validate_mde_version()
+{
+    if ! [[ "$MDE_VERSION" =~ ^101\.[0-9]{1,5}\.[0-9]{4}$ ]]; then
+        echo ""
+        return 1
+    fi
+
+    local sep='_'
+    local suffix='-1'
+    local prefix='-'
+    if [ "$DISTRO_FAMILY" = "debian" ]; then
+        sep='-'
+        suffix=''
+        prefix='='
+    fi
+    local version
+    if [ "$CHANNEL" = "insiders-fast" ]; then
+        version="${MDE_VERSION}${sep}insiderfast${suffix}"
+    elif [ "$CHANNEL" = "insiders-slow" ]; then
+        version="${MDE_VERSION}${sep}external${suffix}"
+    else
+        version="$MDE_VERSION"
+    fi
+
+    local search_command
+    if [ "$PKG_MGR" = "apt" ]; then
+        search_command='apt $ASSUMEYES policy mdatp 2>/dev/null | grep "$version" &> /dev/null'
+    elif [ "$PKG_MGR" = "yum" ]; then
+        check_option="yum --help | grep '\-\-showduplicates' &> /dev/null"
+        eval $check_option
+        if [ $? -eq 0 ]; then
+            search_command='yum $ASSUMEYES -v list mdatp --showduplicates 2>/dev/null | grep "$version"  &> /dev/null'
+        else
+            search_command='echo &>/dev/null'
+        fi
+    elif [ "$PKG_MGR" = "dnf" ]; then
+        search_command='dnf $ASSUMEYES search --showduplicates mdatp -y 2>/dev/null | grep "$version"  &> /dev/null'
+    elif [ "$PKG_MGR" = "zypper" ]; then
+        search_command='zypper search -s mdatp $ASSUMEYES 2>/dev/null | grep "$version"  &> /dev/null'
+    fi
+
+    eval $search_command
+    if [ $? -eq 0 ]; then
+        echo "${prefix}${version}"
+    else
+        echo ""
+    fi
+}
+
 install_on_debian()
 {
     local packages=
@@ -531,7 +626,7 @@ install_on_debian()
 
     if check_if_pkg_is_installed mdatp; then
         pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
-        log_info "[i] MDE already installed ($pkg_version)"
+        log_info "[i] MDE already installed ($pkg_version)."
         return
     fi
 
@@ -548,16 +643,24 @@ install_on_debian()
     run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
     run_quietly "apt-get update" "[!] unable to refresh the repos properly"
 
+    local version=""
+    if [ ! -z "$MDE_VERSION" ]; then
+        version=$(validate_mde_version)
+        if [ -z "$version" ]; then
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
+        fi
+    fi
+
     ### Install MDE ###
     log_info "[>] installing MDE"
     if [ "$CHANNEL" = "prod" ]; then
         if [[ -z "$VERSION_NAME" ]]; then
-            run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+            run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
         else
-            run_quietly "$PKG_MGR_INVOKER -t $VERSION_NAME install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+            run_quietly "$PKG_MGR_INVOKER -t $VERSION_NAME install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
         fi
     else
-        run_quietly "$PKG_MGR_INVOKER -t $CHANNEL install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+        run_quietly "$PKG_MGR_INVOKER -t $CHANNEL install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     fi
 
     sleep 5
@@ -586,13 +689,20 @@ install_on_mariner()
         run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras" "unable to install mariner-repos-extras"
         run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras" "unable to enable extras repo"
         run_quietly "$PKG_MGR_INVOKER config-manager --disable mariner-official-extras-preview" "unable to disable extras-preview repo"
-        run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     else
         ### Add Preview Repo File ###
         run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras-preview" "unable to install mariner-repos-extras-preview"
         run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras-preview" "unable to enable extras-preview repo"
-        run_quietly "$PKG_MGR_INVOKER install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     fi
+
+    local version=""
+    if [ ! -z "$MDE_VERSION" ]; then
+        version=$(validate_mde_version)
+        if [ -z "$version" ]; then
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
+        fi
+    fi
+    run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
 
     sleep 5
     log_info "[v] installed"
@@ -628,12 +738,13 @@ install_on_fedora()
     ### Configure the repo name from which package should be installed
     local repo_name=${repo}-${CHANNEL}
 
-    if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ]; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
-        repo_name=${repo}-slow-prod
+    if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
+        repo_name=packages-microsoft-com-prod-${CHANNEL}
     fi
 
-    if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
-        repo_name=packages-microsoft-com-prod
+    if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ] && ! { [ "$DISTRO" == "rhel" ] && [[ "$SCALED_VERSION" == 9* ]]; }; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
+        #repo_name=${repo}-slow-prod
+        repo_name=packages-microsoft-com-insiders-slow
     fi
 
     if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
@@ -644,24 +755,51 @@ install_on_fedora()
         effective_distro="$DISTRO"
     fi
 
-    # Configure repository if it does not exist
-    yum -q repolist $repo_name | grep "$repo_name"
-    found_repo=$?
-    if [ $found_repo -eq 0 ]; then
-        log_info "[i] repository already configured"
-    else
-        log_info "[i] configuring the repository"
+    if [ "$ARCHITECTURE" == "aarch64" ]; then
+        if [ "$DISTRO" == "amzn" ]; then
+            effective_distro="amazonlinux"
+            SCALED_VERSION=$VERSION
+        fi
+        log_info "[i] configuring the repository for ARM architecture"
         run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
+
+        ### Fetch the gpg key ###
+        run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+        run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+    else
+
+        # Configure repository if it does not exist
+        yum -q repolist $repo_name | grep "$repo_name"
+        found_repo=$?
+        if [ $found_repo -eq 0 ]; then
+            log_info "[i] repository already configured"
+        else
+            log_info "[i] configuring the repository"
+            run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
+        fi
+
+        ### Fetch the gpg key ###
+        run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+        run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
     fi
 
-    ### Fetch the gpg key ###
-    run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-    run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+    local version=""
+    if [ ! -z "$MDE_VERSION" ]; then
+        version=$(validate_mde_version)
+        if [ -z "$version" ]; then
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
+        fi
+    fi
 
     ### Install MDE ###
     log_info "[>] installing MDE"
-    run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
-    
+
+    if [ "$ARCHITECTURE" == "aarch64" ]; then
+        run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    else
+        run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    fi
+
     sleep 5
     log_info "[v] installed"
 }
@@ -708,7 +846,15 @@ install_on_sles()
     ### Install MDE ###
     log_info "[>] installing MDE"
 
-    run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp" "[!] failed to install MDE (1/2)"
+    local version=""
+    if [ ! -z "$MDE_VERSION" ]; then
+        version=$(validate_mde_version)
+        if [ -z "$version" ]; then
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
+        fi
+    fi
+
+    run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp$version" "[!] failed to install MDE (1/2)"
     
     if ! check_if_pkg_is_installed mdatp; then
         log_warning "[r] retrying"
@@ -780,7 +926,24 @@ upgrade_mdatp()
     local VERSION_BEFORE_UPDATE=$(get_mdatp_version)
     log_info "[>] Current $VERSION_BEFORE_UPDATE"
 
-    run_quietly "$PKG_MGR_INVOKER $1 mdatp" "Unable to upgrade MDE $?" $ERR_INSTALLATION_FAILED
+    local version=""
+    if [ ! -z "$MDE_VERSION" ]; then
+        version=$(validate_mde_version)
+        if [ -z "$version" ]; then
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting upgrade" $ERR_INSTALLATION_FAILED
+        fi
+    fi
+
+    local current_version=$(echo "$VERSION_BEFORE_UPDATE" | sed 's/^[ \t\n]*//;s/[ \t\n]*$//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+    local requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+
+    if [[ "$INSTALL_MODE" == "d" && "$current_version" -lt "$requested_version" ]]; then
+        script_exit "For downgrade the requested version[$MDE_VERSION] should be older than current version[$VERSION_BEFORE_UPDATE]"
+    elif [[ "$INSTALL_MODE" == "u" && ! -z "$MDE_VERSION" && "$current_version" -gt "$requested_version" ]]; then
+        script_exit "For upgrade the requested version[$MDE_VERSION] should be newer than current version[$VERSION_BEFORE_UPDATE]. If you want to move to an older version instead, retry with --downgrade flag"
+    fi
+
+    run_quietly "$PKG_MGR_INVOKER $1 mdatp$version" "Unable to upgrade MDE $?" $ERR_INSTALLATION_FAILED
 
     local VERSION_AFTER_UPDATE=$(get_mdatp_version)
     if [ "$VERSION_BEFORE_UPDATE" == "$VERSION_AFTER_UPDATE" ]; then
@@ -885,7 +1048,7 @@ onboard_device()
         mdatp_offboard_file=/etc/opt/microsoft/mdatp/mdatp_offboard.json
         if [ -f "$mdatp_offboard_file" ]; then
             echo "found mdatp_offboard file"
-            sudo rm -f $mdatp_offboard_file
+            run_quietly "rm -f $mdatp_offboard_file" "error: failed to remove offboarding blob" $ERR_ONBOARDING_FAILED
             if [ ! -f "$mdatp_offboard_file" ]; then
                 echo "removed mdatp_offboard file"
             else
@@ -901,6 +1064,13 @@ onboard_device()
     elif [[ $ONBOARDING_SCRIPT == *.sh ]]; then        
         run_quietly "sh $ONBOARDING_SCRIPT" "error: bash onboarding failed" $ERR_ONBOARDING_FAILED
 
+    elif [[ $ONBOARDING_SCRIPT == *.json ]]; then
+        local onboarding_dir=/etc/opt/microsoft/mdatp/
+        if [ -d "$onboarding_dir" ]; then
+            run_quietly "cp $ONBOARDING_SCRIPT $onboarding_dir/mdatp_onboard.json" "error: JSON onboarding failed" $ERR_ONBOARDING_FAILED
+        else
+            script_exit "error: JSON onboarding failed. mdatp is not installed or installation failed." $ERR_ONBOARDING_FAILED
+        fi
     else
         script_exit "error: unknown onboarding script type." $ERR_ONBOARDING_FAILED
     fi
@@ -1035,15 +1205,16 @@ usage()
     echo "mde_installer.sh v$SCRIPT_VERSION"
     echo "usage: $1 [OPTIONS]"
     echo "Options:"
-    echo " -c|--channel         specify the channel(insiders-fast / insiders-slow / prod) from which you want to install. Default: insiders-fast"
+    echo " -c|--channel         specify the channel(insiders-fast / insiders-slow / prod) from which you want to install. Default: prod"
     echo " -i|--install         install the product"
-    echo " -r|--remove          remove the product"
+    echo " -r|--remove          uninstall the product"
     echo " -u|--upgrade         upgrade the existing product to a newer version if available"
+    echo " -l|--downgrade       downgrade the existing product to a older version if available"
     echo " -o|--onboard         onboard the product with <onboarding_script>"
     echo " -f|--offboard        offboard the product with <offboarding_script>"
-    echo " -p|--passive-mode    set EPP to passive mode"
-    echo " -r|--rtp-mode        set EPP to real time protection mode. passive-mode and rtp-mode are mutually exclusive"
-    echo " -t|--tag             set a tag by declaring <name> and <value>. ex: -t GROUP Coders"
+    echo " -p|--passive-mode    set real time protection to passive mode"
+    echo " -a|--rtp-mode        set real time protection to active mode. passive-mode and rtp-mode are mutually exclusive"
+    echo " -t|--tag             set a tag by declaring <name> and <value>, e.g: -t GROUP Coders"
     echo " -m|--min_req         enforce minimum requirements"
     echo " -x|--skip_conflict   skip conflicting application verification"
     echo " -w|--clean           remove repo from package manager for a specific channel"
@@ -1056,6 +1227,7 @@ usage()
     echo " --http-proxy <URL>   set http proxy"
     echo " --https-proxy <URL>  set https proxy"
     echo " --ftp-proxy <URL>    set ftp proxy"
+    echo " --mdatp              specific version of mde to be installed. will use the latest if not provided"
     echo " -h|--help            display help"
 }
 
@@ -1083,6 +1255,11 @@ do
         -u|--upgrade|--update)
             INSTALL_MODE="u"
             verify_privileges "upgrade"
+            shift 1
+            ;;
+        -l|--downgrade)
+            INSTALL_MODE="d"
+            verify_privileges "downgrade"
             shift 1
             ;;
         -r|--remove)
@@ -1188,6 +1365,13 @@ do
             export log_path=$2
             shift 2
             ;;
+        --mdatp)
+            if [[ -z "$2" ]]; then
+                script_exit "$1 option requires two arguments" $ERR_INVALID_ARGUMENTS
+            fi
+            export MDE_VERSION=$2
+            shift 2
+            ;;
         *)
             echo "use -h or --help for details"
             script_exit "unknown argument" $ERR_INVALID_ARGUMENTS
@@ -1207,14 +1391,23 @@ if [ ! -z "$PASSIVE_MODE" ] && [ ! -z "$RTP_MODE" ]; then
 fi
 
 if [[ "$INSTALL_MODE" == 'i' && -z "$CHANNEL" ]]; then
-    log_info "[i] Specify the install channel using "--channel" argument. If not provided, mde will be installed for insiders-fast by default. Expected channel values: prod, insiders-slow, insiders-fast."
-    CHANNEL=insiders-fast
+    log_info "[i] Specify the install channel using "--channel" argument. If not provided, mde will be installed for prod by default. Expected channel values: prod, insiders-slow, insiders-fast."
+    CHANNEL=prod
 fi
 
 if [[ "$INSTALL_MODE" == 'c' && -z "$CHANNEL" ]]; then
-    log_info "[i] Specify the cleanup channel using "--channel" argument. If not provided, insiders-fast repo will be cleaned up by default. Expected channel values: prod, insiders-slow, insiders-fast."
-    CHANNEL=insiders-fast
+    log_info "[i] Specify the cleanup channel using "--channel" argument. If not provided, prod repo will be cleaned up by default. Expected channel values: prod, insiders-slow, insiders-fast."
+    CHANNEL=prod
 fi
+
+if [[ "$INSTALL_MODE" == 'd' && -z "$MDE_VERSION" ]]; then
+    script_exit "Specify the mdatp version using --mdatp argument when using --downgrade option" $ERR_INVALID_ARGUMENTS
+fi
+
+if [[ -z "$MDE_VERSION" && ( "$INSTALL_MODE" == 'i' || "$INSTALL_MODE" == 'u' ) ]]; then
+    log_info "[i] Specify the version to be installed using "--mdatp" argument. If not provided, latest mde will be installed by default."
+fi
+
 
 # echo "--- mde_installer.sh v$SCRIPT_VERSION ---"
 log_info "--- mde_installer.sh v$SCRIPT_VERSION ---"
@@ -1229,6 +1422,11 @@ detect_arch
 
 ### Detect the distro and version number ###
 detect_distro
+
+### Check for ARM preview
+if [ "$ARCHITECTURE" == "aarch64" ]; then
+    check_arm_distro_support
+fi
 
 ### Scale the version number according to repos avaiable on pmc ###
 scale_version_id
@@ -1266,6 +1464,20 @@ elif [ "$INSTALL_MODE" == "u" ]; then
     elif [ "$DISTRO_FAMILY" == "sles" ]; then
         upgrade_mdatp "up $ASSUMEYES"
     else    
+        script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
+    fi
+
+elif [ "$INSTALL_MODE" == "d" ]; then
+
+    if [ "$DISTRO_FAMILY" == "debian" ]; then
+        upgrade_mdatp "$ASSUMEYES install --allow-downgrades"
+    elif [ "$DISTRO_FAMILY" == "fedora" ]; then
+        upgrade_mdatp "$ASSUMEYES downgrade"
+    elif [ "$DISTRO_FAMILY" == "mariner" ]; then
+        upgrade_mdatp "$ASSUMEYES downgrade"
+    elif [ "$DISTRO_FAMILY" == "sles" ]; then
+        upgrade_mdatp "install --oldpackage $ASSUMEYES"
+    else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 

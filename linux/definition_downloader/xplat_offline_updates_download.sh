@@ -35,8 +35,13 @@
 #       │   │   ├── manifest.json
 #       │   │   └── updates.zip
 #       │   ├── arch_arm64
+#       │   │   ├── manifest.json
+#       │   │   └── updates.zip
 #       ├── preview_back
 #       │   ├── arch_x86_64
+#       │   │   ├── manifest.json
+#       │   │   └── updates.zip
+#       │   ├── arch_arm64
 #       │   │   ├── manifest.json
 #       │   │   └── updates.zip
 #       ├── production
@@ -44,10 +49,15 @@
 #       │   │   ├── manifest.json
 #       │   │   └── updates.zip
 #       │   ├── arch_arm64
+#       │   │   ├── manifest.json
+#       │   │   └── updates.zip
 #       └── production_back
 #           ├── arch_x86_64
 #           │   ├── manifest.json
 #           │   └── updates.zip
+#           └── arch_arm64
+#               ├── manifest.json
+#               └── updates.zip
 
 scriptVersion="0.0.2"
 defaultBaseUpdateUrl="https://go.microsoft.com/fwlink/"
@@ -198,14 +208,10 @@ function invoke_download_all_updates()
                 mkdir -p "$path"
             fi
             
-            if [[ ( "$platform" == "linux" ) && ( "$arch" == "arm64" ) ]]; then
-                continue  # Currently, we do not support Linux ARM64, so we skip the download step in this case.
-            fi
-            
             linkid=$(get_link_id "$platform")
             url="$baseUpdateUrl?linkid=$linkid"
             
-            if [[ ( "$platform" == "mac" ) && ( "$arch" == "arm64" ) ]]; then
+            if [[ "$arch" == "arm64" ]]; then
                 url="$url$armArchArgs"
             fi
             
