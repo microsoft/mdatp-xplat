@@ -3,3 +3,6 @@
 
 # Python precompiled files
 **/*.pyc
+
+# microsoft.asc
+**/*.asc
