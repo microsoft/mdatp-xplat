@@ -325,12 +325,20 @@ check_arm_distro_support()
     fi
     log_info "[>] OPT_FOR_MDE_ARM_PREVIEW: $OPT_FOR_MDE_ARM_PREVIEW"
     if [ "$ARCHITECTURE" == "aarch64" ]; then
-        if [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "amzn" ]; then
-            script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "ubuntu" ] && [ "$VERSION" != "20.04" ] && [ "$VERSION" != "22.04" ]; then
-            script_exit "ARM architecture is not supported on Ubuntu versions other than 20.04 or 22.04" $ERR_UNSUPPORTED_ARCH
+        if [ "$DISTRO" == "ubuntu" ] && [ "$VERSION" != "20.04" ] && [ "$VERSION" != "22.04" ] && [ "$VERSION" != "24.04" ]; then
+            script_exit "MDE for ARM architecture is not supported on Ubuntu versions other than 20.04, 22.04, or 24.04" $ERR_UNSUPPORTED_ARCH
         elif [ "$DISTRO" == "amzn" ] && [ "$VERSION" != "2" ] && [ "$VERSION" != "2023" ]; then
-            script_exit "ARM architecture is not supported on Amazon Linux versions other than 2 or 2023" $ERR_UNSUPPORTED_ARCH
+            script_exit "MDE for ARM architecture is not supported on Amazon Linux versions other than 2 or 2023" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "rhel" ] && [ "$VERSION" != "8" ]; then
+            script_exit "MDE for ARM architecture is not supported on RHEL versions other than 8" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "sles" ] && [ "$VERSION" != "15" ]; then
+            script_exit "MDE for ARM architecture is not supported on SLES versions other than 15" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "mariner" ] && [ "$VERSION" != "2.0" ]; then
+            script_exit "MDE for ARM architecture is not supported on Mariner versions other than 2.0" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "azurelinux" ] && [ "$VERSION" != "3.0" ]; then
+            script_exit "MDE for ARM architecture is not supported on Azure Linux versions other than 3.0" $ERR_UNSUPPORTED_ARCH
+        else
+            script_exit "MDE for ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
         fi
     fi
 
