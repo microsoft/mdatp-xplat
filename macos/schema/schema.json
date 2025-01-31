@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.24042.0008",
+    "__version": "101.2412.0004",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
@@ -405,7 +405,7 @@
                 },
                  "definitionUpdateDue": {
                     "default": "7",
-                    "title": "security intelligence due (in days)",
+                    "title": "Security intelligence update due (in days)",
                     "type": "number",
                     "propertyOrder": 60,
                     "description": "Determines the number of days after which the last installed security intelligence updates are considered outdated.",
@@ -415,10 +415,9 @@
                             "rel": "More information"
                         }
                     ],
-                    "default": 0,
-                    "minimum": 0,
-                    "maximum": 8
-                    
+                    "default": 7,
+                    "minimum": 1,
+                    "maximum": 30
                 }
             }
         },
