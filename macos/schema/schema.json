@@ -402,6 +402,23 @@
                         }
                     ],
                     "enum": ["normal", "moderate", "high", "high_plus", "zero_tolerance"]
+                },
+                 "definitionUpdateDue": {
+                    "default": "7",
+                    "title": "security intelligence due (in days)",
+                    "type": "number",
+                    "propertyOrder": 60,
+                    "description": "Determines the number of days after which the last installed security intelligence updates are considered outdated.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences?view=o365-worldwide#Duration-for-security-intelligence-updates-due-in-days",
+                            "rel": "More information"
+                        }
+                    ],
+                    "default": 0,
+                    "minimum": 0,
+                    "maximum": 8
+                    
                 }
             }
         },
