@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.24042.0008",
+    "__version": "101.24122.0004",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
@@ -402,6 +402,22 @@
                         }
                     ],
                     "enum": ["normal", "moderate", "high", "high_plus", "zero_tolerance"]
+                },
+                 "definitionUpdateDue": {
+                    "default": "7",
+                    "title": "Security intelligence update due (in days)",
+                    "type": "number",
+                    "propertyOrder": 60,
+                    "description": "Determines the number of days after which the last installed security intelligence updates are considered outdated.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#duration-for-security-intelligence-updates-due-in-days",
+                            "rel": "More information"
+                        }
+                    ],
+                    "default": 7,
+                    "minimum": 1,
+                    "maximum": 30
                 }
             }
         },
@@ -635,12 +651,89 @@
             "defaultProperties": [],
             "properties": {
                 "enforcementLevel": {
-                    "title": "Enforcement level",
                     "default": "audit",
-                    "type": "string",
-                    "propertyOrder": 10,
                     "description": "Specifies if network protection is disabled, in audit mode, or enforced",
-                    "enum": ["disabled", "audit", "block"]
+                    "enum": ["disabled", "audit", "block"],
+                    "propertyOrder": 10,
+                    "title": "Enforcement level",
+                    "type": "string"
+                },
+                "disableDnsOverTcpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of DNS over TCP",
+                    "propertyOrder": 20,
+                    "title": "Disable DNS over TCP parsing",
+                    "type": "boolean"
+                },
+                "disableDnsParsing": {
+                    "default": false,
+                    "description": "Disables parsing of DNS traffic",
+                    "propertyOrder": 30,
+                    "title": "Disable DNS parsing",
+                    "type": "boolean"
+                },
+                "disableFtpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of FTP traffic",
+                    "propertyOrder": 40,
+                    "title": "Disable FTP parsing",
+                    "type": "boolean"
+                },
+                "disableHttpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of HTTP traffic",
+                    "propertyOrder": 50,
+                    "title": "Disable HTTP parsing",
+                    "type": "boolean"
+                },
+                "disableIcmpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of ICMP traffic",
+                    "propertyOrder": 60,
+                    "title": "Disable ICMP parsing",
+                    "type": "boolean"
+                },
+                "disableInboundConnectionFiltering": {
+                    "default": false,
+                    "description": "Disables filtering of inbound connections",
+                    "propertyOrder": 70,
+                    "title": "Disable inbound connection filtering",
+                    "type": "boolean"
+                },
+                "disableRdpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of RDP traffic",
+                    "propertyOrder": 80,
+                    "title": "Disable RDP parsing",
+                    "type": "boolean"
+                },
+                "disableSmtpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of SMTP traffic",
+                    "propertyOrder": 90,
+                    "title": "Disable SMTP parsing",
+                    "type": "boolean"
+                },
+                "disableSshParsing": {
+                    "default": false,
+                    "description": "Disables parsing of SSH traffic",
+                    "propertyOrder": 100,
+                    "title": "Disable SSH parsing",
+                    "type": "boolean"
+                },
+                "disableTlsParsing": {
+                    "default": false,
+                    "description": "Disables parsing of TLS traffic",
+                    "propertyOrder": 110,
+                    "title": "Disable TLS parsing",
+                    "type": "boolean"
+                },
+                "enableSetWarnToBlock": {
+                    "default": false,
+                    "description": "Converts warn determinations into blocks",
+                    "propertyOrder": 120,
+                    "title": "Enable set warn to block",
+                    "type": "boolean"
                 }
             }
         },
