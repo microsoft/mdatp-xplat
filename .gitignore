@@ -4,5 +4,8 @@
 # Python precompiled files
 **/*.pyc
 
+# microsoft.asc
+**/*.asc
+
 # macOS system files
 .DS_Store

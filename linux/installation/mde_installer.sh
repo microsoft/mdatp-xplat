@@ -308,6 +308,8 @@ detect_distro()
         DISTRO_FAMILY="fedora"
     elif [ "$DISTRO" == "mariner" ]; then
         DISTRO_FAMILY="mariner"
+    elif [ "$DISTRO" == "azurelinux" ]; then
+        DISTRO_FAMILY="azurelinux"
     elif [ "$DISTRO" == "sles" ] || [ "$DISTRO" == "sle-hpc" ] || [ "$DISTRO" == "sles_sap" ]; then
         DISTRO_FAMILY="sles"
     else
@@ -325,12 +327,28 @@ check_arm_distro_support()
     fi
     log_info "[>] OPT_FOR_MDE_ARM_PREVIEW: $OPT_FOR_MDE_ARM_PREVIEW"
     if [ "$ARCHITECTURE" == "aarch64" ]; then
-        if [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "amzn" ]; then
-            script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "ubuntu" ] && [ "$VERSION" != "20.04" ] && [ "$VERSION" != "22.04" ]; then
-            script_exit "ARM architecture is not supported on Ubuntu versions other than 20.04 or 22.04" $ERR_UNSUPPORTED_ARCH
+        if [ "$DISTRO" == "ubuntu" ] && [ "$VERSION" != "20.04" ] && [ "$VERSION" != "22.04" ] && [ "$VERSION" != "24.04" ]; then
+            script_exit "MDE for ARM architecture is not supported on Ubuntu versions other than 20.04, 22.04, or 24.04" $ERR_UNSUPPORTED_ARCH
         elif [ "$DISTRO" == "amzn" ] && [ "$VERSION" != "2" ] && [ "$VERSION" != "2023" ]; then
-            script_exit "ARM architecture is not supported on Amazon Linux versions other than 2 or 2023" $ERR_UNSUPPORTED_ARCH
+            script_exit "MDE for ARM architecture is not supported on Amazon Linux versions other than 2 or 2023" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "rhel" ] && [ "$VERSION" != "8" ] && [ "$VERSION" != "9" ]; then
+            script_exit "MDE for ARM architecture is not supported on RHEL versions other than 8 or 9" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "centos" ] && [ "$VERSION" != "8" ] && [ "$VERSION" != "9" ]; then
+            script_exit "MDE for ARM architecture is not supported on CentOS versions other than 8 or 9" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "fedora" ] && [ "$VERSION" != "40" ] && [ "$VERSION" != "41" ]; then
+            script_exit "MDE for ARM architecture is not supported on Fedora versions other than 40 or 41" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "sles" ] && [ "$VERSION" != "15" ]; then
+            script_exit "MDE for ARM architecture is not supported on SLES versions other than 15" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "mariner" ] && [ "$VERSION" != "2.0" ]; then
+            script_exit "MDE for ARM architecture is not supported on Mariner versions other than 2.0" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "azurelinux" ] && [ "$VERSION" != "3.0" ]; then
+            script_exit "MDE for ARM architecture is not supported on Azure Linux versions other than 3.0" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" == "debian" ] && [ "$VERSION" != "11" ] && [ "$VERSION" != "12" ]; then
+            script_exit "MDE for ARM architecture is not supported on Debian versions other than 11 or 12" $ERR_UNSUPPORTED_ARCH
+        elif [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "rhel" ] && [ "$DISTRO" != "amzn" ] && [ "$DISTRO" != "centos" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "sles" ] && [ "$DISTRO" != "mariner" ] && [ "$DISTRO" != "azurelinux" ] && [ "$DISTRO" != "debian" ]; then
+            script_exit "MDE for ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
+        else
+            log_info "[i] MDE for ARM architecture is supported on $DISTRO" $SUCCESS
         fi
     fi
 
@@ -340,6 +358,8 @@ check_arm_distro_support()
         log_info "[>] Your distribution is supported by MDE for ARM Linux"
     elif [ "$CHANNEL" == "insiders-slow" ]; then
         log_info "[>] Your distribution is supported by MDE for ARM Linux"
+    elif [ "$INSTALL_MODE" == 'r' ]; then
+        log_info "[>] "
     else
         script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
     fi
@@ -483,7 +503,7 @@ set_package_manager()
     elif [ "$DISTRO_FAMILY" = "fedora" ]; then
         PKG_MGR=yum
         PKG_MGR_INVOKER="yum $ASSUMEYES"
-    elif [ "$DISTRO_FAMILY" = "mariner" ]; then
+    elif [ "$DISTRO_FAMILY" = "mariner" ] || [ "$DISTRO_FAMILY" = "azurelinux" ]; then
         PKG_MGR=dnf
         PKG_MGR_INVOKER="dnf $ASSUMEYES"
     elif [ "$DISTRO_FAMILY" = "sles" ]; then
@@ -640,7 +660,15 @@ install_on_debian()
     run_quietly "mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
 
     ### Fetch the gpg key ###
-    run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+
+    if { [ "$DISTRO" == "ubuntu" ] && [ "$VERSION" == "24.04" ]; } || { [ "$DISTRO" == "debian" ] && [ "$VERSION" == "12" ]; }; then
+        if [ ! -f /usr/share/keyrings/microsoft-prod.gpg ]; then
+            run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+        fi
+    else
+        run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+    fi
+
     run_quietly "apt-get update" "[!] unable to refresh the repos properly"
 
     local version=""
@@ -693,6 +721,46 @@ install_on_mariner()
         ### Add Preview Repo File ###
         run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras-preview" "unable to install mariner-repos-extras-preview"
         run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras-preview" "unable to enable extras-preview repo"
+    fi
+
+    local version=""
+    if [ ! -z "$MDE_VERSION" ]; then
+        version=$(validate_mde_version)
+        if [ -z "$version" ]; then
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
+        fi
+    fi
+    run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+
+    sleep 5
+    log_info "[v] installed"
+}
+
+install_on_azurelinux()
+{
+    local packages=
+    local pkg_version=
+    local repo=
+    local effective_distro=
+
+    if check_if_pkg_is_installed mdatp; then
+        pkg_version=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
+        log_info "[i] MDE already installed ($pkg_version)"
+        return
+    fi
+
+    # To use config-manager plugin, install dnf-plugins-core package
+    run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
+
+    ### Install MDE ###
+    log_info "[>] installing MDE"
+    if [ "$CHANNEL" = "prod" ]; then
+        run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss" "unable to install azurelinux-repos-ms-non-oss"
+        run_quietly "$PKG_MGR_INVOKER config-manager --enable azurelinux-repos-ms-non-oss" "unable to enable extras repo"
+        run_quietly "$PKG_MGR_INVOKER config-manager --disable azurelinux-repos-ms-non-oss-preview" "unable to disable extras-preview repo"
+    else
+        ### Add Preview Repo File ###
+        run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss-preview" "unable to install azurelinux-repos-ms-non-oss-preview"
     fi
 
     local version=""
@@ -833,7 +901,7 @@ install_on_sles()
 
     if [ $lines -eq 0 ]; then
         log_info "[i] configuring the repository"
-        run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n microsoft-$CHANNEL https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
+        run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n $repo_name https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
     else
         log_info "[i] repository already configured"
     fi
@@ -1007,6 +1075,12 @@ scale_version_id()
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
+    elif [ "$DISTRO_FAMILY" == "azurelinux" ]; then
+        if [[ $VERSION == 3* ]]; then
+            SCALED_VERSION=3
+        else
+            script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
+        fi
     elif [ "$DISTRO_FAMILY" == "sles" ]; then
         if [[ $VERSION == 12* ]]; then
             SCALED_VERSION=12
@@ -1015,7 +1089,7 @@ scale_version_id()
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]]; then
+    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]] && [[ $VERSION != "24.04" ]]; then
         SCALED_VERSION=18.04
     else
         # no problems with 
@@ -1447,6 +1521,8 @@ if [ "$INSTALL_MODE" == "i" ]; then
         install_on_fedora
     elif [ "$DISTRO_FAMILY" == "mariner" ]; then
         install_on_mariner
+    elif [ "$DISTRO_FAMILY" == "azurelinux" ]; then
+        install_on_azurelinux
     elif [ "$DISTRO_FAMILY" = "sles" ]; then
         install_on_sles
     else
@@ -1460,6 +1536,8 @@ elif [ "$INSTALL_MODE" == "u" ]; then
     elif [ "$DISTRO_FAMILY" == "fedora" ]; then
         upgrade_mdatp "$ASSUMEYES update"
     elif [ "$DISTRO_FAMILY" == "mariner" ]; then
+        upgrade_mdatp "$ASSUMEYES update"
+    elif [ "$DISTRO_FAMILY" == "azurelinux" ]; then
         upgrade_mdatp "$ASSUMEYES update"
     elif [ "$DISTRO_FAMILY" == "sles" ]; then
         upgrade_mdatp "up $ASSUMEYES"
@@ -1475,13 +1553,15 @@ elif [ "$INSTALL_MODE" == "d" ]; then
         upgrade_mdatp "$ASSUMEYES downgrade"
     elif [ "$DISTRO_FAMILY" == "mariner" ]; then
         upgrade_mdatp "$ASSUMEYES downgrade"
+    elif [ "$DISTRO_FAMILY" == "azurelinux" ]; then
+        upgrade_mdatp "$ASSUMEYES downgrade"
     elif [ "$DISTRO_FAMILY" == "sles" ]; then
         upgrade_mdatp "install --oldpackage $ASSUMEYES"
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
-elif [ "$INSTALL_MODE" = "r" ]; then
+elif [ "$INSTALL_MODE" == "r" ]; then
     if remove_mdatp; then
         script_exit "[v] removed MDE" $SUCCESS
     fi
