@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.7.0" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="0.7.1" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -331,9 +331,9 @@ check_arm_distro_support()
             script_exit "MDE for ARM architecture is not supported on Ubuntu versions other than 20.04, 22.04, or 24.04" $ERR_UNSUPPORTED_ARCH
         elif [ "$DISTRO" == "amzn" ] && [ "$VERSION" != "2" ] && [ "$VERSION" != "2023" ]; then
             script_exit "MDE for ARM architecture is not supported on Amazon Linux versions other than 2 or 2023" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "rhel" ] && [ "$VERSION" != "8" ] && [ "$VERSION" != "9" ]; then
+        elif [ "$DISTRO" == "rhel" ] && [ "${VERSION/.*}" != "8" ] && [ "${VERSION/.*}" != "9" ]; then
             script_exit "MDE for ARM architecture is not supported on RHEL versions other than 8 or 9" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "centos" ] && [ "$VERSION" != "8" ] && [ "$VERSION" != "9" ]; then
+        elif [ "$DISTRO" == "centos" ] && [ "${VERSION/.*}" != "8" ] && [ "${VERSION/.*}" != "9" ]; then
             script_exit "MDE for ARM architecture is not supported on CentOS versions other than 8 or 9" $ERR_UNSUPPORTED_ARCH
         elif [ "$DISTRO" == "fedora" ] && [ "$VERSION" != "40" ] && [ "$VERSION" != "41" ]; then
             script_exit "MDE for ARM architecture is not supported on Fedora versions other than 40 or 41" $ERR_UNSUPPORTED_ARCH
@@ -361,7 +361,7 @@ check_arm_distro_support()
     elif [ "$INSTALL_MODE" == 'r' ]; then
         log_info "[>] "
     else
-        script_exit "ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
+        script_exit "MDE Linux for ARM is not available on $DISTRO" $ERR_UNSUPPORTED_ARCH
     fi
 
 }
