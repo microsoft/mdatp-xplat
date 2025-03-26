@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.24122.0004",
+    "__version": "101.24122.0005",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
@@ -551,6 +551,20 @@
                         }
                     ],
                     "enum": ["enabled", "disabled"]   
+                },
+                "behaviorMonitoring": {
+                    "default": "disabled",
+                    "title": "Behavior Monitoring",
+                    "type": "string",
+                    "propertyOrder": 40,
+                    "description": "Behavior Monitoring detections with Microsoft Defender for Endpoint.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/behavior-monitor-macos",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
                 }
             }
         },
