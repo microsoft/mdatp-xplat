@@ -23,7 +23,6 @@ PKG_MGR=
 INSTALL_MODE=
 DEBUG=
 VERBOSE=
-MDE_VERSION_CMD="mdatp health --field app_version"
 PMC_URL=https://packages.microsoft.com/config
 SCALED_VERSION=
 VERSION=
@@ -66,6 +65,18 @@ ERR_UNSUPPORTED_ARCH=45
 
 # Predefined values
 export DEBIAN_FRONTEND=noninteractive
+
+declare -A SUPPORTED_VERSIONS_ARM64=(
+    [ubuntu]="20.04 22.04 24.04"
+    [amzn]="2 2023"
+    [rhel]="8 9"
+    [centos]="8 9"
+    [fedora]="40 41"
+    [sles]="15"
+    [mariner]="2.0"
+    [azurelinux]="3.0"
+    [debian]="11 12"
+)
 
 _log() {
     level="$1"
@@ -253,19 +264,27 @@ retry_quietly()
     return $exit_code
 }
 
+get_health_field()
+{
+    val=$(mdatp health --field $1)
+    clean_output=$(echo "$val" | sed '1{/^ATTENTION/d}')
+    # return string 
+    echo "$clean_output"
+}
+
 print_state()
 {
-    if [ -z $(which mdatp) ]; then
+    if [ -z $(which mdatp 2>/dev/null) ]; then
         log_warning "[S] MDE not installed."
     else
         log_info "[S] MDE installed."
         if run_quietly "mdatp health" "[S] Could not connect to the daemon -- MDE is not ready to connect yet."; then
-            log_info "[S] Version: $($MDE_VERSION_CMD)"
-            log_info "[S] Onboarded: $(mdatp health --field licensed)"
-            log_info "[S] Passive mode: $(mdatp health --field passive_mode_enabled)"
-            log_info "[S] Device tags: $(mdatp health --field edr_device_tags)"
-            log_info "[S] Subsystem: $(mdatp health --field real_time_protection_subsystem)"
-            log_info "[S] Conflicting applications: $(mdatp health --field conflicting_applications)"
+            log_info "[S] Version: $(get_health_field "app_version")"
+            log_info "[S] Onboarded: $(get_health_field "licensed")"
+            log_info "[S] Passive mode: $(get_health_field "passive_mode_enabled")"
+            log_info "[S] Device tags: $(get_health_field "edr_device_tags")"
+            log_info "[S] Subsystem: $(get_health_field "real_time_protection_subsystem")"
+            log_info "[S] Conflicting applications: $(get_health_field "conflicting_applications")"
         fi
     fi
 }
@@ -326,30 +345,21 @@ check_arm_distro_support()
         . "$FILE"
     fi
     log_info "[>] OPT_FOR_MDE_ARM_PREVIEW: $OPT_FOR_MDE_ARM_PREVIEW"
-    if [ "$ARCHITECTURE" == "aarch64" ]; then
-        if [ "$DISTRO" == "ubuntu" ] && [ "$VERSION" != "20.04" ] && [ "$VERSION" != "22.04" ] && [ "$VERSION" != "24.04" ]; then
-            script_exit "MDE for ARM architecture is not supported on Ubuntu versions other than 20.04, 22.04, or 24.04" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "amzn" ] && [ "$VERSION" != "2" ] && [ "$VERSION" != "2023" ]; then
-            script_exit "MDE for ARM architecture is not supported on Amazon Linux versions other than 2 or 2023" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "rhel" ] && [ "${VERSION/.*}" != "8" ] && [ "${VERSION/.*}" != "9" ]; then
-            script_exit "MDE for ARM architecture is not supported on RHEL versions other than 8 or 9" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "centos" ] && [ "${VERSION/.*}" != "8" ] && [ "${VERSION/.*}" != "9" ]; then
-            script_exit "MDE for ARM architecture is not supported on CentOS versions other than 8 or 9" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "fedora" ] && [ "$VERSION" != "40" ] && [ "$VERSION" != "41" ]; then
-            script_exit "MDE for ARM architecture is not supported on Fedora versions other than 40 or 41" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "sles" ] && [ "$VERSION" != "15" ]; then
-            script_exit "MDE for ARM architecture is not supported on SLES versions other than 15" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "mariner" ] && [ "$VERSION" != "2.0" ]; then
-            script_exit "MDE for ARM architecture is not supported on Mariner versions other than 2.0" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "azurelinux" ] && [ "$VERSION" != "3.0" ]; then
-            script_exit "MDE for ARM architecture is not supported on Azure Linux versions other than 3.0" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" == "debian" ] && [ "$VERSION" != "11" ] && [ "$VERSION" != "12" ]; then
-            script_exit "MDE for ARM architecture is not supported on Debian versions other than 11 or 12" $ERR_UNSUPPORTED_ARCH
-        elif [ "$DISTRO" != "ubuntu" ] && [ "$DISTRO" != "rhel" ] && [ "$DISTRO" != "amzn" ] && [ "$DISTRO" != "centos" ] && [ "$DISTRO" != "fedora" ] && [ "$DISTRO" != "sles" ] && [ "$DISTRO" != "mariner" ] && [ "$DISTRO" != "azurelinux" ] && [ "$DISTRO" != "debian" ]; then
-            script_exit "MDE for ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
-        else
-            log_info "[i] MDE for ARM architecture is supported on $DISTRO" $SUCCESS
+
+    # Extract major version for RHEL and CentOS
+    if [[ "$DISTRO" == "rhel" || "$DISTRO" == "centos" ]]; then
+        MAJOR_VERSION="${VERSION%%.*}"
+    else
+        MAJOR_VERSION="$VERSION"
+    fi
+
+    if [[ -n "${SUPPORTED_VERSIONS_ARM64[$DISTRO]}" ]]; then
+        if [[ ! " ${SUPPORTED_VERSIONS_ARM64[$DISTRO]} " =~ " $MAJOR_VERSION " ]]; then
+            script_exit "MDE for ARM architecture is not supported on $DISTRO version $VERSION" $ERR_UNSUPPORTED_ARCH
         fi
+        log_info "[i] MDE for ARM architecture is supported on $DISTRO version $VERSION" $SUCCESS
+    else
+        script_exit "MDE for ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
     fi
 
     ### ARM is released only on insiders slow channel channel
@@ -427,13 +437,13 @@ verify_mdatp_installed()
             #make sure mdatp is installed
     if [ ! -z $op ]; then
         #check if mdatp is onboarded or not
-        check_missing_license=$(mdatp health --field health_issues | grep "missing license" -c)
+        check_missing_license=$(get_health_field "health_issues" | grep "missing license" -c)
         onboard_file=/etc/opt/microsoft/mdatp/mdatp_onboard.json
         if ([ $check_missing_license -gt 0 ]) || ([ ! -f "$onboard_file" ]); then
             log_info "[i] MDE already installed but not onboarded. Please use --onboard command to onboard the product."
         else
-            current_mdatp_version=$($MDE_VERSION_CMD | tail -1)
-            org_id=$(mdatp health --field org_id | tail -1)           
+            current_mdatp_version=$(get_health_field "app_version")
+            org_id=$(get_health_field "org_id")          
             if [ ! -z "$MDE_VERSION" ]; then
                 local current_version=$(echo "$current_mdatp_version" | sed 's/"//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
                 local requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
@@ -532,6 +542,13 @@ check_if_pkg_is_installed()
     return $?
 }
 
+exit_if_mde_not_installed()
+{
+    if ! check_if_pkg_is_installed mdatp; then
+        script_exit "MDE package is not installed. Please install it with --install option" $ERR_MDE_NOT_INSTALLED
+    fi
+}
+
 get_mdatp_version()
 {
     local PKG_VERSION=""
@@ -543,6 +560,22 @@ get_mdatp_version()
     fi
 
     echo $PKG_VERSION
+}
+
+get_mdatp_channel()
+{
+    local channel=""
+    channel=$(get_health_field "release_ring")
+    if [ "$?" = "0" ] && [ -n "$channel" ]; then
+        channel=$(echo "$channel" | tail -n 1 | awk -F'"' '{print $2}')
+    else
+        install_log=/var/log/microsoft/mdatp/install.log
+        if [ -e "$install_log" ]; then
+            channel=$(cat "$install_log" | grep "Release ring: " | tail -n 1 | awk -F': ' '{print $2}')
+        fi
+    fi
+
+    echo $channel
 }
 
 install_required_pkgs()
@@ -645,7 +678,7 @@ install_on_debian()
     local success=
 
     if check_if_pkg_is_installed mdatp; then
-        pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
+        pkg_version=$(get_health_field "app_version") || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
         log_info "[i] MDE already installed ($pkg_version)."
         return
     fi
@@ -703,7 +736,7 @@ install_on_mariner()
     local effective_distro=
 
     if check_if_pkg_is_installed mdatp; then
-        pkg_version=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
+        pkg_version=$(get_health_field "app_version") || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
         log_info "[i] MDE already installed ($pkg_version)"
         return
     fi
@@ -744,7 +777,7 @@ install_on_azurelinux()
     local effective_distro=
 
     if check_if_pkg_is_installed mdatp; then
-        pkg_version=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
+        pkg_version=$(get_health_field "app_version") || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
         log_info "[i] MDE already installed ($pkg_version)"
         return
     fi
@@ -784,7 +817,7 @@ install_on_fedora()
     local effective_distro=
 
     if check_if_pkg_is_installed mdatp; then
-        pkg_version=$($MDE_VERSION_CMD) || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
+        pkg_version=$(get_health_field "app_version") || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
         log_info "[i] MDE already installed ($pkg_version)"
         return
     fi
@@ -879,7 +912,7 @@ install_on_sles()
     local repo=packages-microsoft-com
 
     if check_if_pkg_is_installed mdatp; then
-        pkg_version=$($MDE_VERSION_CMD) || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
+        pkg_version=$(get_health_field "app_version") || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
         log_info "[i] MDE already installed ($pkg_version)"
         return
     fi
@@ -938,7 +971,12 @@ remove_repo()
 {
     # Remove mdatp if installed
     if check_if_pkg_is_installed mdatp; then
-        remove_mdatp
+        current_channel=$(get_mdatp_channel)
+        if { [ "$CHANNEL" == "prod" ] && [ "$current_channel" == "Production" ]; } || \
+           { [ "$CHANNEL" == "insiders-fast" ] && [ "$current_channel" == "InsiderFast" ]; } || \
+           { [ "$CHANNEL" == "insiders-slow" ] && [ "$current_channel" == "External" ]; }; then
+               remove_mdatp
+        fi
     fi
 
     # Remove configured packages.microsoft.com repository
@@ -987,9 +1025,7 @@ upgrade_mdatp()
         script_exit "INTERNAL ERROR. upgrade_mdatp requires an argument (the upgrade command)" $ERR_INTERNAL
     fi
 
-    if ! check_if_pkg_is_installed mdatp; then
-        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
-    fi
+    exit_if_mde_not_installed
 
     local VERSION_BEFORE_UPDATE=$(get_mdatp_version)
     log_info "[>] Current $VERSION_BEFORE_UPDATE"
@@ -1023,9 +1059,7 @@ upgrade_mdatp()
 
 remove_mdatp()
 {
-    if ! check_if_pkg_is_installed mdatp; then
-        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
-    fi
+    exit_if_mde_not_installed
 
     run_quietly "$PKG_MGR_INVOKER remove mdatp" "unable to remove MDE $?" $ERR_UNINSTALLATION_FAILED
 }
@@ -1102,9 +1136,7 @@ onboard_device()
 {
     log_info "[>] onboarding script: $ONBOARDING_SCRIPT"
 
-    if ! check_if_pkg_is_installed mdatp; then
-        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
-    fi
+    exit_if_mde_not_installed
 
     if [ ! -f $ONBOARDING_SCRIPT ]; then
         script_exit "error: onboarding script not found." $ERR_ONBOARDING_NOT_FOUND
@@ -1136,7 +1168,13 @@ onboard_device()
         run_quietly "$PYTHON $ONBOARDING_SCRIPT" "error: python onboarding failed" $ERR_ONBOARDING_FAILED
 
     elif [[ $ONBOARDING_SCRIPT == *.sh ]]; then        
-        run_quietly "sh $ONBOARDING_SCRIPT" "error: bash onboarding failed" $ERR_ONBOARDING_FAILED
+        shebang_line=$(head -n 1 "$ONBOARDING_SCRIPT")
+        if [[ "$shebang_line" == \#!* ]]; then
+            interpreter_path=${shebang_line:2}
+            run_quietly "$interpreter_path $ONBOARDING_SCRIPT" "error: $interpreter_path onboarding failed" $ERR_ONBOARDING_FAILED
+        else
+            run_quietly "sh $ONBOARDING_SCRIPT" "error: sh onboarding failed" $ERR_ONBOARDING_FAILED
+        fi
 
     elif [[ $ONBOARDING_SCRIPT == *.json ]]; then
         local onboarding_dir=/etc/opt/microsoft/mdatp/
@@ -1177,9 +1215,7 @@ offboard_device()
 {
     log_info "[>] offboarding script: $OFFBOARDING_SCRIPT"
 
-    if ! check_if_pkg_is_installed mdatp; then
-        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
-    fi
+    exit_if_mde_not_installed
 
     if [ ! -f $OFFBOARDING_SCRIPT ]; then
         script_exit "error: offboarding script not found." $ERR_OFFBOARDING_NOT_FOUND
@@ -1215,9 +1251,7 @@ offboard_device()
 
 set_epp_to_passive_mode()
 {
-    if ! check_if_pkg_is_installed mdatp; then
-        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
-    fi
+    exit_if_mde_not_installed
 
     if [[ $(mdatp health --field passive_mode_enabled | tail -1) == "false" ]]; then
         log_info "[>] setting MDE/EPP to passive mode"
@@ -1231,9 +1265,7 @@ set_epp_to_passive_mode()
 
 set_epp_to_rtp_mode()
 {
-    if ! check_if_pkg_is_installed mdatp; then
-        script_exit "MDE package is not installed. Please install it first" $ERR_MDE_NOT_INSTALLED
-    fi
+    exit_if_mde_not_installed
 
     if [[ $(mdatp health --field real_time_protection_enabled | tail -1) == "false" ]]; then
         log_info "[>] setting MDE/EPP to real time protection mode"
@@ -1467,6 +1499,12 @@ fi
 if [[ "$INSTALL_MODE" == 'i' && -z "$CHANNEL" ]]; then
     log_info "[i] Specify the install channel using "--channel" argument. If not provided, mde will be installed for prod by default. Expected channel values: prod, insiders-slow, insiders-fast."
     CHANNEL=prod
+fi
+
+if [[ ! -z "$CHANNEL" && ("$INSTALL_MODE" == 'u' || "$INSTALL_MODE" == 'd') ]]; then
+    log_info "[i] Switching channel during upgrade/downgrade is not supported. Please first remove MDE using --remove option."
+    usage
+    exit 1
 fi
 
 if [[ "$INSTALL_MODE" == 'c' && -z "$CHANNEL" ]]; then
