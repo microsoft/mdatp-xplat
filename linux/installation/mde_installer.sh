@@ -319,68 +319,6 @@ detect_distro()
     log_info "[>] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
 }
 
-check_arm_distro_support()
-{
-    FILE="/etc/mde.arm.d/mde.conf"
-    if [ -f $FILE ]; then
-        . "$FILE"
-    fi
-    log_info "[>] OPT_FOR_MDE_ARM_PREVIEW: $OPT_FOR_MDE_ARM_PREVIEW"
-    case "$DISTRO" in
-        "ubuntu")
-            if [ "$VERSION" != "20.04" ] && [ "$VERSION" != "22.04" ] && [ "$VERSION" != "24.04" ]; then
-                script_exit "MDE for ARM architecture is not supported on Ubuntu versions other than 20.04, 22.04, or 24.04" $ERR_UNSUPPORTED_ARCH
-            fi
-            ;;
-        "amzn")
-            if [ "$VERSION" != "2" ] && [ "$VERSION" != "2023" ]; then
-                script_exit "MDE for ARM architecture is not supported on Amazon Linux versions other than 2 or 2023" $ERR_UNSUPPORTED_ARCH
-            fi
-            ;;
-        "rhel")
-            if [ "${VERSION/.*}" != "8" ] && [ "${VERSION/.*}" != "9" ]; then
-                script_exit "MDE for ARM architecture is not supported on RHEL versions other than 8 or 9" $ERR_UNSUPPORTED_ARCH
-            fi
-            OPT_FOR_MDE_ARM_PREVIEW="1"
-            ;;
-        "sles")
-            if [ "$VERSION" != "15" ]; then
-                script_exit "MDE for ARM architecture is not supported on SLES versions other than 15" $ERR_UNSUPPORTED_ARCH
-            fi
-            OPT_FOR_MDE_ARM_PREVIEW="1"
-            ;;
-        "mariner")
-            if [ "$VERSION" != "2.0" ]; then
-                script_exit "MDE for ARM architecture is not supported on Mariner versions other than 2.0" $ERR_UNSUPPORTED_ARCH
-            fi
-            ;;
-        "azurelinux")
-            if [ "$VERSION" != "3.0" ]; then
-                script_exit "MDE for ARM architecture is not supported on Azure Linux versions other than 3.0" $ERR_UNSUPPORTED_ARCH
-            fi
-            ;;
-        "debian")
-            if [ "$VERSION" != "11" ] && [ "$VERSION" != "12" ]; then
-                script_exit "MDE for ARM architecture is not supported on Debian versions other than 11 or 12" $ERR_UNSUPPORTED_ARCH
-            fi
-            OPT_FOR_MDE_ARM_PREVIEW="1"
-            ;;
-        *)
-            script_exit "MDE for ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
-            ;;
-    esac
-
-    ### ARM is released only on insiders slow channel
-    if [ "$OPT_FOR_MDE_ARM_PREVIEW" == "true" ] || [ "$OPT_FOR_MDE_ARM_PREVIEW" == "1" ]; then
-        log_info "[>] Your distribution is supported by MDE for ARM Linux"
-    elif [ "$INSTALL_MODE" == 'r' ]; then
-        log_info "[>] "
-    else
-        script_exit "MDE Linux for ARM is not available on $DISTRO" $ERR_UNSUPPORTED_ARCH
-    fi
-
-}
-
 verify_channel()
 {
     if [ "$CHANNEL" != "prod" ] && [ "$CHANNEL" != "insiders-fast" ] && [ "$CHANNEL" != "insiders-slow" ]; then
@@ -1511,11 +1449,6 @@ detect_arch
 
 ### Detect the distro and version number ###
 detect_distro
-
-### Check for ARM preview
-if [ "$ARCHITECTURE" == "aarch64" ]; then
-    check_arm_distro_support
-fi
 
 ### Scale the version number according to repos avaiable on pmc ###
 scale_version_id
