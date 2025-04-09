@@ -1,12 +1,14 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.97.94",
+    "__version": "101.24122.0004",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
     "options": {
         "remove_empty_properties": true
     },
     "type": "object",
+    "defaultProperties": [ "antivirusEngine", "dlp", "features" ],
     "properties": {
         "antivirusEngine": {
             "title": "Antivirus engine",
@@ -14,6 +16,20 @@
             "propertyOrder": 10,
             "defaultProperties": [ "passiveMode" ],
             "properties": {
+                "enforcementLevel": {
+                    "title": "Enforcement level",
+                    "default": "realTime",
+                    "type": "string",
+                    "propertyOrder": 5,
+                    "description": "Antivirus engine enforcement mode",
+                    "enum": ["passive", "on_demand", "real_time"],
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences#enforcement-level-for-antivirus-engine",
+                            "rel": "More information"
+                        }
+                    ]
+                },
                 "enableRealTimeProtection": {
                     "default": true,
                     "description": "Locates and stops malware from installing or running on your device. You can turn off this setting for a short time before it turns back on automatically.",
@@ -346,19 +362,19 @@
                     ],
                     "enum": ["optional", "required"]
                 },
-                "automaticSampleSubmission": {
-                    "default": true,
+                "automaticSampleSubmissionConsent": {
+                    "default": "safe",
+                    "title": "Automatic sample submission Consent",
+                    "type": "string",
+                    "propertyOrder": 30,
                     "description": "Sends sample files to Microsoft to help protect device users and your organization from potential threats",
-                    "format": "checkbox",
                     "links": [
                         {
                             "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#enable--disable-automatic-sample-submissions",
                             "rel": "More information"
                         }
                     ],
-                    "propertyOrder": 30,
-                    "title": "Automatic sample submissions",
-                    "type": "boolean"
+                    "enum": ["none", "safe", "all"]
                 },
                 "automaticDefinitionUpdateEnabled": {
                     "default": true,
@@ -373,6 +389,36 @@
                     ],
                     "propertyOrder": 40,
                     "type": "boolean"
+                },
+                "cloudBlockLevel": {
+                    "default": "normal",
+                    "title": "Cloud Block Level",
+                    "type": "string",
+                    "propertyOrder": 50,
+                    "description": "Determines how aggressive Defender for Endpoint will be in blocking and scanning suspicious files.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/mac-preferences?view=o365-worldwide#configure-cloud-block-level",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["normal", "moderate", "high", "high_plus", "zero_tolerance"]
+                },
+                 "definitionUpdateDue": {
+                    "default": "7",
+                    "title": "Security intelligence update due (in days)",
+                    "type": "number",
+                    "propertyOrder": 60,
+                    "description": "Determines the number of days after which the last installed security intelligence updates are considered outdated.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#duration-for-security-intelligence-updates-due-in-days",
+                            "rel": "More information"
+                        }
+                    ],
+                    "default": 7,
+                    "minimum": 1,
+                    "maximum": 30
                 }
             }
         },
@@ -459,6 +505,18 @@
                             }
                         }
                     }
+                },
+                "groupIds": {
+                    "title": "Group identifier",
+                    "type": "string",
+                    "propertyOrder": 30,
+                    "description": "",
+                    "links": [
+                        {
+                            "href": "https://docs.microsoft.com/en-us/windows/security/threat-protection/microsoft-defender-atp/mac-preferences#group-identifiers",
+                            "rel": "More information"
+                        }
+                    ]
                 }
             }
         },
@@ -480,6 +538,20 @@
                         }
                     ],
                     "enum": ["enabled", "disabled"]                
+                },
+                "scheduledScan":{
+                    "default": "enabled",
+                    "title": "Scheduled Scan",
+                    "type": "string",
+                    "propertyOrder": 30,
+                    "description": "Schedule scans with Microsoft Defender for Endpoint.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-schedule-scan",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]   
                 }
             }
         },
@@ -487,21 +559,74 @@
             "title": "Tamper protection",
             "propertyOrder": 60,
             "defaultProperties": [],
+            "links": [
+                {
+                    "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/tamperprotection-macos",
+                    "rel": "Feature documentation"
+                }
+            ],
             "properties": {
                 "enforcementLevel": {
                     "title": "Enforcement level",
-                    "default": "audit",
+                    "default": "block",
                     "type": "string",
                     "propertyOrder": 10,
                     "description": "Specifies if tamper protection is disabled, in audit mode, or enforced",
                     "enum": ["disabled", "audit", "block"]
+                },
+                "exclusions": {
+                    "title": "Process exclusions",
+                    "type": "array",
+                    "propertyOrder": 20,
+                    "description": "Defines process that can interfere with Defender without considering it tampering",
+                    "items": {
+                        "title": "Process identity",
+                        "type": "object",
+                        "format": "grid",
+                        "links": [
+                            {
+                                "href": "https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/tamperprotection-macos#exclusions",
+                                "rel": "Tamper Protection exclusions"
+                            }
+                        ],
+                        "properties":  {
+                            "path": {
+                                "title": "Process path",
+                                "type": "string",
+                                "propertyOrder": 10,
+                                "description": "Full and exact path to the process binary"
+                            },
+                            "teamId": {
+                                "title": "Process's TeamIdentifier",
+                                "type": "string",
+                                "propertyOrder": 20,
+                                "description": "Code signature TeamIdentifier"
+                            },
+                            "signingId": {
+                                "title": "Process's Signing Identifier",
+                                "type": "string",
+                                "propertyOrder": 30,
+                                "description": "Code signature Identifier"
+                            },
+                            "args": {
+                                "title": "Process's arguments",
+                                "type": "array",
+                                "propertyOrder": 40,
+                                "description": "Command line arguments",
+                                "items": {
+                                    "title": "Argument",
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
         "deviceControl": {
             "title": "Device Control",
             "propertyOrder": 70,
-            "defaultProperties": [ "policy" ],
+            "defaultProperties": [],
             "properties": {
                 "policy": {
                     "title": "Device Control Policy",
@@ -527,19 +652,96 @@
             "defaultProperties": [],
             "properties": {
                 "enforcementLevel": {
-                    "title": "Enforcement level",
                     "default": "audit",
-                    "type": "string",
-                    "propertyOrder": 10,
                     "description": "Specifies if network protection is disabled, in audit mode, or enforced",
-                    "enum": ["disabled", "audit", "block"]
+                    "enum": ["disabled", "audit", "block"],
+                    "propertyOrder": 10,
+                    "title": "Enforcement level",
+                    "type": "string"
+                },
+                "disableDnsOverTcpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of DNS over TCP",
+                    "propertyOrder": 20,
+                    "title": "Disable DNS over TCP parsing",
+                    "type": "boolean"
+                },
+                "disableDnsParsing": {
+                    "default": false,
+                    "description": "Disables parsing of DNS traffic",
+                    "propertyOrder": 30,
+                    "title": "Disable DNS parsing",
+                    "type": "boolean"
+                },
+                "disableFtpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of FTP traffic",
+                    "propertyOrder": 40,
+                    "title": "Disable FTP parsing",
+                    "type": "boolean"
+                },
+                "disableHttpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of HTTP traffic",
+                    "propertyOrder": 50,
+                    "title": "Disable HTTP parsing",
+                    "type": "boolean"
+                },
+                "disableIcmpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of ICMP traffic",
+                    "propertyOrder": 60,
+                    "title": "Disable ICMP parsing",
+                    "type": "boolean"
+                },
+                "disableInboundConnectionFiltering": {
+                    "default": false,
+                    "description": "Disables filtering of inbound connections",
+                    "propertyOrder": 70,
+                    "title": "Disable inbound connection filtering",
+                    "type": "boolean"
+                },
+                "disableRdpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of RDP traffic",
+                    "propertyOrder": 80,
+                    "title": "Disable RDP parsing",
+                    "type": "boolean"
+                },
+                "disableSmtpParsing": {
+                    "default": false,
+                    "description": "Disables parsing of SMTP traffic",
+                    "propertyOrder": 90,
+                    "title": "Disable SMTP parsing",
+                    "type": "boolean"
+                },
+                "disableSshParsing": {
+                    "default": false,
+                    "description": "Disables parsing of SSH traffic",
+                    "propertyOrder": 100,
+                    "title": "Disable SSH parsing",
+                    "type": "boolean"
+                },
+                "disableTlsParsing": {
+                    "default": false,
+                    "description": "Disables parsing of TLS traffic",
+                    "propertyOrder": 110,
+                    "title": "Disable TLS parsing",
+                    "type": "boolean"
+                },
+                "enableSetWarnToBlock": {
+                    "default": false,
+                    "description": "Converts warn determinations into blocks",
+                    "propertyOrder": 120,
+                    "title": "Enable set warn to block",
+                    "type": "boolean"
                 }
             }
         },
         "dlp": {
             "title": "Data Loss Prevention",
             "propertyOrder": 90,
-            "defaultProperties": [],
+            "defaultProperties": [ "exclusions", "features" ],
             "properties": {
                 "exclusions": {
                     "title": "Exclusions",
@@ -600,6 +802,116 @@
                                 "default": "production",
                                 "enum": ["insiderFast", "external", "production"]
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "scheduledScan": {
+            "title": "Scheduled scan configuration",
+            "propertyOrder": 100,
+            "defaultProperties": [],
+            "links": [
+                {
+                    "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-schedule-scan",
+                    "rel": "More information"
+                }
+            ],
+            "properties": {
+                "checkForDefinitionsUpdate": {
+                    "title": "Check for definitions update",
+                    "description": "Check for definitions update before initiating a scheduled scan",
+                    "propertyOrder": 10,
+                    "type": "boolean",
+                    "default": false
+                },
+                "dailyConfiguration": {
+                    "title": "Daily and Hourly quick scan configuration",
+                    "description": "Check for definitions update before initiating a scheduled scan",
+                    "propertyOrder": 20,
+                    "type": "object",
+                    "properties": {
+                        "timeOfDay": {
+                            "title": "Time of day",
+                            "description": "Specifies the time of day, as the number of minutes after midnight, to perform a daily quick scan.",
+                            "propertyOrder": 10,
+                            "type": "number",
+                            "default": 0,
+                            "minimum": 0,
+                            "maximum": 1440
+                        },
+                        "interval": {
+                            "title": "Start time",
+                            "description": "Specify how many hours should elapse before the next hourly quick scan. 0 indicates no hourly quick scan. 1 indicates a scan every hour. 24 indicates a scan once a day.",
+                            "propertyOrder": 20,
+                            "type": "number",
+                            "default": 0,
+                            "minimum": 0,
+                            "maximum": 24
+                        }
+                    }
+                },
+                "ignoreExclusions": {
+                    "title": "Ignore exclusions",
+                    "description": "Should exclusions be ignored during a scheduled scan",
+                    "propertyOrder": 30,
+                    "type": "boolean",
+                    "default": false
+                },
+                "lowPriorityScheduledScan":{
+                    "title": "Low priority scheduled scan",
+                    "description": "Should scheduled scan be run with low priority. (Scan might take longer to complete).",
+                    "propertyOrder": 40,
+                    "type": "boolean",
+                    "default": false
+                },
+                "randomizeScanStartTime":{
+                    "title": "Randomize scheduled scan start time",
+                    "description": "Randomize the start time of a daily and weekly scheduled scan to any interval from 0 to 23 hours.",
+                    "propertyOrder": 50,
+                    "type": "number",
+                    "default": 0,
+                    "minimum": 0,
+                    "maximum": 23
+                },
+                "runScanWhenIdle":{
+                    "title": "Run scheduled scan when idle",
+                    "description": "Run scheduled scan when the device is idle. Only applicable for weekly full scans.",
+                    "propertyOrder": 60,
+                    "type": "boolean",
+                    "default": false
+                },
+                "weeklyConfiguration":{
+                    "title": "Weekly scheduled scan configuration",
+                    "description": "Should scheduled scan be run with low priority. (Scan might take longer to complete).",
+                    "propertyOrder": 70,
+                    "type": "object",
+                    "properties": {
+                        "scanType": {
+                            "title": "Scan type",
+                            "description": "Specifies the type of scan to perform.",
+                            "propertyOrder": 10,
+                            "type": "string",
+                            "default": "quick",
+                            "enum": ["quick", "full"]
+                        },
+                        "dayOfWeek": {
+                            "title": "Day of week",
+                            "description": "Specifies the day of the week to perform a weekly scan. 0 indicates never. 1-7 indicates Sunday - Saturday. 8 indicates every day.",
+                            "propertyOrder": 10,
+                            "type": "number",
+                            "default": 0,
+                            "minimum": 0,
+                            "maximum": 8
+                        },
+                        "timeOfDay": {
+                            "title": "Time of day",
+                            "description": "Specifies the time of day, as the number of minutes after midnight, to perform a weekly scan.",
+                            "propertyOrder": 20,
+                            "type": "number",
+                            "default": 0,
+                            "minimum": 0,
+                            "maximum": 1440
                         }
                     }
                 }
