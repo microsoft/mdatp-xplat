@@ -338,44 +338,6 @@ detect_distro()
     log_info "[>] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
 }
 
-check_arm_distro_support()
-{
-    FILE="/etc/mde.arm.d/mde.conf"
-    if [ -f $FILE ]; then
-        . "$FILE"
-    fi
-    log_info "[>] OPT_FOR_MDE_ARM_PREVIEW: $OPT_FOR_MDE_ARM_PREVIEW"
-
-    # Extract major version for RHEL and CentOS
-    if [[ "$DISTRO" == "rhel" || "$DISTRO" == "centos" ]]; then
-        MAJOR_VERSION="${VERSION%%.*}"
-    else
-        MAJOR_VERSION="$VERSION"
-    fi
-
-    if [[ -n "${SUPPORTED_VERSIONS_ARM64[$DISTRO]}" ]]; then
-        if [[ ! " ${SUPPORTED_VERSIONS_ARM64[$DISTRO]} " =~ " $MAJOR_VERSION " ]]; then
-            script_exit "MDE for ARM architecture is not supported on $DISTRO version $VERSION" $ERR_UNSUPPORTED_ARCH
-        fi
-        log_info "[i] MDE for ARM architecture is supported on $DISTRO version $VERSION" $SUCCESS
-    else
-        script_exit "MDE for ARM architecture is not supported on $DISTRO" $ERR_UNSUPPORTED_ARCH
-    fi
-
-    ### ARM is released only on insiders slow channel channel
-    if [ "$OPT_FOR_MDE_ARM_PREVIEW" == "true" ] || [ "$OPT_FOR_MDE_ARM_PREVIEW" == "1" ]; then
-        CHANNEL="insiders-slow"
-        log_info "[>] Your distribution is supported by MDE for ARM Linux"
-    elif [ "$CHANNEL" == "insiders-slow" ]; then
-        log_info "[>] Your distribution is supported by MDE for ARM Linux"
-    elif [ "$INSTALL_MODE" == 'r' ]; then
-        log_info "[>] "
-    else
-        script_exit "MDE Linux for ARM is not available on $DISTRO" $ERR_UNSUPPORTED_ARCH
-    fi
-
-}
-
 verify_channel()
 {
     if [ "$CHANNEL" != "prod" ] && [ "$CHANNEL" != "insiders-fast" ] && [ "$CHANNEL" != "insiders-slow" ]; then
@@ -1534,11 +1496,6 @@ detect_arch
 
 ### Detect the distro and version number ###
 detect_distro
-
-### Check for ARM preview
-if [ "$ARCHITECTURE" == "aarch64" ]; then
-    check_arm_distro_support
-fi
 
 ### Scale the version number according to repos avaiable on pmc ###
 scale_version_id
