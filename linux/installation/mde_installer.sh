@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.7.1" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="0.8.0" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -21,7 +21,7 @@ DISTRO_FAMILY=
 ARCHITECTURE=
 PKG_MGR=
 INSTALL_MODE=
-DEBUG=
+DEBUG=0
 VERBOSE=
 PMC_URL=https://packages.microsoft.com/config
 SCALED_VERSION=
@@ -35,7 +35,7 @@ RTP_MODE=
 MIN_CORES=1
 MIN_MEM_MB=1024
 MIN_DISK_SPACE_MB=2048
-declare -a tags
+declare -A tags
 
 # Error codes
 SUCCESS=0
@@ -65,18 +65,6 @@ ERR_UNSUPPORTED_ARCH=45
 
 # Predefined values
 export DEBIAN_FRONTEND=noninteractive
-
-declare -A SUPPORTED_VERSIONS_ARM64=(
-    [ubuntu]="20.04 22.04 24.04"
-    [amzn]="2 2023"
-    [rhel]="8 9"
-    [centos]="8 9"
-    [fedora]="40 41"
-    [sles]="15"
-    [mariner]="2.0"
-    [azurelinux]="3.0"
-    [debian]="11 12"
-)
 
 _log() {
     level="$1"
@@ -118,7 +106,7 @@ script_exit()
         exit $ERR_INTERNAL
     fi
 
-    if [ -n $DEBUG ]; then
+    if [ "$DEBUG" != "0" ]; then
         print_state
     fi
 
@@ -209,8 +197,8 @@ run_quietly()
         log_info "$out"
     fi
     
-    if [ "$exit_code" -ne 0 ]; then
-        if [ -n $DEBUG ]; then             
+    if [ "$exit_code" != "0" ]; then
+        if [ "$DEBUG" != "0" ]; then
             log_debug "[>] Running command: $1"
             log_debug "[>] Command output: $out"
             log_debug "[>] Command exit_code: $exit_code"
@@ -266,15 +254,28 @@ retry_quietly()
 
 get_health_field()
 {
-    val=$(mdatp health --field $1)
-    clean_output=$(echo "$val" | sed '1{/^ATTENTION/d}')
-    # return string 
+    # get_health_field <field>
+    # get the health field from mdatp health --field <field>
+    # extract the value from the output and return it
+
+    if ! command -v mdatp >/dev/null 2>&1; then
+        return 1
+    fi
+
+    local val
+    val=$(mdatp health --field "$1" 2>/dev/null)
+    cmd_status=$?
+    if [ $cmd_status -ne 0 ]; then
+        return 1
+    fi
+    clean_output=$(echo "$val" | sed '1{/^ATTENTION/d}' | sed 's/^"\(.*\)"$/\1/')
     echo "$clean_output"
+    return 0
 }
 
 print_state()
 {
-    if [ -z $(which mdatp 2>/dev/null) ]; then
+    if ( ! check_if_pkg_is_installed mdatp ) && ( ! command -v mdatp >/dev/null 2>&1 ); then
         log_warning "[S] MDE not installed."
     else
         log_info "[S] MDE installed."
@@ -293,7 +294,7 @@ detect_arch()
 {
     arch=$(uname -m)
     ARCHITECTURE=$arch
-    log_info "[>] detected: $ARCHITECTURE architecture"
+    log_info "[v] detected: $ARCHITECTURE architecture"
 }
 
 detect_distro()
@@ -317,25 +318,25 @@ detect_distro()
     fi
 
     # change distro to ubuntu for linux mint support
-    if [ "$DISTRO" == "linuxmint" ]; then
+    if [ "$DISTRO" = "linuxmint" ]; then
         DISTRO="ubuntu"
     fi
 
-    if [ "$DISTRO" == "debian" ] || [ "$DISTRO" == "ubuntu" ]; then
+    if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         DISTRO_FAMILY="debian"
-    elif [ "$DISTRO" == "rhel" ] || [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ] || [ "$DISTRO" == "almalinux" ] || [ "$DISTRO" == "rocky" ]; then
+    elif [ "$DISTRO" = "rhel" ] || [ "$DISTRO" = "centos" ] || [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "amzn" ] || [ "$DISTRO" = "almalinux" ] || [ "$DISTRO" = "rocky" ]; then
         DISTRO_FAMILY="fedora"
-    elif [ "$DISTRO" == "mariner" ]; then
+    elif [ "$DISTRO" = "mariner" ]; then
         DISTRO_FAMILY="mariner"
-    elif [ "$DISTRO" == "azurelinux" ]; then
+    elif [ "$DISTRO" = "azurelinux" ]; then
         DISTRO_FAMILY="azurelinux"
-    elif [ "$DISTRO" == "sles" ] || [ "$DISTRO" == "sle-hpc" ] || [ "$DISTRO" == "sles_sap" ]; then
+    elif [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ] || [ "$DISTRO" = "sles_sap" ]; then
         DISTRO_FAMILY="sles"
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
-    log_info "[>] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
+    log_info "[v] detected: $DISTRO $VERSION $VERSION_NAME ($DISTRO_FAMILY)"
 }
 
 verify_channel()
@@ -358,7 +359,7 @@ verify_privileges()
 
 verify_min_requirements()
 {
-    # echo "[>] verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space"
+    # verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space
     
     local cores=$(nproc --all)
     if [ $cores -lt $MIN_CORES ]; then
@@ -431,14 +432,21 @@ verify_mdatp_installed()
 
 verify_conflicting_applications()
 {
-    # echo "[>] identifying conflicting applications (fanotify mounts)"
+    # identifying conflicting applications (fanotify mounts)
+
+    if ! command -v timeout >/dev/null 2>&1; then
+        log_warning "[!] 'timeout' command not found. Skipping conflicting application check"
+        return
+    fi
 
     # find applications that are using fanotify
-    local conflicting_apps=$(timeout 5m find /proc/*/fdinfo/ -type f -print0 2>/dev/null | xargs -r0 grep -Fl "fanotify mnt_id" 2>/dev/null | xargs -I {} -r sh -c 'cat "$(dirname {})/../cmdline"')
-    
-    if [ ! -z $conflicting_apps ]; then
+    local conflicting_apps
+    conflicting_apps=$(timeout 5m find /proc/*/fdinfo/ -type f -print0 2>/dev/null \
+        | xargs -r0 grep -Fl "fanotify mnt_id" 2>/dev/null \
+        | xargs -I {} -r sh -c 'tr "\0" "" < "$(dirname {})/../cmdline"' 2>/dev/null)
 
-        if [ $conflicting_apps == "/opt/microsoft/mdatp/sbin/wdavdaemon" ]; then
+    if [ ! -z "$conflicting_apps" ]; then
+        if [ "$conflicting_apps" = "/opt/microsoft/mdatp/sbin/wdavdaemon" ]; then
             verify_mdatp_installed 
         else
             script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
@@ -458,7 +466,7 @@ verify_conflicting_applications()
     for t in "${conflicting_services[@]}"
     do
         set -- $t
-        # echo "[>] locating service: $1"
+        # locating service: $1
         if find_service $1; then
             script_exit "found conflicting service: [$1], aborting" $ERR_CONFLICTING_APPS
         fi        
@@ -504,6 +512,28 @@ check_if_pkg_is_installed()
     return $?
 }
 
+check_if_device_is_onboarded()
+{
+    local onboarded
+    onboarded=$(get_health_field "licensed")
+    if [ "$onboarded" = "true" ]; then
+        return 0
+    fi
+    return 1
+}
+
+skip_if_mde_installed()
+{
+    if check_if_pkg_is_installed mdatp; then
+        verify_mdatp_installed
+        pkg_version=$(get_health_field "app_version") || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
+        log_info "[i] MDE already installed ($pkg_version)"
+        return 0
+    else
+        return 1
+    fi
+}
+
 exit_if_mde_not_installed()
 {
     if ! check_if_pkg_is_installed mdatp; then
@@ -526,15 +556,26 @@ get_mdatp_version()
 
 get_mdatp_channel()
 {
-    local channel=""
-    channel=$(get_health_field "release_ring")
-    if [ "$?" = "0" ] && [ -n "$channel" ]; then
-        channel=$(echo "$channel" | tail -n 1 | awk -F'"' '{print $2}')
+    local release_ring=""
+    release_ring=$(mdatp health --field release_ring)
+    if [ "$?" = "0" ] && [ -n "$release_ring" ]; then
+        release_ring=$(echo "$release_ring" | tail -n 1 | awk -F'"' '{print $2}')
     else
         install_log=/var/log/microsoft/mdatp/install.log
         if [ -e "$install_log" ]; then
-            channel=$(cat "$install_log" | grep "Release ring: " | tail -n 1 | awk -F': ' '{print $2}')
+            release_ring=$(cat "$install_log" | grep "Release ring: " | tail -n 1 | awk -F': ' '{print $2}')
         fi
+    fi
+
+    local channel=""
+    if [[ "$release_ring" = *"Production"* ]]; then
+        channel="prod"
+    elif [[ "$release_ring" = *"InsiderFast"* ]]; then
+        channel="insiders-fast"
+    elif [[ "$release_ring" = *"External"* ]]; then
+        channel="insiders-slow"
+    else
+        channel="dogfood"
     fi
 
     echo $channel
@@ -639,24 +680,20 @@ install_on_debian()
     local pkg_version=
     local success=
 
-    if check_if_pkg_is_installed mdatp; then
-        pkg_version=$(get_health_field "app_version") || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
-        log_info "[i] MDE already installed ($pkg_version)."
-        return
-    fi
-
     packages=(curl apt-transport-https gnupg)
 
-    install_required_pkgs ${packages[@]}
+    install_required_pkgs "${packages[@]}"
 
     ### Configure the repository ###
+    log_info "[>] configuring the repository"
+
     rm -f microsoft.list > /dev/null
     run_quietly "curl -s -o microsoft.list $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list" "unable to fetch repo list" $ERR_FAILED_REPO_SETUP
     run_quietly "mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
 
     ### Fetch the gpg key ###
 
-    if { [ "$DISTRO" == "ubuntu" ] && [ "$VERSION" == "24.04" ]; } || { [ "$DISTRO" == "debian" ] && [ "$VERSION" == "12" ]; }; then
+    if { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "24.04" ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "12" ]; }; then
         if [ ! -f /usr/share/keyrings/microsoft-prod.gpg ]; then
             run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
         fi
@@ -687,7 +724,7 @@ install_on_debian()
     fi
 
     sleep 5
-    log_info "[v] installed"
+    log_info "[v] Installation complete!"
 }
 
 install_on_mariner()
@@ -696,12 +733,6 @@ install_on_mariner()
     local pkg_version=
     local repo=
     local effective_distro=
-
-    if check_if_pkg_is_installed mdatp; then
-        pkg_version=$(get_health_field "app_version") || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
-        log_info "[i] MDE already installed ($pkg_version)"
-        return
-    fi
 
     # To use config-manager plugin, install dnf-plugins-core package
     run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
@@ -712,10 +743,13 @@ install_on_mariner()
         run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras" "unable to install mariner-repos-extras"
         run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras" "unable to enable extras repo"
         run_quietly "$PKG_MGR_INVOKER config-manager --disable mariner-official-extras-preview" "unable to disable extras-preview repo"
-    else
+    elif [ "$CHANNEL" = "insiders-slow" ]; then
         ### Add Preview Repo File ###
         run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras-preview" "unable to install mariner-repos-extras-preview"
         run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras-preview" "unable to enable extras-preview repo"
+    else
+        # mariner is only supported on prod and insiders-slow channels
+        script_exit "Invalid channel: $CHANNEL. Available channels for $DISTRO_FAMILY are prod and insiders-slow channel only." $ERR_INVALID_CHANNEL
     fi
 
     local version=""
@@ -728,7 +762,7 @@ install_on_mariner()
     run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
 
     sleep 5
-    log_info "[v] installed"
+    log_info "[v] Installation complete!"
 }
 
 install_on_azurelinux()
@@ -738,17 +772,11 @@ install_on_azurelinux()
     local repo=
     local effective_distro=
 
-    if check_if_pkg_is_installed mdatp; then
-        pkg_version=$(get_health_field "app_version") || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
-        log_info "[i] MDE already installed ($pkg_version)"
-        return
-    fi
-
     # To use config-manager plugin, install dnf-plugins-core package
     run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
 
-    ### Install MDE ###
-    log_info "[>] installing MDE"
+    ### Configure the repository ###
+    log_info "[>] configuring the repository"
     if [ "$CHANNEL" = "prod" ]; then
         run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss" "unable to install azurelinux-repos-ms-non-oss"
         run_quietly "$PKG_MGR_INVOKER config-manager --enable azurelinux-repos-ms-non-oss" "unable to enable extras repo"
@@ -765,10 +793,13 @@ install_on_azurelinux()
             script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
         fi
     fi
+
+    ### Install MDE ###
+    log_info "[>] installing MDE"
     run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
 
     sleep 5
-    log_info "[v] installed"
+    log_info "[v] Installation complete!"
 }
 
 install_on_fedora()
@@ -778,12 +809,6 @@ install_on_fedora()
     local repo=packages-microsoft-com
     local effective_distro=
 
-    if check_if_pkg_is_installed mdatp; then
-        pkg_version=$(get_health_field "app_version") || script_exit "Unable to fetch the app version. Please upgrade to latest version $?" $ERR_INSTALLATION_FAILED
-        log_info "[i] MDE already installed ($pkg_version)"
-        return
-    fi
-
     # curl-minimal results into issues when present and trying to install curl, so skip installing
     # the curl over Amazon Linux 2023
     if [[ "$VERSION" == "2023" ]] && [[ "$DISTRO" == "amzn" ]] && $(check_if_pkg_is_installed curl-minimal); then
@@ -792,12 +817,14 @@ install_on_fedora()
         packages=(curl yum-utils)
     fi
 
-    if [[ $SCALED_VERSION == 7* ]] && [ "$DISTRO" == "rhel" ]; then
+    if [[ $SCALED_VERSION == 7* ]] && [[ "$DISTRO" == "rhel" ]]; then
         packages=($packages deltarpm)
     fi
 
-    install_required_pkgs ${packages[@]}
+    install_required_pkgs "${packages[@]}"
 
+    ### Configure the repository ###
+    log_info "[>] configuring the repository"
     ### Configure the repo name from which package should be installed
     local repo_name=${repo}-${CHANNEL}
 
@@ -810,20 +837,20 @@ install_on_fedora()
         repo_name=packages-microsoft-com-insiders-slow
     fi
 
-    if [ "$DISTRO" == "ol" ] || [ "$DISTRO" == "fedora" ] || [ "$DISTRO" == "amzn" ]; then
+    if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "amzn" ]; then
         effective_distro="rhel"
-    elif [ "$DISTRO" == "almalinux" ]; then
+    elif [ "$DISTRO" = "almalinux" ]; then
         effective_distro="alma"
     else
         effective_distro="$DISTRO"
     fi
 
-    if [ "$ARCHITECTURE" == "aarch64" ]; then
-        if [ "$DISTRO" == "amzn" ]; then
+    if [ "$ARCHITECTURE" = "aarch64" ]; then
+        if [ "$DISTRO" = "amzn" ]; then
             effective_distro="amazonlinux"
             SCALED_VERSION=$VERSION
         fi
-        log_info "[i] configuring the repository for ARM architecture"
+        log_info "[>] configuring the repository for ARM architecture"
         run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
 
         ### Fetch the gpg key ###
@@ -837,7 +864,7 @@ install_on_fedora()
         if [ $found_repo -eq 0 ]; then
             log_info "[i] repository already configured"
         else
-            log_info "[i] configuring the repository"
+            log_info "[>] configuring the repository"
             run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
         fi
 
@@ -857,14 +884,14 @@ install_on_fedora()
     ### Install MDE ###
     log_info "[>] installing MDE"
 
-    if [ "$ARCHITECTURE" == "aarch64" ]; then
+    if [ "$ARCHITECTURE" = "aarch64" ]; then
         run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     else
         run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     fi
 
     sleep 5
-    log_info "[v] installed"
+    log_info "[v] Installation complete!"
 }
 
 install_on_sles()
@@ -873,21 +900,16 @@ install_on_sles()
     local pkg_version=
     local repo=packages-microsoft-com
 
-    if check_if_pkg_is_installed mdatp; then
-        pkg_version=$(get_health_field "app_version") || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
-        log_info "[i] MDE already installed ($pkg_version)"
-        return
-    fi
-
     packages=(curl)
 
-    install_required_pkgs ${packages[@]}
+    install_required_pkgs "${packages[@]}"
 
     wait_for_package_manager_to_complete
 
     ### Configure the repository ###
+
     local repo_name=${repo}-${CHANNEL}
-    if [ "$CHANNEL" == "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+    if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
         repo_name=${repo}-slow-prod
     fi
     
@@ -895,7 +917,7 @@ install_on_sles()
     lines=$($PKG_MGR_INVOKER lr | grep "$repo_name" | wc -l)
 
     if [ $lines -eq 0 ]; then
-        log_info "[i] configuring the repository"
+        log_info "[>] configuring the repository"
         run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n $repo_name https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
     else
         log_info "[i] repository already configured"
@@ -926,7 +948,7 @@ install_on_sles()
     fi
 
     sleep 5
-    log_info "[v] installed."
+    log_info "[v] Installation complete!."
 }
 
 remove_repo()
@@ -934,27 +956,29 @@ remove_repo()
     # Remove mdatp if installed
     if check_if_pkg_is_installed mdatp; then
         current_channel=$(get_mdatp_channel)
-        if { [ "$CHANNEL" == "prod" ] && [ "$current_channel" == "Production" ]; } || \
-           { [ "$CHANNEL" == "insiders-fast" ] && [ "$current_channel" == "InsiderFast" ]; } || \
-           { [ "$CHANNEL" == "insiders-slow" ] && [ "$current_channel" == "External" ]; }; then
-               remove_mdatp
+        if [ "$CHANNEL" = "$current_channel" ]; then
+            log_info "[i] MDE is installed for $CHANNEL"
+            remove_mdatp
         fi
     fi
 
+    log_info "[>] Removing repo for $CHANNEL"
+
+    local cmd_status
     # Remove configured packages.microsoft.com repository
-    if [ $DISTRO == 'sles' ] || [ "$DISTRO" = "sle-hpc" ]; then
+    if [ "$DISTRO" = 'sles' ] || [ "$DISTRO" = "sle-hpc" ]; then
         local repo=packages-microsoft-com
         local repo_name=${repo}-${CHANNEL}
-        if [ "$CHANNEL" == "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+        if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
             repo_name=${repo}-slow-prod
         fi
         run_quietly "$PKG_MGR_INVOKER removerepo $repo_name" "failed to remove repo"
     
-    elif [ "$DISTRO_FAMILY" == "fedora" ]; then
+    elif [ "$DISTRO_FAMILY" = "fedora" ]; then
         local repo=packages-microsoft-com
         local repo_name="$repo-$CHANNEL"
 
-        if [ "$CHANNEL" == "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+        if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
             repo_name=${repo}-slow-prod
         fi
 
@@ -963,22 +987,26 @@ remove_repo()
         fi
 
         yum -q repolist $repo_name | grep "$repo_name" &> /dev/null
-        if [ $? -eq 0 ]; then
+        cmd_status=$?
+        if [ $cmd_status -eq 0 ]; then
             run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
             run_quietly "find /etc/yum.repos.d -exec grep -lqR \"\[$repo_name\]\" '{}' \; -delete" "Unable to remove repo ($?)" $ERR_FAILED_REPO_CLEANUP
         else
             log_info "[i] nothing to clean up"
         fi
     
-    elif [ "$DISTRO_FAMILY" == "debian" ]; then
+    elif [ "$DISTRO_FAMILY" = "debian" ]; then
         if [ -f "/etc/apt/sources.list.d/microsoft-$CHANNEL.list" ]; then
             run_quietly "rm -f '/etc/apt/sources.list.d/microsoft-$CHANNEL.list'" "unable to remove repo list ($?)" $ERR_FAILED_REPO_CLEANUP
         fi
+    elif [ "$DISTRO_FAMILY" = "mariner" ]; then # in case of mariner, do not remove the repo
+        log_info "[i] nothing to clean up"
+        return
     else
         script_exit "unsupported distro for remove repo $DISTRO" $ERR_UNSUPPORTED_DISTRO
     fi
 
-    log_info "[v] clean-up done."
+    log_info "[v] Repo removed for $CHANNEL"
 }
 
 upgrade_mdatp()
@@ -990,7 +1018,7 @@ upgrade_mdatp()
     exit_if_mde_not_installed
 
     local VERSION_BEFORE_UPDATE=$(get_mdatp_version)
-    log_info "[>] Current $VERSION_BEFORE_UPDATE"
+    log_info "[i] Current $VERSION_BEFORE_UPDATE"
 
     local version=""
     if [ ! -z "$MDE_VERSION" ]; then
@@ -1003,19 +1031,19 @@ upgrade_mdatp()
     local current_version=$(echo "$VERSION_BEFORE_UPDATE" | sed 's/^[ \t\n]*//;s/[ \t\n]*$//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
     local requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
 
-    if [[ "$INSTALL_MODE" == "d" && "$current_version" -lt "$requested_version" ]]; then
+    if [[ "$INSTALL_MODE" = "d" && "$current_version" -lt "$requested_version" ]]; then
         script_exit "For downgrade the requested version[$MDE_VERSION] should be older than current version[$VERSION_BEFORE_UPDATE]"
-    elif [[ "$INSTALL_MODE" == "u" && ! -z "$MDE_VERSION" && "$current_version" -gt "$requested_version" ]]; then
+    elif [[ "$INSTALL_MODE" = "u" && ! -z "$MDE_VERSION" && "$current_version" -gt "$requested_version" ]]; then
         script_exit "For upgrade the requested version[$MDE_VERSION] should be newer than current version[$VERSION_BEFORE_UPDATE]. If you want to move to an older version instead, retry with --downgrade flag"
     fi
 
     run_quietly "$PKG_MGR_INVOKER $1 mdatp$version" "Unable to upgrade MDE $?" $ERR_INSTALLATION_FAILED
 
     local VERSION_AFTER_UPDATE=$(get_mdatp_version)
-    if [ "$VERSION_BEFORE_UPDATE" == "$VERSION_AFTER_UPDATE" ]; then
-        log_info "[>] MDE is already up to date."
+    if [ "$VERSION_BEFORE_UPDATE" = "$VERSION_AFTER_UPDATE" ]; then
+        log_info "[i] MDE is already up to date."
     else
-        log_info "[v] upgraded"
+        log_info "[v] Upgrade successful!" 
     fi
 }
 
@@ -1023,13 +1051,15 @@ remove_mdatp()
 {
     exit_if_mde_not_installed
 
+    log_info "[>] Removing MDE" 
+
     run_quietly "$PKG_MGR_INVOKER remove mdatp" "unable to remove MDE $?" $ERR_UNINSTALLATION_FAILED
 }
 
 rhel6_supported_version()
 {
     local SUPPORTED_RHEL6_VERSIONS=("6.7" "6.8" "6.9" "6.10")
-    for version in ${SUPPORTED_RHEL6_VERSIONS[@]}; do
+    for version in "${SUPPORTED_RHEL6_VERSIONS[@]}"; do
         if [[ "$1" == "$version" ]]; then 
             return 0
         fi
@@ -1040,10 +1070,10 @@ rhel6_supported_version()
 scale_version_id()
 {
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
-    if [ "$DISTRO_FAMILY" == "fedora" ]; then
+    if [ "$DISTRO_FAMILY" = "fedora" ]; then
         if [[ $VERSION == 6* ]]; then
             if rhel6_supported_version $VERSION; then # support versions 6.7+
-                if [ "$DISTRO" == "centos" ] || [ "$DISTRO" == "rhel" ]; then
+                if [ "$DISTRO" = "centos" ] || [ "$DISTRO" = "rhel" ]; then
                     SCALED_VERSION=6
                 else
                     script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
@@ -1052,9 +1082,9 @@ scale_version_id()
                script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
             fi
 
-        elif [[ $VERSION == 7* ]] || [ "$DISTRO" == "amzn" ]; then
+        elif [[ $VERSION == 7* ]] || [[ "$DISTRO" == "amzn" ]]; then
             SCALED_VERSION=7
-        elif [[ $VERSION == 8* ]] || [ "$DISTRO" == "fedora" ]; then
+        elif [[ $VERSION == 8* ]] || [[ "$DISTRO" == "fedora" ]]; then
             SCALED_VERSION=8
         elif [[ $VERSION == 9* ]]; then
             if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" ]]; then
@@ -1065,19 +1095,19 @@ scale_version_id()
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [ "$DISTRO_FAMILY" == "mariner" ]; then
+    elif [ "$DISTRO_FAMILY" = "mariner" ]; then
         if [[ $VERSION == 2* ]]; then
             SCALED_VERSION=2
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [ "$DISTRO_FAMILY" == "azurelinux" ]; then
+    elif [ "$DISTRO_FAMILY" = "azurelinux" ]; then
         if [[ $VERSION == 3* ]]; then
             SCALED_VERSION=3
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [ "$DISTRO_FAMILY" == "sles" ]; then
+    elif [ "$DISTRO_FAMILY" = "sles" ]; then
         if [[ $VERSION == 12* ]]; then
             SCALED_VERSION=12
         elif [[ $VERSION == 15* ]]; then
@@ -1085,13 +1115,13 @@ scale_version_id()
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [ $DISTRO == "ubuntu" ] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]] && [[ $VERSION != "24.04" ]]; then
+    elif [[ $DISTRO == "ubuntu" ]] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]] && [[ $VERSION != "24.04" ]]; then
         SCALED_VERSION=18.04
     else
         # no problems with 
         SCALED_VERSION=$VERSION
     fi
-    log_info "[>] scaled: $SCALED_VERSION"
+    log_info "[v] scaled: $SCALED_VERSION"
 }
 
 onboard_device()
@@ -1099,6 +1129,11 @@ onboard_device()
     log_info "[>] onboarding script: $ONBOARDING_SCRIPT"
 
     exit_if_mde_not_installed
+
+    if check_if_device_is_onboarded; then
+        log_info "[i] MDE already onboarded"
+        return
+    fi
 
     if [ ! -f $ONBOARDING_SCRIPT ]; then
         script_exit "error: onboarding script not found." $ERR_ONBOARDING_NOT_FOUND
@@ -1125,7 +1160,6 @@ onboard_device()
         fi
 
         # Run onboarding script
-        # echo "[>] running onboarding script..."
         sleep 1
         run_quietly "$PYTHON $ONBOARDING_SCRIPT" "error: python onboarding failed" $ERR_ONBOARDING_FAILED
 
@@ -1150,27 +1184,24 @@ onboard_device()
     fi
 
     # validate onboarding
+    local license_found
     license_found=false
 
     for ((i = 1; i <= 10; i++)); do
         sleep 15 # Delay for 15 seconds before checking the license status
 
-        # Check if "No license found" is present in the output of the mdatp health command
-        if [[ $(mdatp health --field org_id | grep "No license found" -c) -gt 0 ]]; then
-        # If "No license found" is present, set the license_found variable to false
-            license_found=false
-        else
-        # If "No license found" is not present, exit the loop
+        # Check if licensed field is true
+        if check_if_device_is_onboarded; then
             license_found=true
             break
         fi
     done
 
-    if [[ $license_found == false ]]; then
+    if [ "$license_found" = "false" ]; then
         script_exit "onboarding failed" $ERR_ONBOARDING_FAILED
     fi
 
-    log_info "[v] onboarded"
+    log_info "[v] Onboarded"
 }
 
 offboard_device()
@@ -1179,20 +1210,25 @@ offboard_device()
 
     exit_if_mde_not_installed
 
+    if ! check_if_device_is_onboarded; then
+        log_info "[i] MDE already offboarded"
+        return
+    fi
+
     if [ ! -f $OFFBOARDING_SCRIPT ]; then
         script_exit "error: offboarding script not found." $ERR_OFFBOARDING_NOT_FOUND
     fi
-
+    local cmd_status
     if [[ $OFFBOARDING_SCRIPT == *.py ]]; then
         # Make sure python is installed
         PYTHON=$(which python || which python3)
 
-        if [ $? -ne 0 ]; then
+        cmd_status=$?
+        if [ $cmd_status -ne 0 ]; then
             script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
         fi
 
         # Run offboarding script
-        # echo "[>] running offboarding script..."
         sleep 1
         run_quietly "$PYTHON $OFFBOARDING_SCRIPT" "error: python offboarding failed" $ERR_OFFBOARDING_FAILED
 
@@ -1204,22 +1240,36 @@ offboard_device()
     fi
 
     # validate offboarding
-    sleep 3
-    if [[ $(mdatp health --field org_id | grep "No license found" -c) -eq 0 ]]; then
-        script_exit "offboarding failed" $ERR_OFFBOARDING_FAILED
+    local license_found
+    license_found=true
+    for ((i = 1; i <= 10; i++)); do
+        sleep 15 # Delay for 15 seconds before checking the license status
+
+        # Check if "No license found" is present in the output of the mdatp health command
+        if ! check_if_device_is_onboarded; then
+        # If "No license found" is present, set the license_found variable to false
+            license_found=false
+            break
+        fi
+    done
+
+    if [ "$license_found" = "true" ]; then
+        script_exit "offboarding failed" $ERR_OFFBOARDING_FAILED "offboarding_failed"
     fi
-    log_info "[v] offboarded"
+
+    log_info "[v] Offboarded"
 }
 
 set_epp_to_passive_mode()
 {
     exit_if_mde_not_installed
 
-    if [[ $(mdatp health --field passive_mode_enabled | tail -1) == "false" ]]; then
+    if [[ $(get_health_field passive_mode_enabled) == "false" ]]; then
         log_info "[>] setting MDE/EPP to passive mode"
         retry_quietly 3 "mdatp config passive-mode --value enabled" "failed to set MDE to passive-mode" $ERR_PARAMETER_SET_FAILED
     else
-        log_info "[>] MDE/EPP already in passive mode"
+        log_info "[i] MDE/EPP already in passive mode"
+        return
     fi
     
     log_info "[v] passive mode set"
@@ -1229,11 +1279,12 @@ set_epp_to_rtp_mode()
 {
     exit_if_mde_not_installed
 
-    if [[ $(mdatp health --field real_time_protection_enabled | tail -1) == "false" ]]; then
+    if [[ $(get_health_field real_time_protection_enabled) == "false" ]]; then
         log_info "[>] setting MDE/EPP to real time protection mode"
         retry_quietly 3 "mdatp config real-time-protection --value enabled" "failed to set MDE to rtp-mode" $ERR_PARAMETER_SET_FAILED
     else
-        log_info "[>] MDE/EPP already in real time protection mode"
+        log_info "[i] MDE/EPP already in real time protection mode"
+        return
     fi
 
     log_info "[v] real time protection mode set"
@@ -1241,28 +1292,29 @@ set_epp_to_rtp_mode()
 
 set_device_tags()
 {
-    for t in "${tags[@]}"
-    do
-        set -- $t
-        if [ "$1" == "GROUP" ] || [ "$1" == "SecurityWorkspaceId" ] || [ "$1" == "AzureResourceId" ] || [ "$1" == "SecurityAgentId" ]; then
-            local set_tags=$(mdatp health --field edr_device_tags)
-            local tag_exists=0
+    for tag_key in "${!tags[@]}"; do
+        tag_value="${tags[$tag_key]}"
 
-            local result=$(echo "$set_tags" | grep -q "\"key\":\"$1\""; echo "$?")
+        local set_tags tag_exists result value
+        if [ "$tag_key" = "GROUP" ] || [ "$tag_key" = "SecurityWorkspaceId" ] || [ "$tag_key" = "AzureResourceId" ] || [ "$tag_key" = "SecurityAgentId" ]; then
+            set_tags=$(get_health_field edr_device_tags)
+            tag_exists=0
+
+            result=$(echo "$set_tags" | grep -q "\"key\":\"$tag_key\""; echo "$?")
             if [ $result -eq 0 ]; then
-                local value=$(echo "$set_tags" | grep -o "\"key\":\"$1\".*\"" | cut -d '"' -f 8)
-                if [ "$value" == "$2" ]; then
-                    log_warning "[>] tag $1 already set to value $2."
+                value=$(echo "$set_tags" | grep -o "\"key\":\"$tag_key\".*\"" | cut -d '"' -f 8)
+                if [ "$value" = "$tag_value" ]; then
+                    log_warning "[i] tag $tag_key already set to value $tag_value"
                     tag_exists=1
                 fi
             fi
 
             if [ $tag_exists -eq 0 ]; then
-                # echo "[>] setting tag: ($1, $2)"
-                retry_quietly 2 "mdatp edr tag set --name $1 --value $2" "failed to set tag" $ERR_PARAMETER_SET_FAILED
+                log_debug "[>] setting tag: ($tag_key, $tag_value)"
+                retry_quietly 2 "mdatp edr tag set --name $tag_key --value $tag_value" "failed to set tag" $ERR_PARAMETER_SET_FAILED
             fi
         else
-            script_exit "invalid tag name: $1. supported tags: GROUP, SecurityWorkspaceId, AzureResourceId and SecurityAgentId" $ERR_TAG_NOT_SUPPORTED
+            script_exit "invalid tag name: $tag_key. supported tags: GROUP, SecurityWorkspaceId, AzureResourceId and SecurityAgentId" $ERR_TAG_NOT_SUPPORTED
         fi
     done
     log_info "[v] tags set."   
@@ -1310,7 +1362,7 @@ do
         -c|--channel)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi        
+            fi
             CHANNEL=$2
             verify_channel
             shift 2
@@ -1338,7 +1390,7 @@ do
         -o|--onboard)
             if [ -z "$2" ]; then
                 script_exit "$1 option requires an argument" $ERR_INVALID_ARGUMENTS
-            fi        
+            fi
             ONBOARDING_SCRIPT=$2
             verify_privileges "onboard"
             shift 2
@@ -1364,7 +1416,7 @@ do
             PASSIVE_MODE=1
             shift 1
             ;;
-        --rtp-mode)
+        -a|--rtp-mode)
             verify_privileges "rtp-mode"
             RTP_MODE=1
             shift 1
@@ -1374,7 +1426,7 @@ do
                 script_exit "$1 option requires two arguments" $ERR_INVALID_ARGUMENTS
             fi
             verify_privileges "set-tag"
-            tags+=("$2 $3")
+            tags["$2"]="$3"
             shift 3
             ;;
         -w|--clean)
@@ -1442,10 +1494,20 @@ do
             ;;
         *)
             echo "use -h or --help for details"
-            script_exit "unknown argument" $ERR_INVALID_ARGUMENTS
+            script_exit "unknown argument $1" $ERR_INVALID_ARGUMENTS
             ;;
     esac
 done
+
+if command -v mdatp >/dev/null 2>&1; then 
+    INSTALLED_MDE_CHANNEL=$(get_mdatp_channel)
+    if [ "$INSTALLED_MDE_CHANNEL" != "$CHANNEL" ] && [ "$INSTALL_MODE" != 'c' ]; then
+        if [ ! -z "$CHANNEL" ]; then
+            echo "[i] MDE Installed with $INSTALLED_MDE_CHANNEL. Cannot switch channel to $CHANNEL. Channel is being set to $INSTALLED_MDE_CHANNEL. To update chanel remove and re-install MDE with $CHANNEL"
+        fi
+        CHANNEL=$INSTALLED_MDE_CHANNEL
+    fi
+fi
 
 if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${OFFBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && -z "${RTP_MODE}" && ${#tags[@]} -eq 0 ]]; then
     script_exit "no installation mode specified. Specify --help for help" $ERR_INVALID_ARGUMENTS
@@ -1453,7 +1515,7 @@ fi
 
 # Check for mutually exclusive options
 if [ ! -z "$PASSIVE_MODE" ] && [ ! -z "$RTP_MODE" ]; then
-    echo "Options -p and --rtp-mode are mutually exclusive."
+    echo "Options --passive-mode and --rtp-mode are mutually exclusive."
     usage
     exit 1
 fi
@@ -1461,12 +1523,6 @@ fi
 if [[ "$INSTALL_MODE" == 'i' && -z "$CHANNEL" ]]; then
     log_info "[i] Specify the install channel using "--channel" argument. If not provided, mde will be installed for prod by default. Expected channel values: prod, insiders-slow, insiders-fast."
     CHANNEL=prod
-fi
-
-if [[ ! -z "$CHANNEL" && ("$INSTALL_MODE" == 'u' || "$INSTALL_MODE" == 'd') ]]; then
-    log_info "[i] Switching channel during upgrade/downgrade is not supported. Please first remove MDE using --remove option."
-    usage
-    exit 1
 fi
 
 if [[ "$INSTALL_MODE" == 'c' && -z "$CHANNEL" ]]; then
@@ -1504,66 +1560,69 @@ scale_version_id
 set_package_manager
 
 ### Act according to arguments ###
-if [ "$INSTALL_MODE" == "i" ]; then
+if [ "$INSTALL_MODE" = "i" ]; then
 
-    if [ -z $SKIP_CONFLICTING_APPS ]; then
-        verify_conflicting_applications
+    if ! skip_if_mde_installed; then
+
+        if [ -z $SKIP_CONFLICTING_APPS ]; then
+            verify_conflicting_applications
+        fi
+
+        if [ "$DISTRO_FAMILY" = "debian" ]; then
+            install_on_debian
+        elif [ "$DISTRO_FAMILY" = "fedora" ]; then
+            install_on_fedora
+        elif [ "$DISTRO_FAMILY" = "mariner" ]; then
+            install_on_mariner
+        elif [ "$DISTRO_FAMILY" = "azurelinux" ]; then
+            install_on_azurelinux
+        elif [ "$DISTRO_FAMILY" = "sles" ]; then
+            install_on_sles
+        else
+            script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
+        fi
     fi
-    
-    if [ "$DISTRO_FAMILY" == "debian" ]; then
-        install_on_debian
-    elif [ "$DISTRO_FAMILY" == "fedora" ]; then
-        install_on_fedora
-    elif [ "$DISTRO_FAMILY" == "mariner" ]; then
-        install_on_mariner
-    elif [ "$DISTRO_FAMILY" == "azurelinux" ]; then
-        install_on_azurelinux
-    elif [ "$DISTRO_FAMILY" = "sles" ]; then
-        install_on_sles
-    else
-        script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
-    fi
 
-elif [ "$INSTALL_MODE" == "u" ]; then
+elif [ "$INSTALL_MODE" = "u" ]; then
 
-    if [ "$DISTRO_FAMILY" == "debian" ]; then
+    if [ "$DISTRO_FAMILY" = "debian" ]; then
         upgrade_mdatp "$ASSUMEYES install --only-upgrade"
-    elif [ "$DISTRO_FAMILY" == "fedora" ]; then
+    elif [ "$DISTRO_FAMILY" = "fedora" ]; then
         upgrade_mdatp "$ASSUMEYES update"
-    elif [ "$DISTRO_FAMILY" == "mariner" ]; then
+    elif [ "$DISTRO_FAMILY" = "mariner" ]; then
         upgrade_mdatp "$ASSUMEYES update"
-    elif [ "$DISTRO_FAMILY" == "azurelinux" ]; then
+    elif [ "$DISTRO_FAMILY" = "azurelinux" ]; then
         upgrade_mdatp "$ASSUMEYES update"
-    elif [ "$DISTRO_FAMILY" == "sles" ]; then
+    elif [ "$DISTRO_FAMILY" = "sles" ]; then
         upgrade_mdatp "up $ASSUMEYES"
     else    
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
-elif [ "$INSTALL_MODE" == "d" ]; then
+elif [ "$INSTALL_MODE" = "d" ]; then
 
-    if [ "$DISTRO_FAMILY" == "debian" ]; then
+    if [ "$DISTRO_FAMILY" = "debian" ]; then
         upgrade_mdatp "$ASSUMEYES install --allow-downgrades"
-    elif [ "$DISTRO_FAMILY" == "fedora" ]; then
+    elif [ "$DISTRO_FAMILY" = "fedora" ]; then
         upgrade_mdatp "$ASSUMEYES downgrade"
-    elif [ "$DISTRO_FAMILY" == "mariner" ]; then
+    elif [ "$DISTRO_FAMILY" = "mariner" ]; then
         upgrade_mdatp "$ASSUMEYES downgrade"
-    elif [ "$DISTRO_FAMILY" == "azurelinux" ]; then
+    elif [ "$DISTRO_FAMILY" = "azurelinux" ]; then
         upgrade_mdatp "$ASSUMEYES downgrade"
-    elif [ "$DISTRO_FAMILY" == "sles" ]; then
+    elif [ "$DISTRO_FAMILY" = "sles" ]; then
         upgrade_mdatp "install --oldpackage $ASSUMEYES"
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
 
-elif [ "$INSTALL_MODE" == "r" ]; then
+elif [ "$INSTALL_MODE" = "r" ]; then
     if remove_mdatp; then
-        script_exit "[v] removed MDE" $SUCCESS
+        script_exit "removed MDE" $SUCCESS
     fi
 
-elif [ "$INSTALL_MODE" == "c" ]; then
+elif [ "$INSTALL_MODE" = "c" ]; then
     if remove_repo; then
-        script_exit "[v] removed repo" $SUCCESS
+        script_exit "removed repo" $SUCCESS
     fi
 fi
 
