@@ -15,7 +15,7 @@ chmod +x /mde_installer.sh
 
 ```bash
 ❯ ./mde_installer.sh --help
-mde_installer.sh v0.7.0
+mde_installer.sh v0.8.0
 usage: basename ./mde_installer.sh [OPTIONS]
 Options:
  -c|--channel         specify the channel(insiders-fast / insiders-slow / prod) from which you want to install. Default: prod
