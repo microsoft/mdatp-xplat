@@ -1187,8 +1187,8 @@ onboard_device()
     local license_found
     license_found=false
 
-    for ((i = 1; i <= 10; i++)); do
-        sleep 15 # Delay for 15 seconds before checking the license status
+    for ((i = 1; i <= 15; i++)); do
+        sleep 10 # Delay for 10 seconds before checking the license status
 
         # Check if licensed field is true
         if check_if_device_is_onboarded; then
@@ -1242,12 +1242,11 @@ offboard_device()
     # validate offboarding
     local license_found
     license_found=true
-    for ((i = 1; i <= 10; i++)); do
-        sleep 15 # Delay for 15 seconds before checking the license status
+    for ((i = 1; i <= 15; i++)); do
+        sleep 10 # Delay for 10 seconds before checking the license status
 
-        # Check if "No license found" is present in the output of the mdatp health command
+        # Check if licensed field is false
         if ! check_if_device_is_onboarded; then
-        # If "No license found" is present, set the license_found variable to false
             license_found=false
             break
         fi
