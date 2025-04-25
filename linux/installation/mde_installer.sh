@@ -413,9 +413,6 @@ verify_mdatp_installed()
                 local current_version requested_version
                 current_version=$(echo "$current_mdatp_version" | sed 's/"//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
                 requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
-                echo "[$current_mdatp_version]"
-                echo "[$current_version]"
-                echo "[$requested_version]"
 
                 if [[ "$current_version" -lt "$requested_version" ]]; then
                     log_info "[i] Found MDE version $current_mdatp_version already installed and onboarded with org_id $org_id. To install newer version please use --upgrade option"
