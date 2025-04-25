@@ -1187,7 +1187,7 @@ onboard_device()
     local license_found
     license_found=false
 
-    for ((i = 1; i <= 15; i++)); do
+    for ((i = 1; i <= 8; i++)); do
         sleep 10 # Delay for 10 seconds before checking the license status
 
         # Check if licensed field is true
