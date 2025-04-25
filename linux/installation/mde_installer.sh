@@ -1236,7 +1236,7 @@ offboard_device()
     for ((i = 1; i <= 15; i++)); do
         sleep 10 # Delay for 10 seconds before checking the license status
 
-         # Check if licensed field is false
+        # Check if licensed field is false
         if ! check_if_device_is_onboarded; then
             license_found=false
             break
