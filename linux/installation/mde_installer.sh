@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.8.0" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="0.8.1" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -732,7 +732,6 @@ install_on_mariner()
     local packages=
     local pkg_version=
     local repo=
-    local effective_distro=
 
     # To use config-manager plugin, install dnf-plugins-core package
     run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
@@ -770,7 +769,6 @@ install_on_azurelinux()
     local packages=
     local pkg_version=
     local repo=
-    local effective_distro=
 
     # To use config-manager plugin, install dnf-plugins-core package
     run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
@@ -837,41 +835,29 @@ install_on_fedora()
         repo_name=packages-microsoft-com-insiders-slow
     fi
 
-    if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "amzn" ]; then
+    if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ]; then
         effective_distro="rhel"
     elif [ "$DISTRO" = "almalinux" ]; then
         effective_distro="alma"
+    elif [ "$DISTRO" = "amzn" ]; then
+        effective_distro="amazonlinux"
     else
         effective_distro="$DISTRO"
     fi
 
-    if [ "$ARCHITECTURE" = "aarch64" ]; then
-        if [ "$DISTRO" = "amzn" ]; then
-            effective_distro="amazonlinux"
-            SCALED_VERSION=$VERSION
-        fi
-        log_info "[>] configuring the repository for ARM architecture"
-        run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
-
-        ### Fetch the gpg key ###
-        run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-        run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+    # Configure repository if it does not exist
+    yum -q repolist $repo_name | grep "$repo_name"
+    found_repo=$?
+    if [ $found_repo -eq 0 ]; then
+        log_info "[i] repository already configured"
     else
-
-        # Configure repository if it does not exist
-        yum -q repolist $repo_name | grep "$repo_name"
-        found_repo=$?
-        if [ $found_repo -eq 0 ]; then
-            log_info "[i] repository already configured"
-        else
-            log_info "[>] configuring the repository"
-            run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
-        fi
-
-        ### Fetch the gpg key ###
-        run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-        run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+        log_info "[>] configuring the repository"
+        run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
     fi
+
+    ### Fetch the gpg key ###
+    run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+    run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
 
     local version=""
     if [ ! -z "$MDE_VERSION" ]; then
@@ -1082,7 +1068,7 @@ scale_version_id()
                script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
             fi
 
-        elif [[ $VERSION == 7* ]] || [[ "$DISTRO" == "amzn" ]]; then
+        elif [[ $VERSION == 7* ]]; then
             SCALED_VERSION=7
         elif [[ $VERSION == 8* ]] || [[ "$DISTRO" == "fedora" ]]; then
             SCALED_VERSION=8
@@ -1092,6 +1078,8 @@ scale_version_id()
             else
                 SCALED_VERSION=9.0
             fi
+        elif [[ $DISTRO == "amzn" ]] &&  [[ $VERSION == "2" || $VERSION == "2023" ]]; then # For Amazon Linux the scaled version is 2023 or 2
+            SCALED_VERSION=$VERSION
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
