@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.8.1" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="0.8.2" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -457,12 +457,12 @@ verify_conflicting_applications()
     # find known security services
     # | Vendor      | Service       |
     # |-------------|---------------|
-    # | CrowdStrike | falcon-sensor |
+    # | CrowdStrike | falcon-sensor | (removed in 0.8.2)
     # | CarbonBlack | cbsensor      |
     # | McAfee      | MFEcma        |
     # | Trend Micro | ds_agent      |
 
-    local conflicting_services=('ds_agent' 'falcon-sensor' 'cbsensor' 'MFEcma')
+    local conflicting_services=('ds_agent' 'cbsensor' 'MFEcma')
     for t in "${conflicting_services[@]}"
     do
         set -- $t
