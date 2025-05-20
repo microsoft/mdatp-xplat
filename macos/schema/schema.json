@@ -418,18 +418,6 @@
                     "minimum": 1,
                     "maximum": 30
                 },
-                "proxy": {
-                    "title": "Configure proxy for mdatp",
-                    "type": "string",
-                    "propertyOrder": 70,
-                    "description": "Configure proxy for mdatp",
-                    "links": [
-                        {
-                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#cloud-delivered-protection-preferences", 
-                            "rel": "More information"
-                        }
-                    ]
-                },
                 "definitionUpdatesInterval": {
                     "title": "Security intelligence update interval (in seconds)",
                     "type": "number",
@@ -437,13 +425,25 @@
                     "description": "Specifies the time interval (in seconds) after which security intelligence updates will be checked.",
                     "links": [
                         {
-                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#cloud-delivered-protection-preferences", 
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#security-intelligence-update-interval-in-seconds", 
                             "rel": "More information"
                         }
                     ],
                     "default": 28800,
                     "minimum": 60,
                     "maximum": 86400
+                },
+                "proxy": {
+                    "title": "Set proxy for MDE communication",
+                    "type": "string",
+                    "propertyOrder": 70,
+                    "description": "Configure proxy for all MDE cloud communication. If not set, the system-wide proxy is used.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#proxy-for-mde-communication", 
+                            "rel": "More information"
+                        }
+                    ]
                 }
             }
         },
