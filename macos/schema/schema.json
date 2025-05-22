@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.24122.0005",
+    "__version": "101.25032.0006",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
@@ -404,7 +404,6 @@
                     "enum": ["normal", "moderate", "high", "high_plus", "zero_tolerance"]
                 },
                  "definitionUpdateDue": {
-                    "default": "7",
                     "title": "Security intelligence update due (in days)",
                     "type": "number",
                     "propertyOrder": 60,
@@ -418,6 +417,33 @@
                     "default": 7,
                     "minimum": 1,
                     "maximum": 30
+                },
+                "definitionUpdatesInterval": {
+                    "title": "Security intelligence update interval (in seconds)",
+                    "type": "number",
+                    "propertyOrder": 70,
+                    "description": "Specifies the time interval (in seconds) after which security intelligence updates will be checked.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#security-intelligence-update-interval-in-seconds", 
+                            "rel": "More information"
+                        }
+                    ],
+                    "default": 28800,
+                    "minimum": 60,
+                    "maximum": 86400
+                },
+                "proxy": {
+                    "title": "Set proxy for MDE communication",
+                    "type": "string",
+                    "propertyOrder": 80,
+                    "description": "Configure proxy for all MDE cloud communication. If not set, the system-wide proxy is used.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#proxy-for-defender-for-endpoint-communication", 
+                            "rel": "More information"
+                        }
+                    ]
                 }
             }
         },
