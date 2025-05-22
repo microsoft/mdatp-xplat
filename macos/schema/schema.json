@@ -440,7 +440,7 @@
                     "description": "Configure proxy for all MDE cloud communication. If not set, the system-wide proxy is used.",
                     "links": [
                         {
-                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#proxy-for-mde-communication", 
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#proxy-for-defender-for-endpoint-communication", 
                             "rel": "More information"
                         }
                     ]
