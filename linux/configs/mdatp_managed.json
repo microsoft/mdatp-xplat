@@ -107,6 +107,9 @@
           "possible values": "required(default), optional",
         "diagnosticLevel":"optional",
 
+          "info": "set proxy for cloud communication",
+        "proxy": "http://proxy.server:port/",
+
           "info": "determines how aggressive Defender for Endpoint is in blocking and scanning suspicious files.",
           "info": "If this setting is on, Defender for Endpoint is more aggressive when identifying suspicious files to block and scan;",
           "info": " otherwise, it's less aggressive and therefore blocks and scans with less frequency.",
