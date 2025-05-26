@@ -23,26 +23,6 @@
           "possible values": "merge(default), admin_only ",
         "exclusionsMergePolicy":"merge",    
 
-          "info": "Entities that have been excluded from the scan",
-        "exclusions":[
-            {
-                  "info": " exclude content from the scan by full file path",
-                "$type":"excludedPath",
-                  "possible values": "false(default), true",
-                "isDirectory":false,
-                "path":"/var/log/system.log"
-            },
-            {
-                "$type":"excludedFileExtension",
-                "extension":"pdf"
-            },
-            {
-                  "info": " Specifies a process for which all file activity is excluded from scanning",
-                "$type":"excludedFileName",
-                  "possible values": "name (for example, cat) or full path (for example, /bin/cat)",
-                "name":"cat"
-            }
-        ],
           "info": "whether to scan mount point marked as noexec as part of RTP",
           "possible values": "unmute(default)(scan all noexec mount poiunt), mute",
         "nonExecMountPolicy":"mute",
@@ -52,7 +32,7 @@
 
           "info": "whether to computes hashes for files MDE AV scans",
           "possible values": "false(default), true",
-        "enableFileHashComputation":true,
+        "enableFileHashComputation":false,
 
           "info": "threats (identified by their name) that aren't blocked by the product and are instead allowed to run",
         "allowedThreats": ["EICAR-Test-File"],
@@ -143,68 +123,13 @@
     },
       "info": "to enable certain advanced features",
     "features":{
-          "info": " whether module load events (file open events on shared libraries) are monitored",
-          "possible values":    "disabled (default), enabled",
-        "moduleLoad":"disabled",
-
           "info": " whether infected processes that open or load any infected file gets remediated or not",
           "possible values":    "disabled (default), enabled",
         "remediateInfectedFile":"disabled",
-        "supplementarySensorConfigurations":{
-              "info": " whether file modify permissions events (chmod) are monitored",
-              "possible values": "disabled (default), enabled",
-            "enableFilePermissionEvents":"disabled",
-
-              "info": " whether file modify ownership events (chown) are monitored",
-              "possible values": "disabled (default), enabled",
-            "enableFileOwnershipEvents":"disabled",
-
-              "info": " whether network socket events involving creation of raw sockets / packet sockets, or setting socket option, are monitored",
-              "info": " This feature is applicable only when Behavior Monitoring is enabled",
-              "possible values": "disabled (default), enabled",
-            "enableRawSocketEvent":"disabled",
-
-              "info": " whether boot loader events are monitored and scanned",
-              "info": " This feature is applicable only when Behavior Monitoring is enabled",
-              "possible values": "disabled (default), enabled",
-            "enableBootLoaderCalls":"disabled",
-
-              "info": " whether ptrace events are monitored and scanned",
-              "info": " This feature is applicable only when Behavior Monitoring is enabled",
-              "possible values": "disabled (default), enabled",
-            "enableProcessCalls":"disabled",
-
-              "info": " whether pseudofs events are monitored and scanned",
-              "info": " This feature is applicable only when Behavior Monitoring is enabled",
-              "possible values": "disabled (default), enabled",
-            "enablePseudofsCalls":"diabled",
-
-              "info": " whether module load events are monitored using eBPF and scanned",
-              "info": " This feature is applicable only when Behavior Monitoring is enabled",
-              "possible values": "disabled (default), enabled",
-            "enableEbpfModuleLoadEvents":"disabled",
-
-              "info": " whether open events from procfs are monitored by eBPF",
-              "info": " This feature is applicable only when Behavior Monitoring is enabled",
-              "possible values": "disabled (default), enabled",
-            "enableOtherFsOpenEvents":"disabled",
-
-              "info": " whether events are enriched with metadata at source in eBPF",
-              "possible values": "disabled (default), enabled",
-            "enableEbpfSourceEnrichment":"disabled",
-
-              "info": " whether metadata of events being scanned by the antivirus engine are cached or not",
-              "possible values": "disabled (default), enabled",
-            "enableAntivirusEngineCache":"disabled",
-
-              "info": " whether suspicious events from Antivirus are reported to EDR",
-              "possible values": "disabled (default), enabled",
-            "sendLowfiEvents":"disabled"
-        },
         "ebpfSupplementaryEventProvider":"enabled",
         "offlineDefinitionUpdateVerifySig": "disabled"
     },
-      "info": "This is a preview feature. For these to be effective, Network Protection has to be turned on",
+      "info": "This is a preview feature. For these to be effective, Network Protection can only be enabled by Microsoft from backend, please reach back",
     "networkProtection":{
           "info": "Action to take when coming across a threat of the type specified",
           "possible values": "disabled (default), audit, block ",
