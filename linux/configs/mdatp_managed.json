@@ -1,227 +1,227 @@
 {
-	"antivirusEngine":{
-         "possible values": "real_time, on_demand, passive",
-	   "enforcementLevel":"real_time",
+    "antivirusEngine":{
+          "possible values": "real_time, on_demand, passive",
+        "enforcementLevel":"real_time",
 
           "info": "only works when the enforcement level is set to real_time",
           "possible values": "disabled(default), enabled",
-       "behaviorMonitoring" : "disabled",
+        "behaviorMonitoring" : "disabled",
 
           "info": "only works when the enforcement level is set to real_time",
           "possible values": "true(default),false ",
-	   "scanAfterDefinitionUpdate":true,
+        "scanAfterDefinitionUpdate":true,
 
           "info": "whether to scan archives during on-demand antivirus scans",
           "possible values": "true(default),false",
-	   "scanArchives":true,
+        "scanArchives":true,
 
           "info": "degree of parallelism for on-demand scans",
           "possible values": "between 2(default) and 64",
-	   "maximumOnDemandScanThreads":2,
+        "maximumOnDemandScanThreads":2,
 
           "info": " which epp exclusion policy to apply. merge-> combine Microsoft Defender portal value and user defined. admin_only -> combine Microsoft Defender portal value",
           "possible values": "merge(default), admin_only ",
-	   "exclusionsMergePolicy":"merge",	
+        "exclusionsMergePolicy":"merge",    
 
           "info": "Entities that have been excluded from the scan",
-       "exclusions":[
-           {
+        "exclusions":[
+            {
                   "info": " exclude content from the scan by full file path",
-               "$type":"excludedPath",
+                "$type":"excludedPath",
                   "possible values": "false(default), true",
-               "isDirectory":false,
-               "path":"/var/log/system.log"
-           },
-           {
-               "$type":"excludedFileExtension",
-               "extension":"pdf"
-           },
-           {
+                "isDirectory":false,
+                "path":"/var/log/system.log"
+            },
+            {
+                "$type":"excludedFileExtension",
+                "extension":"pdf"
+            },
+            {
                   "info": " Specifies a process for which all file activity is excluded from scanning",
-               "$type":"excludedFileName",
+                "$type":"excludedFileName",
                   "possible values": "name (for example, cat) or full path (for example, /bin/cat)",
-               "name":"cat"
-           }
-       ],
+                "name":"cat"
+            }
+        ],
           "info": "whether to scan mount point marked as noexec as part of RTP",
           "possible values": "unmute(default)(scan all noexec mount poiunt), mute",
-       "nonExecMountPolicy":"mute",
+        "nonExecMountPolicy":"mute",
 
           "info": "exclude filesystems from RTP scan. Doesn't exclude from Quick, Full, and custom scans",
-       "unmonitoredFilesystems": ["Fuse"],
+        "unmonitoredFilesystems": ["Fuse"],
 
           "info": "whether to computes hashes for files MDE AV scans",
           "possible values": "false(default), true",
-       "enableFileHashComputation":true,
+        "enableFileHashComputation":true,
 
           "info": "threats (identified by their name) that aren't blocked by the product and are instead allowed to run",
-       "allowedThreats": ["EICAR-Test-File"],
+        "allowedThreats": ["EICAR-Test-File"],
 
           "info": "Restricts the actions that the local user of a device can take when threats are detected",
           "possible values": "array of string from: allow (restricts users from allowing threats), restore (restricts users from restoring threats from the quarantine)",
-	   "disallowedThreatActions":[ "allow" ],
+        "disallowedThreatActions":[ "allow" ],
 
           "info": "control how certain threat types are handled",
-	   "threatTypeSettings":[
-		{
-              "info": "Type of threat for which the behavior is configured",
-              "possible values": "potentially_unwanted_application, archive_bomb",
-		   "key":"potentially_unwanted_application",
-              "info": "Action to take when coming across a threat of the type specified",
-              "possible values": "audit(default)(threat is only logged), block(block the threat and notify), off(neither logged not blocked)",
-		   "value":"block"
-		},
-		{
-		   "key":"archive_bomb",
-		   "value":"audit"
-		}
-	 ],
+        "threatTypeSettings":[
+            {
+                  "info": "Type of threat for which the behavior is configured",
+                  "possible values": "potentially_unwanted_application, archive_bomb",
+                "key":"potentially_unwanted_application",
+                  "info": "Action to take when coming across a threat of the type specified",
+                  "possible values": "audit(default)(threat is only logged), block(block the threat and notify), off(neither logged not blocked)",
+                "value":"block"
+            },
+            {
+                "key":"archive_bomb",
+                "value":"audit"
+            }
+        ],
           "info": " which threatTypeSettings policy to apply. merge-> combine Microsoft Defender portal value and user defined. admin_only -> combine Microsoft Defender portal value",
           "possible values": "merge(default), admin_only",
-	   "threatTypeSettingsMergePolicy":"merge",
+        "threatTypeSettingsMergePolicy":"merge",
 
           "info": " number of days that results are retained in the scan history on the device including quarantined files",
           "possible values": "between 1 and 180. default -> 90",
-	   "scanResultsRetentionDays": 90,
+        "scanResultsRetentionDays": 90,
 
           "info": " maximum number of entries to keep in the scan history",
           "possible values": "between 5000 and 15000. default -> 10000",
-	   "scanHistoryMaximumItems": 5000
-   },
-	"exclusionSettings": {
-           "info": " which epp exclusion policy to apply. merge-> combine Microsoft Defender portal value and user defined. admin_only -> combine Microsoft Defender portal value",
-           "possible values": "merge(default), admin_only",
+        "scanHistoryMaximumItems": 5000
+    },
+    "exclusionSettings": {
+          "info": " which epp exclusion policy to apply. merge-> combine Microsoft Defender portal value and user defined. admin_only -> combine Microsoft Defender portal value",
+          "possible values": "merge(default), admin_only",
         "mergePolicy":"admin_only",
-           "info": "Entities that need to be excluded can be specified by full paths, extensions, or file names",
-		"exclusions":[
-			{
-                   "info": " exclude content from the scan by full file path",
-				"$type": "excludedPath",
-                   "possible values": "false(default), true",
-				"isDirectory": true,
-				"path": "/foo/bar",
-				"scopes":["epp","global"]
-			},
+          "info": "Entities that need to be excluded can be specified by full paths, extensions, or file names",
+        "exclusions":[
             {
-                   "info": "exclude content from the scan by file extension",
+                  "info": " exclude content from the scan by full file path",
+                "$type": "excludedPath",
+                  "possible values": "false(default), true",
+                "isDirectory": true,
+                "path": "/foo/bar",
+                "scopes":["epp","global"]
+            },
+            {
+                  "info": "exclude content from the scan by file extension",
                 "$type":"excludedFileExtension",
                 "extension":".pdf",
                 "scopes": [ "epp" ]
             },
-			{
-                   "info": " Specifies a process for which all file activity is excluded from scanning",
-			   "$type": "excludedFileName",
-                   "possible values": "name (for example, cat) or full path (for example, /bin/cat)",
-               "name":"cat",
-			   "scopes":["epp","global"]
-			}
-		]
-	},
+            {
+                  "info": " Specifies a process for which all file activity is excluded from scanning",
+                "$type": "excludedFileName",
+                  "possible values": "name (for example, cat) or full path (for example, /bin/cat)",
+                "name":"cat",
+                "scopes":["epp","global"]
+            }
+        ]
+    },
       "info": "configure the cloud-driven protection feature",
-   "cloudService":{
-         "info": "whether cloud-delivered protection is enabled on the device or not",
-         "possible values": "true(default), false",
-	  "enabled":true,
+    "cloudService":{
+          "info": "whether cloud-delivered protection is enabled on the device or not",
+          "possible values": "true(default), false",
+        "enabled":true,
 
-         "info": "determines the level of diagnostics sent by the product to Microsoft",
-         "possible values": "required(default), optional",
-	  "diagnosticLevel":"optional",
+          "info": "determines the level of diagnostics sent by the product to Microsoft",
+          "possible values": "required(default), optional",
+        "diagnosticLevel":"optional",
 
           "info": "determines how aggressive Defender for Endpoint is in blocking and scanning suspicious files.",
           "info": "If this setting is on, Defender for Endpoint is more aggressive when identifying suspicious files to block and scan;",
           "info": " otherwise, it's less aggressive and therefore blocks and scans with less frequency.",
           "possible values": "normal (default), moderate(Delivers verdict only for high confidence detections), high(Aggressively blocks unknown files), high_plus(Aggressively blocks unknown files and applies additional protection measures), zero_tolerance(Blocks all unknown programs)",
-	  "cloudBlockLevel":"normal",
+        "cloudBlockLevel":"normal",
 
-         "info": "whether suspicious samples (that are likely to contain threats) are sent to Microsoft",
-         "possible values": "none(no suspicious samples are submitteda), safe (default)(only suspicious samples that don't contain personally identifiable information (PII) are submitted), all (all suspicious samples are submitted to Microsoft)",
-      "automaticSampleSubmissionConsent": "safe",
+          "info": "whether suspicious samples (that are likely to contain threats) are sent to Microsoft",
+          "possible values": "none(no suspicious samples are submitteda), safe (default)(only suspicious samples that don't contain personally identifiable information (PII) are submitted), all (all suspicious samples are submitted to Microsoft)",
+        "automaticSampleSubmissionConsent": "safe",
 
-         "info": "whether security intelligence updates are installed automatically",
-         "possible values":	"true (default), false",
-	  "automaticDefinitionUpdateEnabled":true
-	},
-       "info": "to enable certain advanced features",
+          "info": "whether security intelligence updates are installed automatically",
+          "possible values":    "true (default), false",
+        "automaticDefinitionUpdateEnabled":true
+    },
+      "info": "to enable certain advanced features",
     "features":{
           "info": " whether module load events (file open events on shared libraries) are monitored",
-          "possible values":	"disabled (default), enabled",
-      "moduleLoad":"disabled",
+          "possible values":    "disabled (default), enabled",
+        "moduleLoad":"disabled",
 
           "info": " whether infected processes that open or load any infected file gets remediated or not",
-          "possible values":	"disabled (default), enabled",
-      "remediateInfectedFile":"disabled",
-      "supplementarySensorConfigurations":{
-           "info": " whether file modify permissions events (chmod) are monitored",
-           "possible values": "disabled (default), enabled",
-        "enableFilePermissionEvents":"disabled",
+          "possible values":    "disabled (default), enabled",
+        "remediateInfectedFile":"disabled",
+        "supplementarySensorConfigurations":{
+              "info": " whether file modify permissions events (chmod) are monitored",
+              "possible values": "disabled (default), enabled",
+            "enableFilePermissionEvents":"disabled",
 
-           "info": " whether file modify ownership events (chown) are monitored",
-           "possible values": "disabled (default), enabled",
-        "enableFileOwnershipEvents":"disabled",
+              "info": " whether file modify ownership events (chown) are monitored",
+              "possible values": "disabled (default), enabled",
+            "enableFileOwnershipEvents":"disabled",
 
-           "info": " whether network socket events involving creation of raw sockets / packet sockets, or setting socket option, are monitored",
-           "info": " This feature is applicable only when Behavior Monitoring is enabled",
-           "possible values": "disabled (default), enabled",
-        "enableRawSocketEvent":"disabled",
+              "info": " whether network socket events involving creation of raw sockets / packet sockets, or setting socket option, are monitored",
+              "info": " This feature is applicable only when Behavior Monitoring is enabled",
+              "possible values": "disabled (default), enabled",
+            "enableRawSocketEvent":"disabled",
 
-           "info": " whether boot loader events are monitored and scanned",
-           "info": " This feature is applicable only when Behavior Monitoring is enabled",
-           "possible values": "disabled (default), enabled",
-        "enableBootLoaderCalls":"disabled",
+              "info": " whether boot loader events are monitored and scanned",
+              "info": " This feature is applicable only when Behavior Monitoring is enabled",
+              "possible values": "disabled (default), enabled",
+            "enableBootLoaderCalls":"disabled",
 
-           "info": " whether ptrace events are monitored and scanned",
-           "info": " This feature is applicable only when Behavior Monitoring is enabled",
-           "possible values": "disabled (default), enabled",
-        "enableProcessCalls":"disabled",
+              "info": " whether ptrace events are monitored and scanned",
+              "info": " This feature is applicable only when Behavior Monitoring is enabled",
+              "possible values": "disabled (default), enabled",
+            "enableProcessCalls":"disabled",
 
-           "info": " whether pseudofs events are monitored and scanned",
-           "info": " This feature is applicable only when Behavior Monitoring is enabled",
-           "possible values": "disabled (default), enabled",
-        "enablePseudofsCalls":"diabled",
+              "info": " whether pseudofs events are monitored and scanned",
+              "info": " This feature is applicable only when Behavior Monitoring is enabled",
+              "possible values": "disabled (default), enabled",
+            "enablePseudofsCalls":"diabled",
 
-           "info": " whether module load events are monitored using eBPF and scanned",
-           "info": " This feature is applicable only when Behavior Monitoring is enabled",
-           "possible values": "disabled (default), enabled",
-        "enableEbpfModuleLoadEvents":"disabled",
+              "info": " whether module load events are monitored using eBPF and scanned",
+              "info": " This feature is applicable only when Behavior Monitoring is enabled",
+              "possible values": "disabled (default), enabled",
+            "enableEbpfModuleLoadEvents":"disabled",
 
-           "info": " whether open events from procfs are monitored by eBPF",
-           "info": " This feature is applicable only when Behavior Monitoring is enabled",
-           "possible values": "disabled (default), enabled",
-        "enableOtherFsOpenEvents":"disabled",
+              "info": " whether open events from procfs are monitored by eBPF",
+              "info": " This feature is applicable only when Behavior Monitoring is enabled",
+              "possible values": "disabled (default), enabled",
+            "enableOtherFsOpenEvents":"disabled",
 
-           "info": " whether events are enriched with metadata at source in eBPF",
-           "possible values": "disabled (default), enabled",
-        "enableEbpfSourceEnrichment":"disabled",
+              "info": " whether events are enriched with metadata at source in eBPF",
+              "possible values": "disabled (default), enabled",
+            "enableEbpfSourceEnrichment":"disabled",
 
-           "info": " whether metadata of events being scanned by the antivirus engine are cached or not",
-           "possible values": "disabled (default), enabled",
-        "enableAntivirusEngineCache":"disabled",
+              "info": " whether metadata of events being scanned by the antivirus engine are cached or not",
+              "possible values": "disabled (default), enabled",
+            "enableAntivirusEngineCache":"disabled",
 
-           "info": " whether suspicious events from Antivirus are reported to EDR",
-           "possible values": "disabled (default), enabled",
-        "sendLowfiEvents":"disabled"
-      },
-      "ebpfSupplementaryEventProvider":"enabled",
-      "offlineDefinitionUpdateVerifySig": "disabled"
-   },
+              "info": " whether suspicious events from Antivirus are reported to EDR",
+              "possible values": "disabled (default), enabled",
+            "sendLowfiEvents":"disabled"
+        },
+        "ebpfSupplementaryEventProvider":"enabled",
+        "offlineDefinitionUpdateVerifySig": "disabled"
+    },
       "info": "This is a preview feature. For these to be effective, Network Protection has to be turned on",
-   "networkProtection":{
-        "info": "Action to take when coming across a threat of the type specified",
-        "possible values": "disabled (default), audit, block ",
-     "enforcementLevel":"disabled",
+    "networkProtection":{
+          "info": "Action to take when coming across a threat of the type specified",
+          "possible values": "disabled (default), audit, block ",
+        "enforcementLevel":"disabled",
 
-        "info": " whether ICMP events are monitored and scanned",
-        "info": " This feature is applicable only when Behavior Monitoring is enabled",
-        "possible values": "true (default), false",
-     "disableIcmpInspection":true
-   },
-   "edr":{
-      "groupIds":"GroupIdExample",
-      "tags": [
-         {
-         "key": "GROUP",
-         "value": "Tag"
-         }
-       ]
-   }
- }
+          "info": " whether ICMP events are monitored and scanned",
+          "info": " This feature is applicable only when Behavior Monitoring is enabled",
+          "possible values": "true (default), false",
+        "disableIcmpInspection":true
+    },
+    "edr":{
+        "groupIds":"GroupIdExample",
+        "tags": [
+            {
+                "key": "GROUP",
+                "value": "Tag"
+            }
+        ]
+    }
+}
