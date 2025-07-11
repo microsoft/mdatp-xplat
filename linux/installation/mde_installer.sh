@@ -447,7 +447,10 @@ verify_conflicting_applications()
 
     if [ ! -z "$conflicting_apps" ]; then
         if [ "$conflicting_apps" = "/opt/microsoft/mdatp/sbin/wdavdaemon" ]; then
-            verify_mdatp_installed 
+            verify_mdatp_installed
+        elif [[ "$conflicting_apps" =~ "fapolicyd" ]]; then
+            # fapolicyd is supported with MDE in non-blocking mode
+            log_warning "[!] [$conflicting_apps] is supported with MDE but for any run time conflicts, please check mdatp health output."
         else
             script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
         fi
