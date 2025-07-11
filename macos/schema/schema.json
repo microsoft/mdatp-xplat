@@ -17,7 +17,7 @@
             "properties": {
                 "enforcementLevel": {
                     "title": "Enforcement level",
-                    "default": "realTime",
+                    "default": "real_time",
                     "type": "string",
                     "propertyOrder": 5,
                     "description": "Antivirus engine enforcement mode",
@@ -286,7 +286,7 @@
                     ]
                 },
                 "maximumOnDemandScanThreads": {
-                    "default": "2",
+                    "default": 2,
                     "title": "Degree of parallelism for on-demand scans",
                     "type": "number",
                     "minimum": 1,
