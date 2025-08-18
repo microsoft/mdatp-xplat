@@ -1075,11 +1075,7 @@ scale_version_id()
         elif [[ $VERSION == 8* ]] || [[ "$DISTRO" == "fedora" ]]; then
             SCALED_VERSION=8
         elif [[ $VERSION == 9* ]]; then
-            if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" ]]; then
-                SCALED_VERSION=9
-            else
-                SCALED_VERSION=9.0
-            fi
+	    SCALED_VERSION=9
         elif [[ $DISTRO == "amzn" ]] &&  [[ $VERSION == "2" || $VERSION == "2023" ]]; then # For Amazon Linux the scaled version is 2023 or 2
             SCALED_VERSION=$VERSION
         else
