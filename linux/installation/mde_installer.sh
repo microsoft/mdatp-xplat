@@ -1674,7 +1674,7 @@ fi
 
 if [ ! -z "$SKIP_PMC_SETUP" ]; then
     if [ "$INSTALL_MODE" == 'c' ]; then
-        script_exit "--clean repo option is only supported with --use-local-repo" $ERR_INVALID_ARGUMENTS
+        script_exit "--clean repo option is not supported with --use-local-repo" $ERR_INVALID_ARGUMENTS
     fi
 
     if [ ! -z "$CHANNEL" ]; then
