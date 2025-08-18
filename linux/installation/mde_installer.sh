@@ -783,8 +783,6 @@ install_on_debian()
     local packages=()
     local pkg_version=
 
-    packages=(curl apt-transport-https gnupg)
-
     if [ -z "$SKIP_PMC_SETUP" ]; then 
         packages=(curl apt-transport-https gnupg)
 
@@ -1027,7 +1025,6 @@ install_on_sles()
     local repo=packages-microsoft-com
 
     packages=(curl)
-
     if [ -z "$SKIP_PMC_SETUP" ]; then 
         install_required_pkgs "${packages[@]}"
 
