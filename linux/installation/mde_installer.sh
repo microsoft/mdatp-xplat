@@ -42,7 +42,6 @@ SUCCESS=0
 ERR_INTERNAL=1
 ERR_INVALID_ARGUMENTS=2
 ERR_INSUFFICIENT_PRIVILAGES=3
-ERR_NO_INTERNET_CONNECTIVITY=4
 ERR_CONFLICTING_APPS=5
 ERR_UNSUPPORTED_DISTRO=10
 ERR_UNSUPPORTED_VERSION=11
@@ -61,7 +60,6 @@ ERR_OFFBOARDING_NOT_FOUND=32
 ERR_OFFBOARDING_FAILED=33
 ERR_TAG_NOT_SUPPORTED=40
 ERR_PARAMETER_SET_FAILED=41
-ERR_UNSUPPORTED_ARCH=45
 
 # Predefined values
 export DEBIAN_FRONTEND=noninteractive
@@ -69,7 +67,7 @@ export DEBIAN_FRONTEND=noninteractive
 _log() {
     level="$1"
     dest="$2"
-    msg="${@:3}"
+    msg="${*:3}"
     ts=$(date -u +"%Y-%m-%dT%H:%M:%S")
 
     if [ "$dest" = "stdout" ]; then
@@ -138,7 +136,7 @@ get_python() {
 
 
 parse_uri() {
-   cat <<EOF | /usr/bin/env $(get_python)
+   cat <<EOF | /usr/bin/env "$(get_python)"
 import sys
 
 if sys.version_info < (3,):
@@ -190,8 +188,10 @@ run_quietly()
         exit 1
     fi
 
-    local out=$(eval $1 2>&1; echo "$?")
-    local exit_code=$(echo "$out" | tail -n1)
+    local out exit_code 
+
+    out=$(eval $1 2>&1; echo "$?")
+    exit_code=$(echo "$out" | tail -n1)
 
     if [ -n "$VERBOSE" ]; then
         log_info "$out"
@@ -205,13 +205,13 @@ run_quietly()
         fi
 
         if [ $# -eq 2 ]; then
-            log_error $2
+            log_error "$2"
         else
             script_exit "$2" "$3"
         fi
     fi
 
-    return $exit_code
+    return "$exit_code"
 }
 
 retry_quietly()
@@ -352,7 +352,7 @@ verify_privileges()
         script_exit "Internal error. verify_privileges require a parameter" $ERR_INTERNAL
     fi
 
-    if [ $(id -u) -ne 0 ]; then
+    if [ "$(id -u)" -ne 0 ]; then
         script_exit "root privileges required to perform $1 operation" $ERR_INSUFFICIENT_PRIVILAGES
     fi
 }
@@ -361,18 +361,20 @@ verify_min_requirements()
 {
     # verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space
     
-    local cores=$(nproc --all)
-    if [ $cores -lt $MIN_CORES ]; then
+    local cores mem_mb disk_space_mb
+
+    cores=$(nproc --all)
+    if [ "$cores" -lt $MIN_CORES ]; then
         script_exit "MDE requires $MIN_CORES cores or more to run, found $cores." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
-    local mem_mb=$(free -m | grep Mem | awk '{print $2}')
-    if [ $mem_mb -lt $MIN_MEM_MB ]; then
+    mem_mb=$(free -m | grep Mem | awk '{print $2}')
+    if [ "$mem_mb" -lt $MIN_MEM_MB ]; then
         script_exit "MDE requires at least $MIN_MEM_MB MB of RAM to run. found $mem_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
-    local disk_space_mb=$(df -m . | tail -1 | awk '{print $4}')
-    if [ $disk_space_mb -lt $MIN_DISK_SPACE_MB ]; then
+    disk_space_mb=$(df -m . | tail -1 | awk '{print $4}')
+    if [ "$disk_space_mb" -lt $MIN_DISK_SPACE_MB ]; then
         script_exit "MDE requires at least $MIN_DISK_SPACE_MB MB of free disk space for installation. found $disk_space_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
@@ -402,17 +404,15 @@ verify_mdatp_installed()
         #check if mdatp is onboarded or not
         check_missing_license=$(get_health_field "health_issues" | grep "missing license" -c)
         onboard_file=/etc/opt/microsoft/mdatp/mdatp_onboard.json
-        if ([ $check_missing_license -gt 0 ]) || ([ ! -f "$onboard_file" ]); then
+        if [ "$check_missing_license" -gt 0 ] || [ ! -f "$onboard_file" ]; then
             log_info "[i] MDE already installed but not onboarded. Please use --onboard command to onboard the product."
         else
             current_mdatp_version=$(get_health_field "app_version")
             org_id=$(get_health_field "org_id")          
             if [ ! -z "$MDE_VERSION" ]; then
-                local current_version=$(echo "$current_mdatp_version" | sed 's/"//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
-                local requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
-                echo "[$current_mdatp_version]"
-                echo "[$current_version]"
-                echo "[$requested_version]"
+                local current_version requested_version
+                current_version=$(echo "$current_mdatp_version" | sed 's/"//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+                requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
 
                 if [[ "$current_version" -lt "$requested_version" ]]; then
                     log_info "[i] Found MDE version $current_mdatp_version already installed and onboarded with org_id $org_id. To install newer version please use --upgrade option"
@@ -433,7 +433,6 @@ verify_mdatp_installed()
 verify_conflicting_applications()
 {
     # identifying conflicting applications (fanotify mounts)
-
     if ! command -v timeout >/dev/null 2>&1; then
         log_warning "[!] 'timeout' command not found. Skipping conflicting application check"
         return
@@ -509,6 +508,7 @@ check_if_pkg_is_installed()
     if [ "$PKG_MGR" = "apt" ]; then
         dpkg -s $1 2> /dev/null | grep Status | grep "install ok installed" 1> /dev/null
     else
+        # shellcheck disable=SC2046
         rpm --quiet --query $(get_rpm_proxy_params) $1
     fi
 
@@ -571,11 +571,11 @@ get_mdatp_channel()
     fi
 
     local channel=""
-    if [[ "$release_ring" = *"Production"* ]]; then
+    if [[ "$release_ring" == *"Production"* ]]; then
         channel="prod"
-    elif [[ "$release_ring" = *"InsiderFast"* ]]; then
+    elif [[ "$release_ring" == *"InsiderFast"* ]]; then
         channel="insiders-fast"
-    elif [[ "$release_ring" = *"External"* ]]; then
+    elif [[ "$release_ring" == *"External"* ]]; then
         channel="insiders-slow"
     else
         channel="dogfood"
@@ -586,7 +586,7 @@ get_mdatp_channel()
 
 install_required_pkgs()
 {
-    local packages=
+    local packages=()
     local pkgs_to_be_installed=
 
     if [ -z "$1" ]; then
@@ -658,7 +658,8 @@ validate_mde_version()
     elif [ "$PKG_MGR" = "yum" ]; then
         check_option="yum --help | grep '\-\-showduplicates' &> /dev/null"
         eval $check_option
-        if [ $? -eq 0 ]; then
+        cmd_status=$?
+        if [ $cmd_status -eq 0 ]; then
             search_command='yum $ASSUMEYES -v list mdatp --showduplicates 2>/dev/null | grep "$version"  &> /dev/null'
         else
             search_command='echo &>/dev/null'
@@ -679,9 +680,8 @@ validate_mde_version()
 
 install_on_debian()
 {
-    local packages=
+    local packages=()
     local pkg_version=
-    local success=
 
     packages=(curl apt-transport-https gnupg)
 
@@ -732,7 +732,7 @@ install_on_debian()
 
 install_on_mariner()
 {
-    local packages=
+    local packages=()
     local pkg_version=
     local repo=
 
@@ -769,7 +769,7 @@ install_on_mariner()
 
 install_on_azurelinux()
 {
-    local packages=
+    local packages=()
     local pkg_version=
     local repo=
 
@@ -805,21 +805,21 @@ install_on_azurelinux()
 
 install_on_fedora()
 {
-    local packages=
+    local packages=()
     local pkg_version=
     local repo=packages-microsoft-com
     local effective_distro=
 
     # curl-minimal results into issues when present and trying to install curl, so skip installing
     # the curl over Amazon Linux 2023
-    if [[ "$VERSION" == "2023" ]] && [[ "$DISTRO" == "amzn" ]] && $(check_if_pkg_is_installed curl-minimal); then
+    if [[ "$VERSION" == "2023" ]] && [[ "$DISTRO" == "amzn" ]] && check_if_pkg_is_installed curl-minimal; then
         packages=(yum-utils)
     else
         packages=(curl yum-utils)
     fi
 
     if [[ $SCALED_VERSION == 7* ]] && [[ "$DISTRO" == "rhel" ]]; then
-        packages=($packages deltarpm)
+        packages=("${packages[@]}" deltarpm)
     fi
 
     install_required_pkgs "${packages[@]}"
@@ -835,7 +835,7 @@ install_on_fedora()
 
     if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ] && ! { [ "$DISTRO" == "rhel" ] && [[ "$SCALED_VERSION" == 9* ]]; }; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
         #repo_name=${repo}-slow-prod
-        repo_name=packages-microsoft-com-insiders-slow
+        repo_name="packages-microsoft-com-insiders-slow"
     fi
 
     if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ]; then
@@ -849,7 +849,7 @@ install_on_fedora()
     fi
 
     # Configure repository if it does not exist
-    yum -q repolist $repo_name | grep "$repo_name"
+    yum -q repolist "$repo_name" | grep "$repo_name"
     found_repo=$?
     if [ $found_repo -eq 0 ]; then
         log_info "[i] repository already configured"
@@ -884,7 +884,7 @@ install_on_fedora()
 
 install_on_sles()
 {
-    local packages=
+    local packages=()
     local pkg_version=
     local repo=packages-microsoft-com
 
@@ -895,7 +895,6 @@ install_on_sles()
     wait_for_package_manager_to_complete
 
     ### Configure the repository ###
-
     local repo_name=${repo}-${CHANNEL}
     if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
         repo_name=${repo}-slow-prod
@@ -936,7 +935,7 @@ install_on_sles()
     fi
 
     sleep 5
-    log_info "[v] Installation complete!."
+    log_info "[v] Installation complete!"
 }
 
 remove_repo()
@@ -954,7 +953,7 @@ remove_repo()
 
     local cmd_status
     # Remove configured packages.microsoft.com repository
-    if [ "$DISTRO" = 'sles' ] || [ "$DISTRO" = "sle-hpc" ]; then
+    if [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ]; then
         local repo=packages-microsoft-com
         local repo_name=${repo}-${CHANNEL}
         if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
@@ -1005,10 +1004,11 @@ upgrade_mdatp()
 
     exit_if_mde_not_installed
 
-    local VERSION_BEFORE_UPDATE=$(get_mdatp_version)
+    local VERSION_BEFORE_UPDATE VERSION_AFTER_UPDATE version current_version requested_version
+    VERSION_BEFORE_UPDATE=$(get_mdatp_version)
     log_info "[i] Current $VERSION_BEFORE_UPDATE"
 
-    local version=""
+    version=""
     if [ ! -z "$MDE_VERSION" ]; then
         version=$(validate_mde_version)
         if [ -z "$version" ]; then
@@ -1016,18 +1016,18 @@ upgrade_mdatp()
         fi
     fi
 
-    local current_version=$(echo "$VERSION_BEFORE_UPDATE" | sed 's/^[ \t\n]*//;s/[ \t\n]*$//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
-    local requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+    current_version=$(echo "$VERSION_BEFORE_UPDATE" | sed 's/^[ \t\n]*//;s/[ \t\n]*$//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+    requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
 
-    if [[ "$INSTALL_MODE" = "d" && "$current_version" -lt "$requested_version" ]]; then
+    if [[ "$INSTALL_MODE" == "d" && "$current_version" -lt "$requested_version" ]]; then
         script_exit "For downgrade the requested version[$MDE_VERSION] should be older than current version[$VERSION_BEFORE_UPDATE]"
-    elif [[ "$INSTALL_MODE" = "u" && ! -z "$MDE_VERSION" && "$current_version" -gt "$requested_version" ]]; then
+    elif [[ "$INSTALL_MODE" == "u" && ! -z "$MDE_VERSION" && "$current_version" -gt "$requested_version" ]]; then
         script_exit "For upgrade the requested version[$MDE_VERSION] should be newer than current version[$VERSION_BEFORE_UPDATE]. If you want to move to an older version instead, retry with --downgrade flag"
     fi
 
     run_quietly "$PKG_MGR_INVOKER $1 mdatp$version" "Unable to upgrade MDE $?" $ERR_INSTALLATION_FAILED
 
-    local VERSION_AFTER_UPDATE=$(get_mdatp_version)
+    VERSION_AFTER_UPDATE=$(get_mdatp_version)
     if [ "$VERSION_BEFORE_UPDATE" = "$VERSION_AFTER_UPDATE" ]; then
         log_info "[i] MDE is already up to date."
     else
@@ -1510,12 +1510,12 @@ if [ ! -z "$PASSIVE_MODE" ] && [ ! -z "$RTP_MODE" ]; then
 fi
 
 if [[ "$INSTALL_MODE" == 'i' && -z "$CHANNEL" ]]; then
-    log_info "[i] Specify the install channel using "--channel" argument. If not provided, mde will be installed for prod by default. Expected channel values: prod, insiders-slow, insiders-fast."
+    log_info "[i] Specify the install channel using \"--channel\" argument. If not provided, mde will be installed for prod by default. Expected channel values: prod, insiders-slow, insiders-fast."
     CHANNEL=prod
 fi
 
 if [[ "$INSTALL_MODE" == 'c' && -z "$CHANNEL" ]]; then
-    log_info "[i] Specify the cleanup channel using "--channel" argument. If not provided, prod repo will be cleaned up by default. Expected channel values: prod, insiders-slow, insiders-fast."
+    log_info "[i] Specify the cleanup channel using \"--channel\" argument. If not provided, prod repo will be cleaned up by default. Expected channel values: prod, insiders-slow, insiders-fast."
     CHANNEL=prod
 fi
 
@@ -1524,7 +1524,7 @@ if [[ "$INSTALL_MODE" == 'd' && -z "$MDE_VERSION" ]]; then
 fi
 
 if [[ -z "$MDE_VERSION" && ( "$INSTALL_MODE" == 'i' || "$INSTALL_MODE" == 'u' ) ]]; then
-    log_info "[i] Specify the version to be installed using "--mdatp" argument. If not provided, latest mde will be installed by default."
+    log_info "[i] Specify the version to be installed using \"--mdatp\" argument. If not provided, latest mde will be installed by default."
 fi
 
 
