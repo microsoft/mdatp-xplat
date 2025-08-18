@@ -41,8 +41,8 @@ Options:
  --https-proxy <URL>  set https proxy
  --ftp-proxy <URL>    set ftp proxy
  --mdatp              specific version of mde to be installed. will use the latest if not provided
- --use-local-repo     this will skip the MDE repo setup and use the already configured repo instead"
- -b|--install-path    specify the installation and configuration path for MDE. Default: /"
+ --use-local-repo     this will skip the MDE repo setup and use the already configured repo instead
+ -b|--install-path    specify the installation and configuration path for MDE. Default: /
  -h|--help            display help
 ```
 
