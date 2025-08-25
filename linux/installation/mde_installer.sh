@@ -751,9 +751,24 @@ delete_sym_link()
     return 0
 }
 
+validate_custom_path_installation_version()
+{
+    # Custom Path installation is available from version 101.25062.0003
+    requested_version="$1"
+    if [ -n "$requested_version" ] && [ -n "$MDE_VERSION" ]; then
+        # Split version into major, minor, patch
+        IFS='.' read -r major minor patch <<< "$MDE_VERSION"
+        # Custom path install supported from 101.25062.0003
+        if (( major < 101 )) || (( major == 101 && minor < 25062 )) || (( major == 101 && minor == 25062 && patch < 3 )); then
+            return 1
+        fi
+    fi
+    return 0
+}
+
 handle_custom_installation() 
 {
-    ## Check that the directory exists and has the right access permission
+    # Check that the directory exists and has the right access permission
     if [ ! -d "$INSTALL_PATH" ]; then
         log_info "[>] INSTALL_PATH=$INSTALL_PATH does not exist, creating it."
         mkdir -p "$INSTALL_PATH" || script_exit "Failed to create directory $INSTALL_PATH" $ERR_INSTALL_PATH_SETUP
@@ -820,6 +835,7 @@ install_on_debian()
     fi
 
     if [ -n "$INSTALL_PATH" ]; then
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
 
@@ -876,6 +892,7 @@ install_on_mariner()
     fi
 
     if [ -n "$INSTALL_PATH" ]; then
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
 
@@ -918,6 +935,7 @@ install_on_azurelinux()
     fi
 
     if [ -n "$INSTALL_PATH" ]; then
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
 
@@ -1002,6 +1020,7 @@ install_on_fedora()
     fi
 
     if [ -n "$INSTALL_PATH" ]; then
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
 
@@ -1064,6 +1083,7 @@ install_on_sles()
     fi
 
     if [ ! -z "$INSTALL_PATH" ]; then
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
 
