@@ -9,6 +9,6 @@ Apply the workaround using an MDM such as Microsoft Intune or JAMF.
 
 **NOTE** If you use another MDM, refer to the instructions on JAMF.
 
-Click here to download the [upgrade_from_25062_helper](upgrade_from_25062_helper.pkg)
+Click here to download the [upgrade_from_25062_helper](https://github.com/microsoft/mdatp-xplat/raw/refs/heads/master/macos/upgrade_from_2506_helper/upgrade_from_25062_helper.pkg)
 
 If you have any questions, please contact Microsoft support.
