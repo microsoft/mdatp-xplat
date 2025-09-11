@@ -9,6 +9,14 @@ Apply the workaround using an MDM such as Microsoft Intune or JAMF.
 
 **NOTE** If you use another MDM, refer to the instructions on JAMF.
 
-Click here to download the [upgrade_from_25062_helper](https://github.com/microsoft/mdatp-xplat/raw/refs/heads/master/macos/upgrade_from_2506_helper/upgrade_from_25062_helper.pkg)
+Click here to download the [upgrade_from_25062_helper](https://officecdn-microsoft-com.akamaized.net/pr/C1297A47-86C4-4C1F-97FA-950631F94777/MacAutoupdate/upgrade_from_25062_helper.pkg)
 
 If you have any questions, please contact Microsoft support.
+
+# Change Log
+
+## September 10, 2025
+Initial release
+
+## September 11, 2025
+Moved pkg from repo to Microsoft CDN
