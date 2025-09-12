@@ -4,8 +4,8 @@ Attempts to upgrade Microsoft Defender for Endpoint on macOS from version 2506 (
 
 Apply the workaround using an MDM such as Microsoft Intune or JAMF.
 
-- Click here for the procedure on [Intune](Intune09102025.pdf)
-- Click here for the procedure on [JAMF](JAMF09102025.pdf)
+- Click here for the procedure on [Intune](Intune09122025.pdf)
+- Click here for the procedure on [JAMF](JAMF09122025.pdf)
 
 **NOTE** If you use another MDM, refer to the instructions on JAMF.
 
@@ -16,7 +16,10 @@ If you have any questions, please contact Microsoft support.
 # Change Log
 
 ## September 10, 2025
-Initial release
+- Initial release
 
 ## September 11, 2025
-Moved pkg from repo to Microsoft CDN
+- Moved pkg from repo to Microsoft CDN
+
+## September 12, 2025
+- Updated Instructions to include clean-up instructions
