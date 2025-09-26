@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.25032.0006",
+    "__version": "101.25072.0011",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
@@ -325,7 +325,33 @@
                             "rel": "More information"
                         }
                     ]
-                }
+                },
+                "offlineDefinitionUpdate": {
+                    "default": "disabled",
+                    "title": "Enable offline security intelligence updates",
+                    "type": "string",
+                    "propertyOrder": 160,
+                    "description": "Enables or disables offline security intelligence updates feature. When this feature is enabled Defender will use a local mirror server to update the signatures.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-support-offline-security-intelligence-update",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]                    
+                },
+                "offlineDefinitionUpdateUrl": {
+                    "title": "URL for a security intelligence updates mirror server",
+                    "type": "string",
+                    "propertyOrder": 170,
+                    "description": "Sets the URL for a local offline security intelligence updates mirror server. When the feature is enabled Defender will use it to update the signatures.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-support-offline-security-intelligence-update#configure-the-endpoints",
+                            "rel": "More information"
+                        }
+                    ]
+                }        
             }
         },
         "cloudService": {
@@ -587,6 +613,20 @@
                     "links": [
                         {
                             "href": "https://learn.microsoft.com/en-us/defender-endpoint/behavior-monitor-macos",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
+                },
+                "offlineDefinitionUpdateVerifySig": {
+                    "default": "enabled",
+                    "title": "offline security intelligence updates signature verification",
+                    "type": "string",
+                    "propertyOrder": 60,
+                    "description": "Offline security intelligence updates signature verification with Microsoft Defender for Endpoint. It is recommended to keep this setting enabled when offline updates are enabled.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-support-offline-security-intelligence-update",
                             "rel": "More information"
                         }
                     ],
