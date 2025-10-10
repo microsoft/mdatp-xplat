@@ -1248,6 +1248,8 @@ scale_version_id()
             else
                 SCALED_VERSION=9.0
             fi
+		elif [[ "$VERSION" == 10* ]] && [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" ]]; then
+			SCALED_VERSION=10
         elif [[ $DISTRO == "amzn" ]] &&  [[ $VERSION == "2" || $VERSION == "2023" ]]; then # For Amazon Linux the scaled version is 2023 or 2
             SCALED_VERSION=$VERSION
         else
