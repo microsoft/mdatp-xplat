@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.8.1" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="0.8.3" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -42,7 +42,6 @@ SUCCESS=0
 ERR_INTERNAL=1
 ERR_INVALID_ARGUMENTS=2
 ERR_INSUFFICIENT_PRIVILAGES=3
-ERR_NO_INTERNET_CONNECTIVITY=4
 ERR_CONFLICTING_APPS=5
 ERR_UNSUPPORTED_DISTRO=10
 ERR_UNSUPPORTED_VERSION=11
@@ -61,7 +60,8 @@ ERR_OFFBOARDING_NOT_FOUND=32
 ERR_OFFBOARDING_FAILED=33
 ERR_TAG_NOT_SUPPORTED=40
 ERR_PARAMETER_SET_FAILED=41
-ERR_UNSUPPORTED_ARCH=45
+ERR_INSTALL_PATH_SETUP=51
+ERR_INSTALL_PATH_PERMISSIONS=52
 
 # Predefined values
 export DEBIAN_FRONTEND=noninteractive
@@ -69,7 +69,7 @@ export DEBIAN_FRONTEND=noninteractive
 _log() {
     level="$1"
     dest="$2"
-    msg="${@:3}"
+    msg="${*:3}"
     ts=$(date -u +"%Y-%m-%dT%H:%M:%S")
 
     if [ "$dest" = "stdout" ]; then
@@ -122,6 +122,7 @@ script_exit()
         exit $ERR_INTERNAL
     else
         log_info "[*] exiting ($2)"
+        cleanup $2
 	    exit $2
     fi
 }
@@ -138,7 +139,7 @@ get_python() {
 
 
 parse_uri() {
-   cat <<EOF | /usr/bin/env $(get_python)
+   cat <<EOF | /usr/bin/env "$(get_python)"
 import sys
 
 if sys.version_info < (3,):
@@ -180,6 +181,15 @@ get_rpm_proxy_params() {
     echo $proxy_params
 }
 
+cleanup()
+{
+    # If installation failed in case of custom installation, delete symlink
+    if [ "$1" = "$ERR_INSTALLATION_FAILED" ] && [ -n "$INSTALL_PATH" ]; then
+        local mdatp_symlink="/opt/microsoft/mdatp"
+        delete_sym_link "$mdatp_symlink"
+    fi
+}
+
 run_quietly()
 {
     # run_quietly <command> <error_msg> [<error_code>]
@@ -190,8 +200,10 @@ run_quietly()
         exit 1
     fi
 
-    local out=$(eval $1 2>&1; echo "$?")
-    local exit_code=$(echo "$out" | tail -n1)
+    local out exit_code 
+
+    out=$(eval $1 2>&1; echo "$?")
+    exit_code=$(echo "$out" | tail -n1)
 
     if [ -n "$VERBOSE" ]; then
         log_info "$out"
@@ -205,13 +217,13 @@ run_quietly()
         fi
 
         if [ $# -eq 2 ]; then
-            log_error $2
+            log_error "$2"
         else
             script_exit "$2" "$3"
         fi
     fi
 
-    return $exit_code
+    return "$exit_code"
 }
 
 retry_quietly()
@@ -352,7 +364,7 @@ verify_privileges()
         script_exit "Internal error. verify_privileges require a parameter" $ERR_INTERNAL
     fi
 
-    if [ $(id -u) -ne 0 ]; then
+    if [ "$(id -u)" -ne 0 ]; then
         script_exit "root privileges required to perform $1 operation" $ERR_INSUFFICIENT_PRIVILAGES
     fi
 }
@@ -361,18 +373,20 @@ verify_min_requirements()
 {
     # verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space
     
-    local cores=$(nproc --all)
-    if [ $cores -lt $MIN_CORES ]; then
+    local cores mem_mb disk_space_mb
+
+    cores=$(nproc --all)
+    if [ "$cores" -lt $MIN_CORES ]; then
         script_exit "MDE requires $MIN_CORES cores or more to run, found $cores." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
-    local mem_mb=$(free -m | grep Mem | awk '{print $2}')
-    if [ $mem_mb -lt $MIN_MEM_MB ]; then
+    mem_mb=$(free -m | grep Mem | awk '{print $2}')
+    if [ "$mem_mb" -lt $MIN_MEM_MB ]; then
         script_exit "MDE requires at least $MIN_MEM_MB MB of RAM to run. found $mem_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
-    local disk_space_mb=$(df -m . | tail -1 | awk '{print $4}')
-    if [ $disk_space_mb -lt $MIN_DISK_SPACE_MB ]; then
+    disk_space_mb=$(df -m . | tail -1 | awk '{print $4}')
+    if [ "$disk_space_mb" -lt $MIN_DISK_SPACE_MB ]; then
         script_exit "MDE requires at least $MIN_DISK_SPACE_MB MB of free disk space for installation. found $disk_space_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
 
@@ -402,17 +416,15 @@ verify_mdatp_installed()
         #check if mdatp is onboarded or not
         check_missing_license=$(get_health_field "health_issues" | grep "missing license" -c)
         onboard_file=/etc/opt/microsoft/mdatp/mdatp_onboard.json
-        if ([ $check_missing_license -gt 0 ]) || ([ ! -f "$onboard_file" ]); then
+        if [ "$check_missing_license" -gt 0 ] || [ ! -f "$onboard_file" ]; then
             log_info "[i] MDE already installed but not onboarded. Please use --onboard command to onboard the product."
         else
             current_mdatp_version=$(get_health_field "app_version")
             org_id=$(get_health_field "org_id")          
             if [ ! -z "$MDE_VERSION" ]; then
-                local current_version=$(echo "$current_mdatp_version" | sed 's/"//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
-                local requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
-                echo "[$current_mdatp_version]"
-                echo "[$current_version]"
-                echo "[$requested_version]"
+                local current_version requested_version
+                current_version=$(echo "$current_mdatp_version" | sed 's/"//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+                requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
 
                 if [[ "$current_version" -lt "$requested_version" ]]; then
                     log_info "[i] Found MDE version $current_mdatp_version already installed and onboarded with org_id $org_id. To install newer version please use --upgrade option"
@@ -433,7 +445,6 @@ verify_mdatp_installed()
 verify_conflicting_applications()
 {
     # identifying conflicting applications (fanotify mounts)
-
     if ! command -v timeout >/dev/null 2>&1; then
         log_warning "[!] 'timeout' command not found. Skipping conflicting application check"
         return
@@ -447,7 +458,10 @@ verify_conflicting_applications()
 
     if [ ! -z "$conflicting_apps" ]; then
         if [ "$conflicting_apps" = "/opt/microsoft/mdatp/sbin/wdavdaemon" ]; then
-            verify_mdatp_installed 
+            verify_mdatp_installed
+        elif [[ "$conflicting_apps" =~ "fapolicyd" ]]; then
+            # fapolicyd is supported with MDE in non-blocking mode
+            log_warning "[!] [$conflicting_apps] is supported with MDE but for any run time conflicts, please check mdatp health output."
         else
             script_exit "found conflicting applications: [$conflicting_apps], aborting" $ERR_CONFLICTING_APPS
         fi
@@ -457,12 +471,12 @@ verify_conflicting_applications()
     # find known security services
     # | Vendor      | Service       |
     # |-------------|---------------|
-    # | CrowdStrike | falcon-sensor |
+    # | CrowdStrike | falcon-sensor | (removed in 0.8.2)
     # | CarbonBlack | cbsensor      |
     # | McAfee      | MFEcma        |
     # | Trend Micro | ds_agent      |
 
-    local conflicting_services=('ds_agent' 'falcon-sensor' 'cbsensor' 'MFEcma')
+    local conflicting_services=('ds_agent' 'cbsensor' 'MFEcma')
     for t in "${conflicting_services[@]}"
     do
         set -- $t
@@ -506,6 +520,7 @@ check_if_pkg_is_installed()
     if [ "$PKG_MGR" = "apt" ]; then
         dpkg -s $1 2> /dev/null | grep Status | grep "install ok installed" 1> /dev/null
     else
+        # shellcheck disable=SC2046
         rpm --quiet --query $(get_rpm_proxy_params) $1
     fi
 
@@ -568,11 +583,11 @@ get_mdatp_channel()
     fi
 
     local channel=""
-    if [[ "$release_ring" = *"Production"* ]]; then
+    if [[ "$release_ring" == *"Production"* ]]; then
         channel="prod"
-    elif [[ "$release_ring" = *"InsiderFast"* ]]; then
+    elif [[ "$release_ring" == *"InsiderFast"* ]]; then
         channel="insiders-fast"
-    elif [[ "$release_ring" = *"External"* ]]; then
+    elif [[ "$release_ring" == *"External"* ]]; then
         channel="insiders-slow"
     else
         channel="dogfood"
@@ -583,11 +598,17 @@ get_mdatp_channel()
 
 install_required_pkgs()
 {
-    local packages=
+    local packages=()
     local pkgs_to_be_installed=
+    local exit_on_failure=1  # Default: exit on failure
 
     if [ -z "$1" ]; then
         script_exit "INTERNAL ERROR. install_required_pkgs requires an argument" $ERR_INTERNAL
+    fi
+
+    if [[ "$1" == "--no-exit" ]]; then
+        exit_on_failure=0
+        shift 1  # Remove the flag from arguments
     fi
 
     packages=("$@")
@@ -600,7 +621,12 @@ install_required_pkgs()
 
     if [ ! -z "$pkgs_to_be_installed" ]; then
         log_info "[>] installing $pkgs_to_be_installed"
-        run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY 
+
+        if [ "$exit_on_failure" -eq 1 ]; then
+            run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY
+        else
+            run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)"
+        fi
     else
         log_info "[v] required pkgs are installed"
     fi
@@ -655,7 +681,8 @@ validate_mde_version()
     elif [ "$PKG_MGR" = "yum" ]; then
         check_option="yum --help | grep '\-\-showduplicates' &> /dev/null"
         eval $check_option
-        if [ $? -eq 0 ]; then
+        cmd_status=$?
+        if [ $cmd_status -eq 0 ]; then
             search_command='yum $ASSUMEYES -v list mdatp --showduplicates 2>/dev/null | grep "$version"  &> /dev/null'
         else
             search_command='echo &>/dev/null'
@@ -674,33 +701,129 @@ validate_mde_version()
     fi
 }
 
-install_on_debian()
+create_sym_link()
 {
-    local packages=
-    local pkg_version=
-    local success=
+    local source_path="$1"
+    local target_path="$2"
 
-    packages=(curl apt-transport-https gnupg)
-
-    install_required_pkgs "${packages[@]}"
-
-    ### Configure the repository ###
-    log_info "[>] configuring the repository"
-
-    rm -f microsoft.list > /dev/null
-    run_quietly "curl -s -o microsoft.list $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list" "unable to fetch repo list" $ERR_FAILED_REPO_SETUP
-    run_quietly "mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
-
-    ### Fetch the gpg key ###
-
-    if { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "24.04" ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "12" ]; }; then
-        if [ ! -f /usr/share/keyrings/microsoft-prod.gpg ]; then
-            run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
-        fi
-    else
-        run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+    if ! [ -d "$target_path" ]; then
+        log_error "[x] Error: $target_path does not exist"
+        return 1
     fi
 
+    ## Check if source path's parent exists
+    if ! [ -d "$(dirname "$source_path")" ]; then
+        log_error "[x] Error: Parent directory of $source_path does not exist"
+        return 2
+    fi
+
+    if [ -L "$source_path" ]; then
+        log_debug "[i] Symlink already exists at $source_path"
+        # Check if symlink is pointing to correct path
+        if [ "$(readlink -f "$source_path")" = "$target_path" ]; then
+            log_warning "[!] Warning: Symlink is already pointing to correct path"
+            return 0
+        else
+            log_error "[x] Error: Symlink is not pointing to correct path"
+            return 3
+        fi
+    fi
+
+    if ! ln -sf "$target_path" "$source_path"; then
+        log_error "[x] Error: Failed to create symlink at $target_path"
+        return 4
+    fi
+
+    return 0
+}
+
+delete_sym_link()
+{
+    local source_path="$1"
+
+    if [ -L "$source_path" ]; then
+        if ! rm -f "$source_path"; then
+            log_error "[!] Error: Failed to delete symlink $source_path"
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+validate_custom_path_installation_version()
+{
+    # Custom Path installation is available from version 101.25062.0003
+    requested_version="$1"
+    if [ -n "$requested_version" ] && [ -n "$MDE_VERSION" ]; then
+        # Split version into major, minor, patch
+        IFS='.' read -r major minor patch <<< "$MDE_VERSION"
+        # Custom path install supported from 101.25062.0003
+        if (( major < 101 )) || (( major == 101 && minor < 25062 )) || (( major == 101 && minor == 25062 && patch < 3 )); then
+            return 1
+        fi
+    fi
+    return 0
+}
+
+handle_custom_installation() 
+{
+    # Check that the directory exists and has the right access permission
+    if [ ! -d "$INSTALL_PATH" ]; then
+        log_info "[>] INSTALL_PATH=$INSTALL_PATH does not exist, creating it."
+        mkdir -p "$INSTALL_PATH" || script_exit "Failed to create directory $INSTALL_PATH" $ERR_INSTALL_PATH_SETUP
+    fi
+    
+    local installation_path="$INSTALL_PATH/microsoft_mdatp"
+    mkdir -p $installation_path || script_exit "Failed to create directory $installation_path" $ERR_INSTALL_PATH_SETUP
+    chmod 755 "$installation_path" || script_exit "Failed to set permissions on $installation_path" $ERR_INSTALL_PATH_PERMISSIONS
+    local mde_config_dir="/etc/opt/microsoft/mdatp"
+    local mde_config_path="$mde_config_dir/mde_path.json"
+    mkdir -p $mde_config_dir || script_exit "Failed to create directory mde_config_dir" $ERR_INSTALL_PATH_SETUP
+
+    # Create a JSON file to set the installation path
+    echo "{\"path\": \"$installation_path\"}" > $mde_config_path || script_exit "Failed to write installation path to JSON file" $ERR_INSTALL_PATH_SETUP
+    chmod 644 $mde_config_path || script_exit "Failed to set permissions for JSON file" $ERR_INSTALL_PATH_PERMISSIONS
+
+    # Create a symlink to the installation path
+    local src_path="/opt/microsoft/mdatp"
+    local target_path="$installation_path/opt/microsoft/mdatp"
+    mkdir -p "$(dirname "$src_path")" || script_exit "Failed to create directory for symlink source path" $ERR_INSTALL_PATH_SETUP
+    mkdir -p "$target_path" || script_exit "Failed to create directory for symlink target path" $ERR_INSTALL_PATH_SETUP
+    create_sym_link "$src_path" "$target_path" || script_exit "Failed to create symlink from $src_path to $target_path" $ERR_INSTALL_PATH_SETUP
+}
+
+install_on_debian()
+{
+    local packages=()
+    local pkg_version=
+
+    if [ -z "$SKIP_PMC_SETUP" ]; then 
+        packages=(curl apt-transport-https gnupg)
+
+        install_required_pkgs "${packages[@]}"
+
+        ### Configure the repository ###
+        log_info "[>] configuring the repository"
+
+        rm -f microsoft.list > /dev/null
+        run_quietly "curl -s -o microsoft.list $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list" "unable to fetch repo list" $ERR_FAILED_REPO_SETUP
+        run_quietly "mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
+
+        ### Fetch the gpg key ###
+
+        if { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "24.04" ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "12" ]; }; then
+            if [ ! -f /usr/share/keyrings/microsoft-prod.gpg ]; then
+                run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+            fi
+        else
+            run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+        fi
+    else
+        # Try to install/find curl, don't exit the script if it fails.
+        packages=(curl)
+        install_required_pkgs --no-exit "${packages[@]}"
+    fi
     run_quietly "apt-get update" "[!] unable to refresh the repos properly"
 
     local version=""
@@ -711,9 +834,16 @@ install_on_debian()
         fi
     fi
 
+    if [ -n "$INSTALL_PATH" ]; then
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
+        handle_custom_installation
+    fi
+
     ### Install MDE ###
     log_info "[>] installing MDE"
-    if [ "$CHANNEL" = "prod" ]; then
+    if [ -z "$CHANNEL" ]; then
+        run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+    elif [ "$CHANNEL" = "prod" ]; then
         if [[ -z "$VERSION_NAME" ]]; then
             run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
         else
@@ -729,26 +859,28 @@ install_on_debian()
 
 install_on_mariner()
 {
-    local packages=
+    local packages=()
     local pkg_version=
     local repo=
 
-    # To use config-manager plugin, install dnf-plugins-core package
-    run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
+    if [ -z "$SKIP_PMC_SETUP" ]; then 
+        # To use config-manager plugin, install dnf-plugins-core package
+        run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
 
-    ### Install MDE ###
-    log_info "[>] installing MDE"
-    if [ "$CHANNEL" = "prod" ]; then
-        run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras" "unable to install mariner-repos-extras"
-        run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras" "unable to enable extras repo"
-        run_quietly "$PKG_MGR_INVOKER config-manager --disable mariner-official-extras-preview" "unable to disable extras-preview repo"
-    elif [ "$CHANNEL" = "insiders-slow" ]; then
-        ### Add Preview Repo File ###
-        run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras-preview" "unable to install mariner-repos-extras-preview"
-        run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras-preview" "unable to enable extras-preview repo"
-    else
-        # mariner is only supported on prod and insiders-slow channels
-        script_exit "Invalid channel: $CHANNEL. Available channels for $DISTRO_FAMILY are prod and insiders-slow channel only." $ERR_INVALID_CHANNEL
+        ### Install MDE ###
+        log_info "[>] installing MDE"
+        if [ "$CHANNEL" = "prod" ]; then
+            run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras" "unable to install mariner-repos-extras"
+            run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras" "unable to enable extras repo"
+            run_quietly "$PKG_MGR_INVOKER config-manager --disable mariner-official-extras-preview" "unable to disable extras-preview repo"
+        elif [ "$CHANNEL" = "insiders-slow" ]; then
+            ### Add Preview Repo File ###
+            run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras-preview" "unable to install mariner-repos-extras-preview"
+            run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras-preview" "unable to enable extras-preview repo"
+        else
+            # mariner is only supported on prod and insiders-slow channels
+            script_exit "Invalid channel: $CHANNEL. Available channels for $DISTRO_FAMILY are prod and insiders-slow channel only." $ERR_INVALID_CHANNEL
+        fi
     fi
 
     local version=""
@@ -758,6 +890,14 @@ install_on_mariner()
             script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
         fi
     fi
+
+    if [ -n "$INSTALL_PATH" ]; then
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
+        handle_custom_installation
+    fi
+
+    ### Install MDE ###
+    log_info "[>] installing MDE"
     run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
 
     sleep 5
@@ -766,22 +906,24 @@ install_on_mariner()
 
 install_on_azurelinux()
 {
-    local packages=
+    local packages=()
     local pkg_version=
     local repo=
 
-    # To use config-manager plugin, install dnf-plugins-core package
-    run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
+    if [ -z "$SKIP_PMC_SETUP" ]; then 
+        # To use config-manager plugin, install dnf-plugins-core package
+        run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
 
-    ### Configure the repository ###
-    log_info "[>] configuring the repository"
-    if [ "$CHANNEL" = "prod" ]; then
-        run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss" "unable to install azurelinux-repos-ms-non-oss"
-        run_quietly "$PKG_MGR_INVOKER config-manager --enable azurelinux-repos-ms-non-oss" "unable to enable extras repo"
-        run_quietly "$PKG_MGR_INVOKER config-manager --disable azurelinux-repos-ms-non-oss-preview" "unable to disable extras-preview repo"
-    else
-        ### Add Preview Repo File ###
-        run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss-preview" "unable to install azurelinux-repos-ms-non-oss-preview"
+        ### Configure the repository ###
+        log_info "[>] configuring the repository"
+        if [ "$CHANNEL" = "prod" ]; then
+            run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss" "unable to install azurelinux-repos-ms-non-oss"
+            run_quietly "$PKG_MGR_INVOKER config-manager --enable azurelinux-repos-ms-non-oss" "unable to enable extras repo"
+            run_quietly "$PKG_MGR_INVOKER config-manager --disable azurelinux-repos-ms-non-oss-preview" "unable to disable extras-preview repo"
+        else
+            ### Add Preview Repo File ###
+            run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss-preview" "unable to install azurelinux-repos-ms-non-oss-preview"
+        fi
     fi
 
     local version=""
@@ -790,6 +932,11 @@ install_on_azurelinux()
         if [ -z "$version" ]; then
             script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
         fi
+    fi
+
+    if [ -n "$INSTALL_PATH" ]; then
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
+        handle_custom_installation
     fi
 
     ### Install MDE ###
@@ -802,62 +949,67 @@ install_on_azurelinux()
 
 install_on_fedora()
 {
-    local packages=
+    local packages=()
     local pkg_version=
     local repo=packages-microsoft-com
     local effective_distro=
 
     # curl-minimal results into issues when present and trying to install curl, so skip installing
     # the curl over Amazon Linux 2023
-    if [[ "$VERSION" == "2023" ]] && [[ "$DISTRO" == "amzn" ]] && $(check_if_pkg_is_installed curl-minimal); then
-        packages=(yum-utils)
-    else
-        packages=(curl yum-utils)
+    if ! ([[ "$VERSION" == "2023" ]] && [[ "$DISTRO" == "amzn" ]] && check_if_pkg_is_installed curl-minimal); then
+        packages=(curl)
     fi
 
-    if [[ $SCALED_VERSION == 7* ]] && [[ "$DISTRO" == "rhel" ]]; then
-        packages=($packages deltarpm)
-    fi
+    if [ -z "$SKIP_PMC_SETUP" ]; then 
+        packages=("${packages[@]}" yum-utils)
 
-    install_required_pkgs "${packages[@]}"
+        if [[ $SCALED_VERSION == 7* ]] && [[ "$DISTRO" == "rhel" ]]; then
+            packages=("${packages[@]}" deltarpm)
+        fi
 
-    ### Configure the repository ###
-    log_info "[>] configuring the repository"
-    ### Configure the repo name from which package should be installed
-    local repo_name=${repo}-${CHANNEL}
+        install_required_pkgs "${packages[@]}"
 
-    if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
-        repo_name=packages-microsoft-com-prod-${CHANNEL}
-    fi
-
-    if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ] && ! { [ "$DISTRO" == "rhel" ] && [[ "$SCALED_VERSION" == 9* ]]; }; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
-        #repo_name=${repo}-slow-prod
-        repo_name=packages-microsoft-com-insiders-slow
-    fi
-
-    if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ]; then
-        effective_distro="rhel"
-    elif [ "$DISTRO" = "almalinux" ]; then
-        effective_distro="alma"
-    elif [ "$DISTRO" = "amzn" ]; then
-        effective_distro="amazonlinux"
-    else
-        effective_distro="$DISTRO"
-    fi
-
-    # Configure repository if it does not exist
-    yum -q repolist $repo_name | grep "$repo_name"
-    found_repo=$?
-    if [ $found_repo -eq 0 ]; then
-        log_info "[i] repository already configured"
-    else
+        ### Configure the repository ###
         log_info "[>] configuring the repository"
-        run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
-    fi
+        ### Configure the repo name from which package should be installed
+        local repo_name=${repo}-${CHANNEL}
 
-    ### Fetch the gpg key ###
-    run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-    run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+        if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
+            repo_name=packages-microsoft-com-prod-${CHANNEL}
+        fi
+
+        if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ] && ! { [ "$DISTRO" == "rhel" ] && [[ "$SCALED_VERSION" == 9* ]]; }; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
+            #repo_name=${repo}-slow-prod
+            repo_name="packages-microsoft-com-insiders-slow"
+        fi
+
+        if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ]; then
+            effective_distro="rhel"
+        elif [ "$DISTRO" = "almalinux" ]; then
+            effective_distro="alma"
+        elif [ "$DISTRO" = "amzn" ]; then
+            effective_distro="amazonlinux"
+        else
+            effective_distro="$DISTRO"
+        fi
+
+        # Configure repository if it does not exist
+        yum -q repolist "$repo_name" | grep "$repo_name"
+        found_repo=$?
+        if [ $found_repo -eq 0 ]; then
+            log_info "[i] repository already configured"
+        else
+            log_info "[>] configuring the repository"
+            run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
+        fi
+
+        ### Fetch the gpg key ###
+        run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+        run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+    else
+        # Try to install/find packages, don't exit the script if it fails.
+        install_required_pkgs --no-exit "${packages[@]}"
+    fi
 
     local version=""
     if [ ! -z "$MDE_VERSION" ]; then
@@ -867,10 +1019,15 @@ install_on_fedora()
         fi
     fi
 
+    if [ -n "$INSTALL_PATH" ]; then
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
+        handle_custom_installation
+    fi
+
     ### Install MDE ###
     log_info "[>] installing MDE"
 
-    if [ "$ARCHITECTURE" = "aarch64" ]; then
+    if [ "$ARCHITECTURE" = "aarch64" ] || [ -z "$repo_name" ]; then
         run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     else
         run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
@@ -882,40 +1039,40 @@ install_on_fedora()
 
 install_on_sles()
 {
-    local packages=
+    local packages=()
     local pkg_version=
     local repo=packages-microsoft-com
 
     packages=(curl)
+    if [ -z "$SKIP_PMC_SETUP" ]; then 
+        install_required_pkgs "${packages[@]}"
 
-    install_required_pkgs "${packages[@]}"
+        wait_for_package_manager_to_complete
 
-    wait_for_package_manager_to_complete
+        ### Configure the repository ###
+        local repo_name=${repo}-${CHANNEL}
+        if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+            repo_name=${repo}-slow-prod
+        fi
 
-    ### Configure the repository ###
+        # add repository if it does not exist
+        lines=$($PKG_MGR_INVOKER lr | grep "$repo_name" | wc -l)
 
-    local repo_name=${repo}-${CHANNEL}
-    if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
-        repo_name=${repo}-slow-prod
-    fi
-    
-    # add repository if it does not exist
-    lines=$($PKG_MGR_INVOKER lr | grep "$repo_name" | wc -l)
+        if [ $lines -eq 0 ]; then
+            log_info "[>] configuring the repository"
+            run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n $repo_name https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
+        else
+            log_info "[i] repository already configured"
+        fi
 
-    if [ $lines -eq 0 ]; then
-        log_info "[>] configuring the repository"
-        run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n $repo_name https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
+        ### Fetch the gpg key ###
+        run_quietly "rpm $(get_rpm_proxy_params) --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+
+        wait_for_package_manager_to_complete
     else
-        log_info "[i] repository already configured"
+        # Try to install/find packages, don't exit the script if it fails.
+        install_required_pkgs --no-exit "${packages[@]}"
     fi
-
-    ### Fetch the gpg key ###
-    run_quietly "rpm $(get_rpm_proxy_params) --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-    
-    wait_for_package_manager_to_complete
-
-    ### Install MDE ###
-    log_info "[>] installing MDE"
 
     local version=""
     if [ ! -z "$MDE_VERSION" ]; then
@@ -925,7 +1082,19 @@ install_on_sles()
         fi
     fi
 
-    run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp$version" "[!] failed to install MDE (1/2)"
+    if [ ! -z "$INSTALL_PATH" ]; then
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
+        handle_custom_installation
+    fi
+
+    ### Install MDE ###
+    log_info "[>] installing MDE"
+
+    if [ -z "$repo_name" ]; then
+        run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES mdatp$version" "[!] failed to install MDE (1/2)"
+    else
+        run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp$version" "[!] failed to install MDE (1/2)"
+    fi
     
     if ! check_if_pkg_is_installed mdatp; then
         log_warning "[r] retrying"
@@ -934,7 +1103,7 @@ install_on_sles()
     fi
 
     sleep 5
-    log_info "[v] Installation complete!."
+    log_info "[v] Installation complete!"
 }
 
 remove_repo()
@@ -952,7 +1121,7 @@ remove_repo()
 
     local cmd_status
     # Remove configured packages.microsoft.com repository
-    if [ "$DISTRO" = 'sles' ] || [ "$DISTRO" = "sle-hpc" ]; then
+    if [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ]; then
         local repo=packages-microsoft-com
         local repo_name=${repo}-${CHANNEL}
         if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
@@ -1003,10 +1172,11 @@ upgrade_mdatp()
 
     exit_if_mde_not_installed
 
-    local VERSION_BEFORE_UPDATE=$(get_mdatp_version)
+    local VERSION_BEFORE_UPDATE VERSION_AFTER_UPDATE version current_version requested_version
+    VERSION_BEFORE_UPDATE=$(get_mdatp_version)
     log_info "[i] Current $VERSION_BEFORE_UPDATE"
 
-    local version=""
+    version=""
     if [ ! -z "$MDE_VERSION" ]; then
         version=$(validate_mde_version)
         if [ -z "$version" ]; then
@@ -1014,18 +1184,18 @@ upgrade_mdatp()
         fi
     fi
 
-    local current_version=$(echo "$VERSION_BEFORE_UPDATE" | sed 's/^[ \t\n]*//;s/[ \t\n]*$//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
-    local requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+    current_version=$(echo "$VERSION_BEFORE_UPDATE" | sed 's/^[ \t\n]*//;s/[ \t\n]*$//' | awk '{print $NF}' | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
+    requested_version=$(echo "$MDE_VERSION" | awk -F. '{ printf("%d%05d%05d\n", $1,$2,$3); }')
 
-    if [[ "$INSTALL_MODE" = "d" && "$current_version" -lt "$requested_version" ]]; then
+    if [[ "$INSTALL_MODE" == "d" && "$current_version" -lt "$requested_version" ]]; then
         script_exit "For downgrade the requested version[$MDE_VERSION] should be older than current version[$VERSION_BEFORE_UPDATE]"
-    elif [[ "$INSTALL_MODE" = "u" && ! -z "$MDE_VERSION" && "$current_version" -gt "$requested_version" ]]; then
+    elif [[ "$INSTALL_MODE" == "u" && ! -z "$MDE_VERSION" && "$current_version" -gt "$requested_version" ]]; then
         script_exit "For upgrade the requested version[$MDE_VERSION] should be newer than current version[$VERSION_BEFORE_UPDATE]. If you want to move to an older version instead, retry with --downgrade flag"
     fi
 
     run_quietly "$PKG_MGR_INVOKER $1 mdatp$version" "Unable to upgrade MDE $?" $ERR_INSTALLATION_FAILED
 
-    local VERSION_AFTER_UPDATE=$(get_mdatp_version)
+    VERSION_AFTER_UPDATE=$(get_mdatp_version)
     if [ "$VERSION_BEFORE_UPDATE" = "$VERSION_AFTER_UPDATE" ]; then
         log_info "[i] MDE is already up to date."
     else
@@ -1078,6 +1248,8 @@ scale_version_id()
             else
                 SCALED_VERSION=9.0
             fi
+		elif [[ "$VERSION" == 10* ]] && [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" ]]; then
+			SCALED_VERSION=10
         elif [[ $DISTRO == "amzn" ]] &&  [[ $VERSION == "2" || $VERSION == "2023" ]]; then # For Amazon Linux the scaled version is 2023 or 2
             SCALED_VERSION=$VERSION
         else
@@ -1335,6 +1507,8 @@ usage()
     echo " --https-proxy <URL>  set https proxy"
     echo " --ftp-proxy <URL>    set ftp proxy"
     echo " --mdatp              specific version of mde to be installed. will use the latest if not provided"
+    echo " --use-local-repo     this will skip the MDE repo setup and use the already configured repo instead"
+    echo " -b|--install-path    specify the installation and configuration path for MDE. Default: /"
     echo " -h|--help            display help"
 }
 
@@ -1479,6 +1653,19 @@ do
             export MDE_VERSION=$2
             shift 2
             ;;
+        --use-local-repo)
+            SKIP_PMC_SETUP=1
+            shift 1
+            ;;
+        -b|--install-path)
+            if [[ -z "$2" ]]; then
+                script_exit "$1 option requires two arguments" $ERR_INVALID_ARGUMENTS
+            else
+                INSTALL_PATH=$(realpath "$2") || script_exit "Failed to resolve absolute path for $2" $ERR_INVALID_ARGUMENTS
+                INSTALL_PATH="${INSTALL_PATH%/}"
+            fi
+            shift 2
+            ;;
         *)
             echo "use -h or --help for details"
             script_exit "unknown argument $1" $ERR_INVALID_ARGUMENTS
@@ -1507,22 +1694,35 @@ if [ ! -z "$PASSIVE_MODE" ] && [ ! -z "$RTP_MODE" ]; then
     exit 1
 fi
 
-if [[ "$INSTALL_MODE" == 'i' && -z "$CHANNEL" ]]; then
-    log_info "[i] Specify the install channel using "--channel" argument. If not provided, mde will be installed for prod by default. Expected channel values: prod, insiders-slow, insiders-fast."
-    CHANNEL=prod
-fi
+if [ ! -z "$SKIP_PMC_SETUP" ]; then
+    if [ "$INSTALL_MODE" == 'c' ]; then
+        script_exit "--clean repo option is not supported with --use-local-repo" $ERR_INVALID_ARGUMENTS
+    fi
 
-if [[ "$INSTALL_MODE" == 'c' && -z "$CHANNEL" ]]; then
-    log_info "[i] Specify the cleanup channel using "--channel" argument. If not provided, prod repo will be cleaned up by default. Expected channel values: prod, insiders-slow, insiders-fast."
-    CHANNEL=prod
+    if [ ! -z "$CHANNEL" ]; then
+        script_exit "--use-local-repo option is not supported with --channel" $ERR_INVALID_ARGUMENTS
+    fi
+else
+    if [ -z "$CHANNEL" ]; then
+        if [ "$INSTALL_MODE" == 'i' ]; then
+            log_info "[i] Specify the install channel using \"--channel\" argument. If not provided, mde will be installed for prod by default. Expected channel values: prod, insiders-slow, insiders-fast."
+        elif [ "$INSTALL_MODE" == 'c' ]; then
+            log_info "[i] Specify the cleanup channel using \"--channel\" argument. If not provided, prod repo will be cleaned up by default. Expected channel values: prod, insiders-slow, insiders-fast."
+        fi
+        CHANNEL=prod
+    fi
 fi
 
 if [[ "$INSTALL_MODE" == 'd' && -z "$MDE_VERSION" ]]; then
     script_exit "Specify the mdatp version using --mdatp argument when using --downgrade option" $ERR_INVALID_ARGUMENTS
 fi
 
+if [[ ! -z "$INSTALL_PATH" && "$INSTALL_MODE" != 'i' ]]; then
+    script_exit "install path is only supported for installation" $ERR_INVALID_ARGUMENTS
+fi
+
 if [[ -z "$MDE_VERSION" && ( "$INSTALL_MODE" == 'i' || "$INSTALL_MODE" == 'u' ) ]]; then
-    log_info "[i] Specify the version to be installed using "--mdatp" argument. If not provided, latest mde will be installed by default."
+    log_info "[i] Specify the version to be installed using \"--mdatp\" argument. If not provided, latest mde will be installed by default."
 fi
 
 
