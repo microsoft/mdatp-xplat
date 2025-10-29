@@ -202,6 +202,10 @@ run_quietly()
 
     local out exit_code 
 
+    if [ "$DEBUG" != "0" ]; then
+        log_debug "[>] Running command: $1"
+    fi
+
     out=$(eval $1 2>&1; echo "$?")
     exit_code=$(echo "$out" | tail -n1)
 
@@ -211,7 +215,6 @@ run_quietly()
     
     if [ "$exit_code" != "0" ]; then
         if [ "$DEBUG" != "0" ]; then
-            log_debug "[>] Running command: $1"
             log_debug "[>] Command output: $out"
             log_debug "[>] Command exit_code: $exit_code"
         fi
