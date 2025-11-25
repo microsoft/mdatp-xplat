@@ -631,6 +631,52 @@
                         }
                     ],
                     "enum": ["enabled", "disabled"]
+                },
+                "performanceProfiles": {
+                    "default": "enabled",
+                    "title": "Performance Profiles",
+                    "type": "string",
+                    "propertyOrder": 70,
+                    "description": "Performance profiles",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles",    //Verify once link is live
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
+                }
+            }
+        },
+        "performanceProfilesConfiguration": {
+            "title": "Performance Profiles Configuration",
+            "description": "Properties for configuring performance profiles",
+            "propertyOrder": 55,
+            "defaultProperties": [],
+            "properties": {
+                "profiles": {
+                    "title": "Performance Profiles",
+                    "type": "array",
+                    "propertyOrder": 10,
+                    "description": "Names of performance profiles to apply.",
+                    "items": {
+                        "title": "Profile name",
+                        "type": "string"
+                    }
+                },
+                "merge_policy": {
+                    "default": "merge",
+                    "title": "Performance profiles merge policy",
+                    "type": "string",
+                    "propertyOrder": 20,
+                    "description": "Specify the merge policy for performance profiles. This can be a combination of administrator-defined and user-defined profiles (merge) or only administrator-defined profiles (admin_only).",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["merge", "admin_only"]
                 }
             }
         },
