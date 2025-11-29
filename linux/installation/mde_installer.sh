@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.8.3" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="0.8.4" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -814,8 +814,8 @@ install_on_debian()
         run_quietly "mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
 
         ### Fetch the gpg key ###
-
-        if { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "24.04" ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "12" ]; }; then
+        # In ubuntu >= 24 and debian >= 12, apt-key is deprecated
+        if { [ "$DISTRO" = "ubuntu" ] && [ "${VERSION%.*}" -ge 24 ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" -ge 12 ]; }; then
             if [ ! -f /usr/share/keyrings/microsoft-prod.gpg ]; then
                 run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
             fi
