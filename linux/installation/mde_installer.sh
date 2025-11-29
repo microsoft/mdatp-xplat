@@ -1278,7 +1278,7 @@ scale_version_id()
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [[ $DISTRO == "ubuntu" ]] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]] && [[ $VERSION != "24.04" ]]; then
+    elif [[ $DISTRO == "ubuntu" ]] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]] && [[ $VERSION != "24.04" ]] && [[ $VERSION != "25.04" ]]; then
         SCALED_VERSION=18.04
     else
         # no problems with 
