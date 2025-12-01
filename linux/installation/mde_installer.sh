@@ -2187,7 +2187,7 @@ usage()
     echo " -a|--rtp-mode        set real time protection to active mode. passive-mode and rtp-mode are mutually exclusive"
     echo " -t|--tag             set a tag by declaring <name> and <value>, e.g: -t GROUP Coders"
     echo " -m|--min_req(deprecated) enforce minimum requirements. Its enabled by default. Will be removed in future"
-    echo " -q|--pre-req         enforce prerequsiste for MDE like memoery, disk, etc."
+    echo " -q|--pre-req         enforce prerequisite for MDE like memory, disk, etc."
     echo " -x|--skip_conflict   skip conflicting application verification"
     echo " -w|--clean           remove repo from package manager for a specific channel"
     echo " -y|--yes             assume yes for all mid-process prompts (default, depracated)"
