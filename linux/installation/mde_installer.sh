@@ -385,9 +385,9 @@ detect_distro()
     elif [ -f /etc/redhat-release ]; then
         if [ -f /etc/oracle-release ]; then
             DISTRO="ol"
-        elif [[ $(grep -o -i "Red\ Hat" /etc/redhat-release) ]]; then
+        elif grep -q -i "Red Hat" /etc/redhat-release; then
             DISTRO="rhel"
-        elif [[ $(grep -o -i "Centos" /etc/redhat-release) ]]; then
+        elif grep -q -i "Centos" /etc/redhat-release; then
             DISTRO="centos"
         fi
         VERSION=$(grep -o "release .*" /etc/redhat-release | cut -d ' ' -f2)
@@ -400,7 +400,11 @@ detect_distro()
         DISTRO="ubuntu"
     fi
 
-    if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
+    # Add Kali Linux support - treat as Debian-based
+    if [ "$DISTRO" = "kali" ]; then
+        log_info "[i] Kali Linux detected - treating as Debian-based distribution"
+        DISTRO_FAMILY="debian"
+    elif [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         DISTRO_FAMILY="debian"
     elif [ "$DISTRO" = "rhel" ] || [ "$DISTRO" = "centos" ] || [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "amzn" ] || [ "$DISTRO" = "almalinux" ] || [ "$DISTRO" = "rocky" ]; then
         DISTRO_FAMILY="fedora"
