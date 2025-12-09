@@ -12,13 +12,10 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="1.2.0" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="0.8.3" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
-#Dont use this variable directly
-ALL_MDE_VERSIONS=
-SUPPORTED_LAST_N_VERSIONS=9
 DISTRO=
 DISTRO_FAMILY=
 ARCHITECTURE=
@@ -31,19 +28,13 @@ SCALED_VERSION=
 VERSION=
 ONBOARDING_SCRIPT=
 OFFBOARDING_SCRIPT=
-PRE_REQ_CHECK=
+MIN_REQUIREMENTS=
 SKIP_CONFLICTING_APPS=
 PASSIVE_MODE=
 RTP_MODE=
+MIN_CORES=1
 MIN_MEM_MB=1024
 MIN_DISK_SPACE_MB=2048
-MIN_GLIBC_VERSION="2.17"
-MINIMUM_REQUIRED_KERNEL="3.10.0-327"
-CURRENT_KERNEL=
-SUPPORTED_FILESYSTEMS=("btrfs" "ecryptfs" "ext2" "ext3" "ext4" "fuse" "fuseblk" "jfs" "nfs"
-    "overlay" "ramfs" "reiserfs" "tmpfs" "udf" "vfat" "xfs" "Efs" "S3fs" "Blobfuse" "Lustr"
-    "glustrefs" "Afs" "sshfs" "cifs" "smb" "gcsfuse" "sysfs")
-
 declare -A tags
 
 # Error codes
@@ -132,11 +123,10 @@ script_exit()
     else
         log_info "[*] exiting ($2)"
         cleanup $2
-        exit $2
+	    exit $2
     fi
 }
 
-# Centralized proxy configuration function
 get_python() {
    if which python3 &> /dev/null; then
       echo "python3"
@@ -164,18 +154,15 @@ print(uri.port or "")
 EOF
 }
 
-get_rpm_proxy_params() 
-{
-    local proxy_params=""
-    local proxy_host proxy_port
-    
+get_rpm_proxy_params() {
+    proxy_params=""
     if [ -n "$http_proxy" ]; then
-        proxy_host=$(parse_uri "$http_proxy" | sed -n '2p')
+	    proxy_host=$(parse_uri "$http_proxy" | sed -n '2p')
         if [ -n "$proxy_host" ];then
            proxy_params="$proxy_params --httpproxy $proxy_host"
         fi
 
-        proxy_port=$(parse_uri "$http_proxy" | sed -n '3p')
+	    proxy_port=$(parse_uri "$http_proxy" | sed -n '3p')
         if [ -n "$proxy_port" ]; then
            proxy_params="$proxy_params --httpport $proxy_port"
         fi
@@ -192,56 +179,6 @@ get_rpm_proxy_params()
        fi
     fi
     echo $proxy_params
-}
-
-# Get APT proxy configuration
-get_apt_proxy_params() 
-{
-    local apt_proxy_conf=""
-    
-    if [[ -n "$http_proxy" ]]; then
-        apt_proxy_conf="${apt_proxy_conf} -o Acquire::http::Proxy=\"$http_proxy\""
-    fi
-
-    if [[ -n "$https_proxy" ]]; then
-        apt_proxy_conf="${apt_proxy_conf} -o Acquire::https::Proxy=\"$https_proxy\""
-    fi
-
-    if [[ -n "$ftp_proxy" ]]; then
-        apt_proxy_conf="${apt_proxy_conf} -o Acquire::ftp::Proxy=\"$ftp_proxy\""
-    fi
-
-    echo "$apt_proxy_conf"
-}
-
-# Get DNF/YUM proxy parameters
-get_dnf_yum_proxy_params() 
-{
-    # DNF/YUM support proxy via command-line parameter
-    # Generate --setopt=proxy=... parameter if http_proxy is set
-    # DNF/YUM supports authentication in proxy URL (http://user:pass@host:port)
-
-    local dnf_yum_proxy_params=""
-    if [[ -n "$http_proxy" ]]; then
-        dnf_yum_proxy_params="--setopt=proxy=$http_proxy"
-    fi
-    echo "$dnf_yum_proxy_params"
-}
-
-
-# Get ZYPPER proxy parameters
-get_zypper_proxy_params() 
-{
-    local zypper_proxy_params=""
-
-    # ZYPPER only supports one proxy, prioritize HTTP over HTTPS
-    if [[ -n "$http_proxy" ]]; then
-        zypper_proxy_params="--proxy $http_proxy"
-    elif [[ -n "$https_proxy" ]]; then
-        zypper_proxy_params="--proxy $https_proxy"
-    fi
-
-    echo "$zypper_proxy_params"
 }
 
 cleanup()
@@ -275,7 +212,7 @@ run_quietly()
     if [ -n "$VERBOSE" ]; then
         log_info "$out"
     fi
-
+    
     if [ "$exit_code" != "0" ]; then
         if [ "$DEBUG" != "0" ]; then
             log_debug "[>] Command output: $out"
@@ -296,7 +233,7 @@ retry_quietly()
 {
     # retry_quietly <retries> <command> <error_msg> [<error_code>]
     # use error_code for script_exit
-
+    
     if [ $# -lt 3 ] || [ $# -gt 4 ]; then
         log_error "[!] INTERNAL ERROR. retry_quietly requires 3 or 4 arguments"
         exit 1
@@ -435,454 +372,28 @@ verify_privileges()
     fi
 }
 
-join_string()
-{
-    local sep="$1"
-    shift
-    local result=""
-    local val
-
-    for val in "$@"; do
-        if [ -n "$val" ]; then
-            if [ -n "$result" ]; then
-                result+=" $sep "
-            fi
-            result+="$val"
-        fi
-    done
-
-    echo "$result"
-}
-
-#Blocking
-verify_disk_space()
-{
-    local i_path=/opt
-    if [ -n "$INSTALL_PATH" ]; then
-        i_path=$(dirname "$INSTALL_PATH")
-    fi
-    disk_space_mb=$(df -m $i_path | tail -1 | awk '{print $4}')
-    if [ "$disk_space_mb" -lt $MIN_DISK_SPACE_MB ]; then
-        log_error "[x] Error: MDE requires at least $MIN_DISK_SPACE_MB MB of free disk space for installation. found $disk_space_mb MB."
-        return 1
-    fi
-    return 0
-}
-
-#Blocking
-verify_total_memory()
-{
-    mem_mb=$(free -m | grep Mem | awk '{print $2}')
-    if [ "$mem_mb" -lt $MIN_MEM_MB ]; then
-        log_error "[x] Error: MDE requires at least $MIN_MEM_MB MB of RAM to run. found $mem_mb MB."
-        return 1
-    fi
-    return 0
-}
-
-verify_system_specifications()
-{
-    # verifying minimal reuirements: $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk disk_space_mb
-
-    disk_error_message=$(verify_disk_space)
-    local prereqs_passed=$?
-
-    memory_error_message=$(verify_total_memory)
-    (( prereqs_passed |= $? ))
-
-    join_string "|" "$disk_error_message" "$memory_error_message"
-
-    return $prereqs_passed
-}
-
-# Split and sanitize extra version
-sanitize_extra_version()
-{
-    local input="$1"
-    IFS='.' read -ra tokens <<< "$input"
-    local output=()
-    for token in "${tokens[@]}"; do
-        if [[ "$token" =~ ^[0-9]+$ ]]; then
-            output+=("$token")
-        else
-            break
-        fi
-    done
-    # Pad to length 3
-    while [ "${#output[@]}" -lt 3 ]; do output+=("0"); done
-    echo "${output[@]}"
-}
-
-is_newer_kernel()
-{
-    if [ "$DEBUG" != "0" ]; then
-        log_debug "[>] Comparing kernel versions: [$1] (current) >= [$2] (minimum required)"
-    fi
-    local current_kernel="$1"
-    local minimum_kernel="$2"
-
-    # Split on "-" into main and extra version
-    IFS='-' read -r current_main current_extra <<< "$current_kernel"
-    IFS='-' read -r minimum_main minimum_extra <<< "$minimum_kernel"
-
-    # Convert main parts to arrays
-    IFS='.' read -ra current_parts <<< "$current_main"
-    IFS='.' read -ra minimum_parts <<< "$minimum_main"
-
-    # Pad to length 3
-    while [ "${#current_parts[@]}" -lt 3 ]; do current_parts+=("0"); done
-    while [ "${#minimum_parts[@]}" -lt 3 ]; do minimum_parts+=("0"); done
-
-    # Compare main version numbers
-    for (( i=0; i<=2; i++ )); do
-        if (( current_parts[i] < minimum_parts[i] )); then
-            return 1  # current < minimum
-        elif (( current_parts[i] > minimum_parts[i] )); then
-            return 0  # current > minimum
-        fi
-    done
-
-    # If current is an RC, treat it as older
-    if [[ "$current_extra" == rc* ]]; then
-        return 1
-    fi
-    if [[ "$minimum_extra" == rc* ]]; then
-        return 0
-    fi
-
-    # Inline sanitize_extra_version logic to avoid command substitution issues
-    # Process current_extra
-    local current_extra_cleaned
-    current_extra_cleaned=$(echo "$current_extra" | sed 's/[^0-9.]//g')
-    IFS='.' read -ra current_tokens <<< "$current_extra_cleaned"
-    local current_extra_major="${current_tokens[0]:-0}"
-    local current_extra_minor="${current_tokens[1]:-0}"
-    local current_extra_patch="${current_tokens[2]:-0}"
-    
-    # Validate that each part is numeric
-    if ! [[ "$current_extra_major" =~ ^[0-9]+$ ]]; then current_extra_major=0; fi
-    if ! [[ "$current_extra_minor" =~ ^[0-9]+$ ]]; then current_extra_minor=0; fi
-    if ! [[ "$current_extra_patch" =~ ^[0-9]+$ ]]; then current_extra_patch=0; fi
-    
-    # Process minimum_extra
-    local minimum_extra_cleaned
-    minimum_extra_cleaned=$(echo "$minimum_extra" | sed 's/[^0-9.]//g')
-    IFS='.' read -ra minimum_tokens <<< "$minimum_extra_cleaned"
-    local minimum_extra_major="${minimum_tokens[0]:-0}"
-    local minimum_extra_minor="${minimum_tokens[1]:-0}"
-    local minimum_extra_patch="${minimum_tokens[2]:-0}"
-    
-    # Validate that each part is numeric
-    if ! [[ "$minimum_extra_major" =~ ^[0-9]+$ ]]; then minimum_extra_major=0; fi
-    if ! [[ "$minimum_extra_minor" =~ ^[0-9]+$ ]]; then minimum_extra_minor=0; fi
-    if ! [[ "$minimum_extra_patch" =~ ^[0-9]+$ ]]; then minimum_extra_patch=0; fi
-
-    # Compare each part individually
-    if (( current_extra_major < minimum_extra_major )); then
-        return 1
-    elif (( current_extra_major > minimum_extra_major )); then
-        return 0
-    fi
-    
-    if (( current_extra_minor < minimum_extra_minor )); then
-        return 1
-    elif (( current_extra_minor > minimum_extra_minor )); then
-        return 0
-    fi
-    
-    if (( current_extra_patch < minimum_extra_patch )); then
-        return 1
-    elif (( current_extra_patch > minimum_extra_patch )); then
-        return 0
-    fi
-
-    return 0  # versions are equal
-}
-
-#Non-Blocking
-verify_kernel_version()
-{
-    if [[ -z "$CURRENT_KERNEL" ]]; then
-        log_warning "[!] Warning: Failed to get kernel version."
-        return 0
-    fi
-
-    is_newer_kernel $CURRENT_KERNEL "$MINIMUM_REQUIRED_KERNEL"
-    local result=$?
-    if [ "$result" -ne 0 ]; then
-        local msg="MDE requires kernel version $MINIMUM_REQUIRED_KERNEL or later but found $CURRENT_KERNEL."
-        log_warning "[!] Warning: $msg"
-        echo "$msg"
-    fi
-    return 0
-}
-
-is_fs_supported()
-{
-    for fs in "${SUPPORTED_FILESYSTEMS[@]}"; do
-        if [[ "$1" == "$fs" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-#Non-Blocking
-verify_filesystem_support()
-{
-    # Extract mount points and fs types
-    local mount_info
-    mount_info=$(cut -d' ' -f2,3 /proc/mounts)
-    if [[ $? -ne 0 ]]; then
-        log_warning "[!] Warning: Failed to read /proc/mounts"
-        return 0
-    fi
-
-    # Loop over each mount and check for unsupported filesystems
-    local is_any_fs_supported=false
-    unsupported_filesystems=()
-    while IFS=' ' read -r mount_point fs_type; do
-        if ! is_fs_supported "$fs_type"; then
-            unsupported_filesystems+=( "${mount_point}:${fs_type}" )
-        else
-            is_any_fs_supported=true
-        fi
-    done <<< "$mount_info"
-
-    if $is_any_fs_supported; then
-        return 0
-    else
-        log_warning "[!] Warning: No supported filesystem found"
-        echo "No supported filesystem found"
-        return 0
-    fi
-}
-
-verify_ebpf_support()
-{
-    local ebpf_minimum_required_kernel=$1
-
-    if [[ -z "$CURRENT_KERNEL" ]]; then
-        log_warning "[!] Warning: Failed to get kernel version. Won't be able to verify eBPF support."
-        return 0
-    fi
-
-    is_newer_kernel $CURRENT_KERNEL "$ebpf_minimum_required_kernel"
-    local result=$?
-    if [ "$result" -ne 0 ]; then
-        local msg="MDE with eBPF requires kernel version $ebpf_minimum_required_kernel or later but found $CURRENT_KERNEL."
-        log_warning "[!] Warning: $msg"
-    fi
-    return $result
-}
-
-#Non blocking
-verify_supported_distros()
-{
-    if [[ "$VERSION" == *.* ]]; then
-      local major="${VERSION%%.*}"
-      local minor="${VERSION#*.}"
-    else
-      local major="$VERSION"
-      local minor="0"
-    fi
-
-	local arm_arch='^(aarch64|arm64)'
-    local is_arm=false
-    [[ "$ARCHITECTURE" =~ $arm_arch ]] && is_arm=true
-
-    local os_not_supported_msg="[!] Warning: The OS $DISTRO $VERSION ($ARCHITECTURE) is not officially supported."
-
-	case "$DISTRO" in
-        debian)
-            ( $is_arm && [[ "$VERSION" =~ ^(11|12)$ ]] ) || (! $is_arm && (( major >= 9 && major <= 12 )) ) || log_warning "$os_not_supported_msg"
-            ;;
-        ubuntu)
-            [[ "$VERSION" =~ ^(20.04|22.04|24.04)$ ]] || (! $is_arm && [[ "$VERSION" =~ ^(16.04|18.04)$ ]] ) || log_warning "$os_not_supported_msg"
-            ;;
-        rhel|ol)
-            [[ "$major" =~ ^(8|9|10)$ ]] || ( ! $is_arm && (( major >= 7 && minor >= 2 )) ) || log_warning "$os_not_supported_msg"
-            ;;
-        centos)
-            $is_arm && log_warning "$os_not_supported_msg" || [[ "$major" == 8 || ( "$major" == 7 && "$minor" -ge 2 ) ]] || log_warning "$os_not_supported_msg"
-            ;;
-        sles|sle-hpc|sles_sap)
-            [[ "$major" =~ ^(15)$ ]] || (! $is_arm && [[ "$major" =~ ^(12)$ ]] ) || log_warning "$os_not_supported_msg"
-            ;;
-        amzn)
-            [[ "$VERSION" == 2 || "$VERSION" == 2023 ]] || log_warning "$os_not_supported_msg"
-            ;;
-        fedora)
-            $is_arm && log_warning "$os_not_supported_msg" || (( VERSION >= 33 && VERSION <= 38 )) || log_warning "$os_not_supported_msg"
-            ;;
-        almalinux)
-            $is_arm && log_warning "$os_not_supported_msg" || [[ "$major" == 8 && "$minor" -ge 4 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
-            ;;
-        rocky)
-            $is_arm && log_warning "$os_not_supported_msg" || [[ "$major" == 8 && "$minor" -ge 7 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
-            ;;
-        mariner)
-            $is_arm && log_warning "$os_not_supported_msg" || [[ "$VERSION" == 2 ]] || log_warning "$os_not_supported_msg"
-            ;;
-        *)
-            log_warning "[!] Warning: unsupported distro $DISTRO $VERSION"
-            ;;
-    esac
-
-    if is_newer_kernel "$CURRENT_KERNEL" "4.15"; then
-        :
-    elif [[ "$CURRENT_KERNEL" =~ ^3\.10\.0 ]] && is_newer_kernel "$CURRENT_KERNEL" "3.10.0-957.10"; then
-        :
-    else
-        log_warning "[!] Warning: MDE with eBPF requires kernel version 4.15 or later but found $CURRENT_KERNEL."
-    fi
-
-    return 0
-}
-
-#Non-blocking
-verify_fanotify_kernel_flags()
-{
-    # Will checks for the following flags:
-    # CONFIG_FANOTIFY -> this flag controls support for the fanotify file access notification system in the Linux kernel
-    # CONFIG_FANOTIFY_ACCESS_PERMISSIONS -> If enabled, fanotify can be run in blocking mode.
-    # These are kernel flags and can't be changed during runtime.
-
-    if [[ -z "$CURRENT_KERNEL" ]]; then
-        log_warning "[!] Warning: Failed to get kernel version. Won't be able to get FANOTIFY kernel flags."
-        return 0
-    fi
-
-    local kernel_config_file="/boot/config-${CURRENT_KERNEL}"
-
-    if [[ ! -f "$kernel_config_file" ]]; then
-        log_warning "[!] Warning: Kernel config file not found: $kernel_config_file"
-        return 0
-    fi
-
-    declare -A fanotify_flags
-
-    while IFS='=' read -r key value; do
-        if [[ "$key" == *FANOTIFY* ]]; then
-            fanotify_flags["$key"]="$value"
-        fi
-    done < "$kernel_config_file"
-
-    # Check for required kernel options
-    if [[ "${fanotify_flags[CONFIG_FANOTIFY]}" != "y" ]]; then
-        log_warning "[!] Warning: Fanotify(CONFIG_FANOTIFY) is not enabled"
-        echo "Fanotify(CONFIG_FANOTIFY) is not enabled"
-        return 0
-    fi
-
-    if [[ "${fanotify_flags[CONFIG_FANOTIFY_ACCESS_PERMISSIONS]}" != "y" ]]; then
-        log_warning "[!] Warning: CONFIG_FANOTIFY_ACCESS_PERMISSIONS is not enabled. Fanotify can't run in blocking mode."
-    fi
-
-    return 0
-}
-
-#Blocking
-verify_glibc_version()
-{
-    # Check if ldd command is available (most common way to check glibc version)
-    if ! command -v ldd >/dev/null 2>&1; then
-        log_warning "[!] Warning: ldd command not found. Cannot verify glibc version."
-        return 0
-    fi
-    
-    # Get glibc version using ldd --version
-    local glibc_version_output
-    glibc_version_output=$(ldd --version 2>/dev/null | head -n1)
-    
-    if [ -z "$glibc_version_output" ]; then
-        log_warning "[!] Warning: Failed to get glibc version."
-        return 0
-    fi
-    
-    # Extract version number from output (format: "ldd (GNU libc) 2.17" or similar)
-    local current_glibc_version
-    current_glibc_version=$(echo "$glibc_version_output" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
-    
-    if [ -z "$current_glibc_version" ]; then
-        log_warning "[!] Warning: Could not parse glibc version from: $glibc_version_output"
-        return 0
-    fi
-    
-    # Compare versions using version comparison
-    if ! is_version_greater_or_equal "$current_glibc_version" "$MIN_GLIBC_VERSION"; then
-        local msg="MDE requires glibc version $MIN_GLIBC_VERSION or later but found $current_glibc_version."
-        log_error "[x] Error: $msg"
-        echo "$msg"
-        return 1
-    fi
-    
-    return 0
-}
-
-# Helper function to compare version numbers
-is_version_greater_or_equal()
-{
-    local current_version="$1"
-    local required_version="$2"
-
-    # Split versions into arrays
-    IFS='.' read -ra current_parts <<< "$current_version"
-    IFS='.' read -ra required_parts <<< "$required_version"
-
-    # Pad arrays to same length
-    local max_length=${#current_parts[@]}
-    if [ ${#required_parts[@]} -gt $max_length ]; then
-        max_length=${#required_parts[@]}
-    fi
-    
-    while [ ${#current_parts[@]} -lt $max_length ]; do
-        current_parts+=("0")
-    done
-    
-    while [ ${#required_parts[@]} -lt $max_length ]; do
-        required_parts+=("0")
-    done
-    
-    # Compare each part
-    for i in $(seq 0 $((max_length - 1))); do
-        if [ "${current_parts[i]}" -lt "${required_parts[i]}" ]; then
-            return 1  # current < required
-        elif [ "${current_parts[i]}" -gt "${required_parts[i]}" ]; then
-            return 0  # current > required
-        fi
-    done
-    
-    return 0  # versions are equal
-}
-
 verify_min_requirements()
 {
-    verify_system_specifications
-    prereqs_passed=$?
+    # verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space
+    
+    local cores mem_mb disk_space_mb
 
-    CURRENT_KERNEL=$(uname -r)
-
-    verify_kernel_version
-    (( prereqs_passed |= $? ))
-
-    verify_glibc_version
-    (( prereqs_passed |= $? ))
-
-    verify_fanotify_kernel_flags
-    (( prereqs_passed |= $? ))
-
-    verify_filesystem_support
-    (( prereqs_passed |= $? ))
-
-    verify_supported_distros
-    (( prereqs_passed |= $? ))
-
-    if [ "$prereqs_passed" -ne 0 ]; then
-        script_exit "Prerequisite check failed" "$ERR_INSUFFICIENT_REQUIREMENTS"
-    else
-        log_info "[v] All prerequisite passed"
+    cores=$(nproc --all)
+    if [ "$cores" -lt $MIN_CORES ]; then
+        script_exit "MDE requires $MIN_CORES cores or more to run, found $cores." $ERR_INSUFFICIENT_REQUIREMENTS
     fi
+
+    mem_mb=$(free -m | grep Mem | awk '{print $2}')
+    if [ "$mem_mb" -lt $MIN_MEM_MB ]; then
+        script_exit "MDE requires at least $MIN_MEM_MB MB of RAM to run. found $mem_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
+    fi
+
+    disk_space_mb=$(df -m . | tail -1 | awk '{print $4}')
+    if [ "$disk_space_mb" -lt $MIN_DISK_SPACE_MB ]; then
+        script_exit "MDE requires at least $MIN_DISK_SPACE_MB MB of free disk space for installation. found $disk_space_mb MB." $ERR_INSUFFICIENT_REQUIREMENTS
+    fi
+
+    log_info "[v] minimal requirements met"
 }
 
 find_service()
@@ -985,24 +496,18 @@ set_package_manager()
 {
     if [ "$DISTRO_FAMILY" = "debian" ]; then
         PKG_MGR=apt
-        PKG_MGR_INVOKER="apt $(get_apt_proxy_params) $ASSUMEYES"
+        PKG_MGR_INVOKER="apt $ASSUMEYES"
     elif [ "$DISTRO_FAMILY" = "fedora" ]; then
-        # Check if dnf is available (used in RHEL 8+, CentOS 8+, Fedora, Oracle Linux 8+)
-        if command -v dnf >/dev/null 2>&1; then
-            PKG_MGR=dnf
-            PKG_MGR_INVOKER="dnf $(get_dnf_yum_proxy_params) $ASSUMEYES"
-        elif command -v yum >/dev/null 2>&1; then
-            PKG_MGR=yum
-            PKG_MGR_INVOKER="yum $(get_dnf_yum_proxy_params) $ASSUMEYES"
-        fi
+        PKG_MGR=yum
+        PKG_MGR_INVOKER="yum $ASSUMEYES"
     elif [ "$DISTRO_FAMILY" = "mariner" ] || [ "$DISTRO_FAMILY" = "azurelinux" ]; then
         PKG_MGR=dnf
-        PKG_MGR_INVOKER="dnf $(get_dnf_yum_proxy_params) $ASSUMEYES"
+        PKG_MGR_INVOKER="dnf $ASSUMEYES"
     elif [ "$DISTRO_FAMILY" = "sles" ]; then
         DISTRO="sles"
         PKG_MGR="zypper"
-        PKG_MGR_INVOKER="zypper $(get_zypper_proxy_params) --non-interactive"
-    else
+        PKG_MGR_INVOKER="zypper --non-interactive"
+    else    
         script_exit "unsupported distro", $ERR_UNSUPPORTED_DISTRO
     fi
 
@@ -1064,10 +569,6 @@ get_mdatp_version()
         PKG_VERSION=$(rpm -qi mdatp | grep -i version)
     fi
 
-    if [ -z "$PKG_VERSION" ] && command -v mdatp >/dev/null 2>&1; then
-        PKG_VERSION=$(get_health_field "app_version")
-    fi
-
     echo $PKG_VERSION
 }
 
@@ -1075,8 +576,7 @@ get_mdatp_channel()
 {
     local release_ring=""
     release_ring=$(mdatp health --field release_ring)
-    local mdatp_exit_code=$?
-    if [ "$mdatp_exit_code" = "0" ] && [ -n "$release_ring" ]; then
+    if [ "$?" = "0" ] && [ -n "$release_ring" ]; then
         release_ring=$(echo "$release_ring" | tail -n 1 | awk -F'"' '{print $2}')
     else
         install_log=/var/log/microsoft/mdatp/install.log
@@ -1144,171 +644,14 @@ wait_for_package_manager_to_complete()
     do
         lines=$(ps axo pid,comm | grep "$PKG_MGR" | grep -v grep -c)
         if [ "$lines" -eq 0 ]; then
-            log_debug "[>] package manager freed, resuming installation"
+            log_info "[>] package manager freed, resuming installation"
             return
         fi
         sleep 1
         ((counter--))
     done
 
-    log_warning "[!] pkg_mgr blocked"
-}
-
-get_all_mde_version_from_channel()
-{
-    if [ -n "$ALL_MDE_VERSIONS" ]; then
-        echo "$ALL_MDE_VERSIONS"
-        return 0
-    fi
-
-    local search_command
-    local cmd_status
-    if [ "$PKG_MGR" = "apt" ]; then
-        search_command='apt $(get_apt_proxy_params) $ASSUMEYES policy mdatp 2>/dev/null'
-    elif [ "$PKG_MGR" = "yum" ]; then
-        check_option="yum --help | grep '\-\-showduplicates' &> /dev/null"
-        eval $check_option
-        cmd_status=$?
-        if [ $cmd_status -eq 0 ]; then
-            search_command='yum $(get_dnf_yum_proxy_params) $ASSUMEYES -v list mdatp --showduplicates 2>/dev/null'
-        else
-            search_command='echo &>/dev/null'
-        fi
-    elif [ "$PKG_MGR" = "dnf" ]; then
-        search_command='dnf $(get_dnf_yum_proxy_params) $ASSUMEYES search --showduplicates mdatp 2>/dev/null'
-    elif [ "$PKG_MGR" = "zypper" ]; then
-        search_command='zypper $(get_zypper_proxy_params) search -s mdatp 2>/dev/null'
-    fi
-
-    local channel_filter=""
-    if [ "$1" = "insiders-fast" ]; then
-        channel_filter="insiderfast"
-    elif [ "$1" = "insiders-slow" ]; then
-        channel_filter="external"
-    fi
-
-    local search_output
-    search_output=$(eval $search_command 2>/dev/null)
-    cmd_status=$?
-    if [ "$cmd_status" -ne 0 ]; then
-        ALL_MDE_VERSIONS=""
-        echo ""
-        return 1
-    fi
-
-    local versions
-    if [ -n "$channel_filter" ]; then
-        versions=$(echo "$search_output" | grep "$channel_filter" | grep -oP "101\.[0-9]{1,5}\.[0-9]{4}")
-    else
-        versions=$(echo "$search_output" | grep -vE "insiderfast|external" | grep -oP "101\.[0-9]{1,5}\.[0-9]{4}")
-    fi
-
-    if [ -z "$versions" ]; then
-        ALL_MDE_VERSIONS=""
-        echo ""
-        return 1
-    fi
-    ALL_MDE_VERSIONS="$versions"
-    echo "$ALL_MDE_VERSIONS"
-    return 0
-}
-
-get_latest_versions_by_group() {
-    local versions="$1"
-    declare -A latest_versions
-
-    # Process each version
-    while IFS= read -r version; do
-        local major minor patch
-        # shellcheck disable=SC2034
-        IFS='.' read -r major minor patch <<< "$version"
-        local key="$major.$minor"
-
-        # Update if it's the first time or patch is greater
-        #if [[ -z "${latest_versions[$key]}" ]] || [[ "${version##*.}" -gt "${latest_versions[$key]##*.}" ]]; then
-        if [[ -z "${latest_versions[$key]}" ]] || (( 10#${version##*.} > 10#${latest_versions[$key]##*.} )); then
-            latest_versions[$key]="$version"
-        fi
-    done <<< "$versions"
-
-    # Print sorted result
-    for v in "${latest_versions[@]}"; do
-        echo "$v"
-    done | sort -V
-}
-
-get_nth_latest_mde_version_from_channel()
-{
-    local nth="$1"
-    local all_versions
-    all_versions=$(get_all_mde_version_from_channel "$2")
-    if [ $? -ne "0" ]; then
-        echo ""
-        return 1
-    fi
-
-    local all_unique_versions
-    all_unique_versions=$(get_latest_versions_by_group "$all_versions")
-    if [ $? -ne "0" ] || [ -z "$all_unique_versions" ]; then
-        echo ""
-        return 1
-    fi
-    local nth_version
-    nth_version=$(echo "$all_unique_versions" | sort -V | tail -n "$nth" | head -n 1)
-
-    if [ -z "$nth_version" ]; then
-        echo ""
-        return 1
-    fi
-
-    echo "$nth_version"
-}
-
-get_latest_mde_version()
-{
-    local latest_version
-    latest_version=$(get_nth_latest_mde_version_from_channel "1" "$CHANNEL")
-    local ret=$?
-    echo "$latest_version"
-    return $ret
-}
-
-check_if_version_too_old()
-{
-    local requested_version="$1"
-
-    # Get the 9th latest version
-    local latest_nth_version
-    latest_nth_version=$(get_nth_latest_mde_version_from_channel "$SUPPORTED_LAST_N_VERSIONS" "$CHANNEL") || return 0
-
-    # Extract month from version (e.g., from 101.202405.0001 → 202405)
-    local latest_nth_month
-    latest_nth_month=$(echo "$latest_nth_version" | grep -oE '101\.[0-9]{1,5}\.[0-9]{4}' | cut -d '.' -f2)
-
-    local requested_version_month
-    requested_version_month=$(echo "$requested_version" | cut -d '.' -f2)
-
-    # Ensure both are valid numbers
-    if ! [[ "$latest_nth_month" =~ ^[0-9]+$ ]] || ! [[ "$requested_version_month" =~ ^[0-9]+$ ]]; then
-        log_warning "[!] Warning: Failed to extract numeric month parts from version strings."
-        return 0
-    fi
-
-    # Compare months
-    if [ "$requested_version_month" -lt "$latest_nth_month" ]; then
-        echo "$latest_nth_version"
-        return 1
-    fi
-
-    return 0
-}
-
-exit_if_version_is_older()
-{
-    oldest_supported_version=$(check_if_version_too_old "$1")
-    if [ $? -ne 0 ]; then
-        script_exit "The requested MDE version is older than the oldest version [$oldest_supported_version] available within support window. Use newer MDE" $ERR_UNSUPPORTED_VERSION
-    fi
+    log_info "[!] pkg_mgr blocked"
 }
 
 validate_mde_version()
@@ -1316,10 +659,6 @@ validate_mde_version()
     if ! [[ "$MDE_VERSION" =~ ^101\.[0-9]{1,5}\.[0-9]{4}$ ]]; then
         echo ""
         return 1
-    fi
-
-    if [ -z "$SKIP_MDE_SUPPORT_WINDOW_CHECK" ] && [ -n "$PRE_REQ_CHECK" ]; then #Set as env variable
-        exit_if_version_is_older "$MDE_VERSION"
     fi
 
     local sep='_'
@@ -1341,20 +680,20 @@ validate_mde_version()
 
     local search_command
     if [ "$PKG_MGR" = "apt" ]; then
-        search_command='apt $(get_apt_proxy_params) $ASSUMEYES policy mdatp 2>/dev/null | grep "$version" &> /dev/null'
+        search_command='apt $ASSUMEYES policy mdatp 2>/dev/null | grep "$version" &> /dev/null'
     elif [ "$PKG_MGR" = "yum" ]; then
         check_option="yum --help | grep '\-\-showduplicates' &> /dev/null"
         eval $check_option
         cmd_status=$?
         if [ $cmd_status -eq 0 ]; then
-            search_command='yum $(get_dnf_yum_proxy_params) $ASSUMEYES -v list mdatp --showduplicates 2>/dev/null | grep "$version"  &> /dev/null'
+            search_command='yum $ASSUMEYES -v list mdatp --showduplicates 2>/dev/null | grep "$version"  &> /dev/null'
         else
             search_command='echo &>/dev/null'
         fi
     elif [ "$PKG_MGR" = "dnf" ]; then
-        search_command='dnf $(get_dnf_yum_proxy_params) $ASSUMEYES search --showduplicates mdatp -y 2>/dev/null | grep "$version"  &> /dev/null'
+        search_command='dnf $ASSUMEYES search --showduplicates mdatp -y 2>/dev/null | grep "$version"  &> /dev/null'
     elif [ "$PKG_MGR" = "zypper" ]; then
-        search_command='zypper $(get_zypper_proxy_params) search -s mdatp 2>/dev/null | grep "$version"  &> /dev/null'
+        search_command='zypper search -s mdatp $ASSUMEYES 2>/dev/null | grep "$version"  &> /dev/null'
     fi
 
     eval $search_command
@@ -1462,8 +801,6 @@ install_on_debian()
     local packages=()
     local pkg_version=
 
-    run_quietly "apt-get $(get_apt_proxy_params) update" "[!] unable to refresh the repos properly"
-
     if [ -z "$SKIP_PMC_SETUP" ]; then 
         packages=(curl apt-transport-https gnupg)
 
@@ -1485,12 +822,12 @@ install_on_debian()
         else
             run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
         fi
-        run_quietly "apt-get $(get_apt_proxy_params) update" "[!] unable to refresh the repos properly"
     else
         # Try to install/find curl, don't exit the script if it fails.
         packages=(curl)
         install_required_pkgs --no-exit "${packages[@]}"
     fi
+    run_quietly "apt-get update" "[!] unable to refresh the repos properly"
 
     local version=""
     if [ ! -z "$MDE_VERSION" ]; then
@@ -1501,13 +838,12 @@ install_on_debian()
     fi
 
     if [ -n "$INSTALL_PATH" ]; then
-        validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
 
     ### Install MDE ###
     log_info "[>] installing MDE"
-
     if [ -z "$CHANNEL" ]; then
         run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
     elif [ "$CHANNEL" = "prod" ]; then
@@ -1530,15 +866,12 @@ install_on_mariner()
     local pkg_version=
     local repo=
 
-    run_quietly "dnf $(get_dnf_yum_proxy_params) -y makecache" "[!] unable to refresh the repos properly"
-
     if [ -z "$SKIP_PMC_SETUP" ]; then 
         # To use config-manager plugin, install dnf-plugins-core package
         run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
 
-        ### Configure the repository ###
-        log_info "[>] configuring the repository"
-
+        ### Install MDE ###
+        log_info "[>] installing MDE"
         if [ "$CHANNEL" = "prod" ]; then
             run_quietly "$PKG_MGR_INVOKER install mariner-repos-extras" "unable to install mariner-repos-extras"
             run_quietly "$PKG_MGR_INVOKER config-manager --enable mariner-official-extras" "unable to enable extras repo"
@@ -1551,7 +884,6 @@ install_on_mariner()
             # mariner is only supported on prod and insiders-slow channels
             script_exit "Invalid channel: $CHANNEL. Available channels for $DISTRO_FAMILY are prod and insiders-slow channel only." $ERR_INVALID_CHANNEL
         fi
-        run_quietly "dnf $(get_dnf_yum_proxy_params) -y makecache" "[!] unable to refresh the repos properly"
     fi
 
     local version=""
@@ -1563,7 +895,7 @@ install_on_mariner()
     fi
 
     if [ -n "$INSTALL_PATH" ]; then
-        validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
 
@@ -1581,15 +913,12 @@ install_on_azurelinux()
     local pkg_version=
     local repo=
 
-    run_quietly "dnf $(get_dnf_yum_proxy_params) -y makecache" "[!] unable to refresh the repos properly"
-
     if [ -z "$SKIP_PMC_SETUP" ]; then 
         # To use config-manager plugin, install dnf-plugins-core package
         run_quietly "$PKG_MGR_INVOKER install dnf-plugins-core" "failed to install dnf-plugins-core"
 
         ### Configure the repository ###
         log_info "[>] configuring the repository"
-
         if [ "$CHANNEL" = "prod" ]; then
             run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss" "unable to install azurelinux-repos-ms-non-oss"
             run_quietly "$PKG_MGR_INVOKER config-manager --enable azurelinux-repos-ms-non-oss" "unable to enable extras repo"
@@ -1598,7 +927,6 @@ install_on_azurelinux()
             ### Add Preview Repo File ###
             run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss-preview" "unable to install azurelinux-repos-ms-non-oss-preview"
         fi
-        run_quietly "dnf $(get_dnf_yum_proxy_params) -y makecache" "[!] unable to refresh the repos properly"
     fi
 
     local version=""
@@ -1610,7 +938,7 @@ install_on_azurelinux()
     fi
 
     if [ -n "$INSTALL_PATH" ]; then
-        validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
 
@@ -1629,20 +957,14 @@ install_on_fedora()
     local repo=packages-microsoft-com
     local effective_distro=
 
-    run_quietly "$PKG_MGR -y makecache" "[!] unable to refresh the repos properly"
-
     # curl-minimal results into issues when present and trying to install curl, so skip installing
     # the curl over Amazon Linux 2023
     if ! ([[ "$VERSION" == "2023" ]] && [[ "$DISTRO" == "amzn" ]] && check_if_pkg_is_installed curl-minimal); then
         packages=(curl)
     fi
 
-    if [ -z "$SKIP_PMC_SETUP" ]; then
-        if [ "$PKG_MGR" = "dnf" ]; then
-            packages=("${packages[@]}" dnf-plugins-core)
-        else
-            packages=("${packages[@]}" yum-utils)
-        fi
+    if [ -z "$SKIP_PMC_SETUP" ]; then 
+        packages=("${packages[@]}" yum-utils)
 
         if [[ $SCALED_VERSION == 7* ]] && [[ "$DISTRO" == "rhel" ]]; then
             packages=("${packages[@]}" deltarpm)
@@ -1650,20 +972,19 @@ install_on_fedora()
 
         install_required_pkgs "${packages[@]}"
 
+        ### Configure the repository ###
+        log_info "[>] configuring the repository"
         ### Configure the repo name from which package should be installed
         local repo_name=${repo}-${CHANNEL}
-        local repo_channel="${CHANNEL#insiders-}"  
-        case "$DISTRO:$SCALED_VERSION:$CHANNEL" in
-            centos:8:insiders-slow | centos:8:insiders-fast)
-                repo_name="packages-microsoft-com-${repo_channel}-prod"
-                ;;
-            rhel:7.2:insiders-slow | rhel:7.2:insiders-fast)
-                repo_name="packages-microsoft-com-${repo_channel}-prod"
-                ;;
-            rhel:7.4:insiders-slow)
-                repo_name="packages-microsoft-com-slow-prod"
-                ;;
-        esac
+
+        if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
+            repo_name=packages-microsoft-com-prod-${CHANNEL}
+        fi
+
+        if [ "$CHANNEL" == "insiders-slow" ] && [ "$DISTRO" != "rocky" ] && [ "$DISTRO" != "almalinux" ] && ! { [ "$DISTRO" == "rhel" ] && [[ "$SCALED_VERSION" == 9* ]]; }; then  # in case of insiders slow repo [except rocky and alma], the repo name is packages-microsoft-com-slow-prod
+            #repo_name=${repo}-slow-prod
+            repo_name="packages-microsoft-com-insiders-slow"
+        fi
 
         if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ]; then
             effective_distro="rhel"
@@ -1676,26 +997,18 @@ install_on_fedora()
         fi
 
         # Configure repository if it does not exist
-        $PKG_MGR -q repolist "$repo_name" | grep "$repo_name"
+        yum -q repolist "$repo_name" | grep "$repo_name"
         found_repo=$?
         if [ $found_repo -eq 0 ]; then
             log_info "[i] repository already configured"
         else
             log_info "[>] configuring the repository"
-
-            # Use appropriate config manager based on package manager
-            if [ "$PKG_MGR" = "dnf" ]; then
-                run_quietly "dnf $(get_dnf_yum_proxy_params) config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
-            else
-                run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
-            fi
-
-            ### Fetch the gpg key ###
-            run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
-            run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
+            run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo ($?)" $ERR_FAILED_REPO_SETUP
         fi
 
-        run_quietly "$PKG_MGR $(get_dnf_yum_proxy_params) -y makecache" "[!] unable to refresh the repos properly"
+        ### Fetch the gpg key ###
+        run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+        run_quietly "rpm $(get_rpm_proxy_params) --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
     else
         # Try to install/find packages, don't exit the script if it fails.
         install_required_pkgs --no-exit "${packages[@]}"
@@ -1710,7 +1023,7 @@ install_on_fedora()
     fi
 
     if [ -n "$INSTALL_PATH" ]; then
-        validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
 
@@ -1733,8 +1046,6 @@ install_on_sles()
     local pkg_version=
     local repo=packages-microsoft-com
 
-    run_quietly "zypper $(get_zypper_proxy_params) --non-interactive refresh" "[!] unable to refresh the repos properly"
-
     packages=(curl)
     if [ -z "$SKIP_PMC_SETUP" ]; then 
         install_required_pkgs "${packages[@]}"
@@ -1743,6 +1054,9 @@ install_on_sles()
 
         ### Configure the repository ###
         local repo_name=${repo}-${CHANNEL}
+        if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+            repo_name=${repo}-slow-prod
+        fi
 
         # add repository if it does not exist
         lines=$($PKG_MGR_INVOKER lr | grep "$repo_name" | wc -l)
@@ -1750,18 +1064,17 @@ install_on_sles()
         if [ $lines -eq 0 ]; then
             log_info "[>] configuring the repository"
             run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n $repo_name https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
-
-            ### Fetch the gpg key ###
-            run_quietly "rpm $(get_rpm_proxy_params) --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
         else
             log_info "[i] repository already configured"
         fi
 
-        run_quietly "zypper $(get_zypper_proxy_params) --non-interactive refresh" "[!] unable to refresh the repos properly"
+        ### Fetch the gpg key ###
+        run_quietly "rpm $(get_rpm_proxy_params) --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key $?" $ERR_FAILED_REPO_SETUP
+
+        wait_for_package_manager_to_complete
     else
         # Try to install/find packages, don't exit the script if it fails.
         install_required_pkgs --no-exit "${packages[@]}"
-        wait_for_package_manager_to_complete
     fi
 
     local version=""
@@ -1773,7 +1086,7 @@ install_on_sles()
     fi
 
     if [ ! -z "$INSTALL_PATH" ]; then
-        validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
+		validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
 
@@ -1781,9 +1094,15 @@ install_on_sles()
     log_info "[>] installing MDE"
 
     if [ -z "$repo_name" ]; then
-        run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES mdatp$version" "[!] failed to install MDE" $ERR_INSTALLATION_FAILED
+        run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES mdatp$version" "[!] failed to install MDE (1/2)"
     else
-        run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp$version" "[!] failed to install MDE" $ERR_INSTALLATION_FAILED
+        run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp$version" "[!] failed to install MDE (1/2)"
+    fi
+    
+    if ! check_if_pkg_is_installed mdatp; then
+        log_warning "[r] retrying"
+        sleep 2
+        run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES mdatp" "unable to install MDE 2/2 ($?)" $ERR_INSTALLATION_FAILED
     fi
 
     sleep 5
@@ -1808,34 +1127,27 @@ remove_repo()
     if [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ]; then
         local repo=packages-microsoft-com
         local repo_name=${repo}-${CHANNEL}
-
+        if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+            repo_name=${repo}-slow-prod
+        fi
         run_quietly "$PKG_MGR_INVOKER removerepo $repo_name" "failed to remove repo"
     
     elif [ "$DISTRO_FAMILY" = "fedora" ]; then
         local repo=packages-microsoft-com
-        local repo_name=${repo}-${CHANNEL}
-        local repo_channel="${CHANNEL#insiders-}"  
-        case "$DISTRO:$SCALED_VERSION:$CHANNEL" in
-            centos:8:insiders-slow | centos:8:insiders-fast)
-                repo_name="packages-microsoft-com-${repo_channel}-prod"
-                ;;
-            rhel:7.2:insiders-slow | rhel:7.2:insiders-fast)
-                repo_name="packages-microsoft-com-${repo_channel}-prod"
-                ;;
-            rhel:7.4:insiders-slow)
-                repo_name="packages-microsoft-com-slow-prod"
-                ;;
-        esac
+        local repo_name="$repo-$CHANNEL"
 
-        $PKG_MGR -q repolist $repo_name | grep "$repo_name" &> /dev/null
+        if [ "$CHANNEL" = "insiders-slow" ]; then  # in case of insiders slow repo, the repo name is packages-microsoft-com-slow-prod
+            repo_name=${repo}-slow-prod
+        fi
+
+        if [[ $SCALED_VERSION == 7* ]] && [[ "$CHANNEL" != "prod" ]]; then
+            repo_name=${repo}-prod
+        fi
+
+        yum -q repolist $repo_name | grep "$repo_name" &> /dev/null
         cmd_status=$?
         if [ $cmd_status -eq 0 ]; then
-            # Use appropriate config manager based on package manager
-            if [ "$PKG_MGR" = "dnf" ]; then
-                run_quietly "dnf config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
-            else
-                run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
-            fi
+            run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
             run_quietly "find /etc/yum.repos.d -exec grep -lqR \"\[$repo_name\]\" '{}' \; -delete" "Unable to remove repo ($?)" $ERR_FAILED_REPO_CLEANUP
         else
             log_info "[i] nothing to clean up"
@@ -1867,7 +1179,7 @@ upgrade_mdatp()
     VERSION_BEFORE_UPDATE=$(get_mdatp_version)
     log_info "[i] Current $VERSION_BEFORE_UPDATE"
 
-    local version=""
+    version=""
     if [ ! -z "$MDE_VERSION" ]; then
         version=$(validate_mde_version)
         if [ -z "$version" ]; then
@@ -1890,12 +1202,7 @@ upgrade_mdatp()
     if [ "$VERSION_BEFORE_UPDATE" = "$VERSION_AFTER_UPDATE" ]; then
         log_info "[i] MDE is already up to date."
     else
-        # check install mode and log appropriate message
-        if [[ "$INSTALL_MODE" == "d" ]]; then
-            log_info "[v] downgrade successful!"
-        else
-            log_info "[v] upgrade successful!"
-        fi
+        log_info "[v] Upgrade successful!" 
     fi
 }
 
@@ -1944,8 +1251,8 @@ scale_version_id()
             else
                 SCALED_VERSION=9.0
             fi
-        elif [[ "$VERSION" == 10* ]] && [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" ]]; then
-            SCALED_VERSION=10
+		elif [[ "$VERSION" == 10* ]] && [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" ]]; then
+			SCALED_VERSION=10
         elif [[ $DISTRO == "amzn" ]] &&  [[ $VERSION == "2" || $VERSION == "2023" ]]; then # For Amazon Linux the scaled version is 2023 or 2
             SCALED_VERSION=$VERSION
         else
@@ -1982,6 +1289,8 @@ scale_version_id()
 
 onboard_device()
 {
+    log_info "[>] onboarding script: $ONBOARDING_SCRIPT"
+
     exit_if_mde_not_installed
 
     if check_if_device_is_onboarded; then
@@ -2060,6 +1369,8 @@ onboard_device()
 
 offboard_device()
 {
+    log_info "[>] offboarding script: $OFFBOARDING_SCRIPT"
+
     exit_if_mde_not_installed
 
     if ! check_if_device_is_onboarded; then
@@ -2186,8 +1497,7 @@ usage()
     echo " -p|--passive-mode    set real time protection to passive mode"
     echo " -a|--rtp-mode        set real time protection to active mode. passive-mode and rtp-mode are mutually exclusive"
     echo " -t|--tag             set a tag by declaring <name> and <value>, e.g: -t GROUP Coders"
-    echo " -m|--min_req(deprecated) enforce minimum requirements. Its enabled by default. Will be removed in future"
-    echo " -q|--pre-req         enforce prerequisite for MDE like memory, disk, etc."
+    echo " -m|--min_req         enforce minimum requirements"
     echo " -x|--skip_conflict   skip conflicting application verification"
     echo " -w|--clean           remove repo from package manager for a specific channel"
     echo " -y|--yes             assume yes for all mid-process prompts (default, depracated)"
@@ -2204,8 +1514,6 @@ usage()
     echo " -b|--install-path    specify the installation and configuration path for MDE. Default: /"
     echo " -h|--help            display help"
 }
-
-#__MAIN__
 
 if [ $# -eq 0 ]; then
     usage
@@ -2259,12 +1567,8 @@ do
             verify_privileges "offboard"
             shift 2
             ;;
-        -m|--min_req) # Making this No-op argument as removing this may break exisiting users
-            echo "[!] Warning: option <-m/--min_req> is deprecated. Use <-q/--pre-req>. Will be removed in future"
-            shift 1
-            ;;
-        -q|--pre-req)
-            PRE_REQ_CHECK=1
+        -m|--min_req)
+            MIN_REQUIREMENTS=1
             shift 1
             ;;
         -x|--skip_conflict)
@@ -2305,7 +1609,7 @@ do
         -n|--no)
             ASSUMEYES=
             shift 1
-            ;;
+            ;;            
         -s|--verbose)
             VERBOSE=1
             shift 1
@@ -2428,6 +1732,11 @@ fi
 # echo "--- mde_installer.sh v$SCRIPT_VERSION ---"
 log_info "--- mde_installer.sh v$SCRIPT_VERSION ---"
 
+### Validate mininum requirements ###
+if [ $MIN_REQUIREMENTS ]; then
+    verify_min_requirements
+fi
+
 ## Detect the architecture type
 detect_arch
 
@@ -2439,16 +1748,6 @@ scale_version_id
 
 ### Set package manager ###
 set_package_manager
-
-### Validate mininum requirements ###
-if [ "$INSTALL_MODE" = "i" ] && [ -n "$PRE_REQ_CHECK" ]; then
-    verify_min_requirements
-fi
-
-# Log proxy configuration if set
-if [[ -n "$http_proxy" || -n "$https_proxy" ]]; then
-    log_info "[v] Proxy configuration set"
-fi
 
 ### Act according to arguments ###
 if [ "$INSTALL_MODE" = "i" ]; then
