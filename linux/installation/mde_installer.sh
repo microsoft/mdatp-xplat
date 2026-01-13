@@ -816,8 +816,12 @@ install_on_debian()
         ### Fetch the gpg key ###
 
         if { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "24.04" ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "12" ]; }; then
-            if [ ! -f /usr/share/keyrings/microsoft-prod.gpg ]; then
-                run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+            local gpg_key_file="/usr/share/keyrings/microsoft-prod.gpg"
+            if [ ! -f "$gpg_key_file" ]; then
+                run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o $gpg_key_file" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+            fi
+            if [ -f "$gpg_key_file" ]; then
+                run_quietly "chmod o+r $gpg_key_file" "unable to set read permission on gpg key" $ERR_FAILED_REPO_SETUP
             fi
         else
             run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
