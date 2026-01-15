@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="0.8.3" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="0.8.4" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -814,15 +814,23 @@ install_on_debian()
         run_quietly "mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
 
         ### Fetch the gpg key ###
-
-        if { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "24.04" ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "12" ]; }; then
-            local gpg_key_file="/usr/share/keyrings/microsoft-prod.gpg"
+		
+		local gpg_key_file="/usr/share/keyrings/microsoft-prod.gpg"
+        if { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "24.04" ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "12" ]; }; then    
             if [ ! -f "$gpg_key_file" ]; then
                 run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o $gpg_key_file" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
             fi
             if [ -f "$gpg_key_file" ]; then
                 run_quietly "chmod o+r $gpg_key_file" "unable to set read permission on gpg key" $ERR_FAILED_REPO_SETUP
             fi
+		elif { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "13" ]; }; then
+			if [ -f "$gpg_key_file" ]; then
+				run_quietly "rm -f $gpg_key_file" "unable to remove existing microsoft-prod.gpg" $ERR_FAILED_REPO_SETUP
+            fi
+		run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft-2025.asc | sudo gpg --dearmor -o $gpg_key_file" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+			if [ -f "$gpg_key_file" ]; then
+				run_quietly "chmod o+r $gpg_key_file" "unable to set read permission on gpg key" $ERR_FAILED_REPO_SETUP
+			fi
         else
             run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
         fi
