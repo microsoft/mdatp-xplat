@@ -827,7 +827,7 @@ install_on_debian()
 			if [ -f "$gpg_key_file" ]; then
 				run_quietly "rm -f $gpg_key_file" "unable to remove existing microsoft-prod.gpg" $ERR_FAILED_REPO_SETUP
             fi
-		run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft-2025.asc | sudo gpg --dearmor -o $gpg_key_file" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+			run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft-2025.asc | sudo gpg --dearmor -o $gpg_key_file" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
 			if [ -f "$gpg_key_file" ]; then
 				run_quietly "chmod o+r $gpg_key_file" "unable to set read permission on gpg key" $ERR_FAILED_REPO_SETUP
 			fi
