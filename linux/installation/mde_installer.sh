@@ -339,7 +339,7 @@ detect_distro()
 
     if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ]; then
         DISTRO_FAMILY="debian"
-    elif [ "$DISTRO" = "rhel" ] || [ "$DISTRO" = "centos" ] || [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "amzn" ] || [ "$DISTRO" = "almalinux" ] || [ "$DISTRO" = "rocky" ]; then
+    elif [ "$DISTRO" = "rhel" ] || [ "$DISTRO" = "centos" ] || [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "amzn" ] || [ "$DISTRO" = "almalinux" ] || [ "$DISTRO" = "rocky" ] || [ "$DISTRO" = "alinux" ]; then
         DISTRO_FAMILY="fedora"
     elif [ "$DISTRO" = "mariner" ]; then
         DISTRO_FAMILY="mariner"
@@ -998,7 +998,7 @@ install_on_fedora()
             repo_name="packages-microsoft-com-insiders-slow"
         fi
 
-        if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ]; then
+        if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "alinux" ]; then
             effective_distro="rhel"
         elif [ "$DISTRO" = "almalinux" ]; then
             effective_distro="alma"
@@ -1255,7 +1255,7 @@ scale_version_id()
 
         elif [[ $VERSION == 7* ]]; then
             SCALED_VERSION=7
-        elif [[ $VERSION == 8* ]] || [[ "$DISTRO" == "fedora" ]]; then
+        elif [[ $VERSION == 8* ]] || [[ "$DISTRO" == "fedora" ]] || [[ "$DISTRO" == "alinux" ]]; then # Alibaba cloud linux is generalized to use 8* repos
             SCALED_VERSION=8
         elif [[ $VERSION == 9* ]]; then
             if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" ]]; then
