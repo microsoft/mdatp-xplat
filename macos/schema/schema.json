@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.25072.0011",
+    "__version": "101.25102.0001",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
@@ -351,7 +351,21 @@
                             "rel": "More information"
                         }
                     ]
-                }        
+                },
+                "offlineDefinitionUpdateFallbackToCloud": {
+                    "default": true,
+                    "title": "Fallback to Microsoft cloud updates",
+                    "description": "Determine the Defender for Endpoint security intelligence update approach when offline mirror server fails to serve the update request. If set to true, the update is retried via the Microsoft cloud when offline security intelligence update failed.",
+                    "format": "checkbox",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-support-offline-security-intelligence-update#configure-the-endpoints",
+                            "rel": "More information"
+                        }
+                    ],
+                    "propertyOrder": 180,
+                    "type": "boolean"
+                }
             }
         },
         "cloudService": {
