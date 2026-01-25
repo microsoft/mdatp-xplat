@@ -1,4 +1,5 @@
-#! /usr/bin/bash
+#!/bin/bash
+set -euo pipefail
 
 cd /tmp/XMDEClientAnalyzer
-./mde_support_tool.sh -d $@
+./mde_support_tool.sh -d "$@"

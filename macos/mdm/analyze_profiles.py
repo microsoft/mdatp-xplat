@@ -1,7 +1,30 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+"""Analyze MDM profiles for Microsoft Defender for Endpoint on macOS.
 
-from __future__ import print_function
-import getopt, os, sys, plistlib, re, shutil, sys, argparse
+This script validates that the required MDM profiles are properly
+deployed and configured for Defender on macOS systems.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import os
+import plistlib
+import shutil
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 if sys.stdout.isatty():
     class tc:
@@ -268,11 +291,11 @@ def parse_tcc(path):
 
     try:
         shutil.copy(path, mdm_tcc)
-        os.system('plutil -convert xml1 "{}"'.format(mdm_tcc))
+        subprocess.run(['plutil', '-convert', 'xml1', mdm_tcc], check=True, capture_output=True)
         tcc = read_plist(mdm_tcc)
-    except IOError:
+    except (IOError, subprocess.CalledProcessError) as e:
         tcc = None
-        print_warning('No {} found, is the machine enrolled into MDM?'.format(path))
+        print_warning('No {} found or conversion failed, is the machine enrolled into MDM? Error: {}'.format(path, e))
 
     if tcc:
         for service in tcc.values():
@@ -422,28 +445,19 @@ if not args.template:
             import urllib.request
             print_debug('Using module urllib.request')
 
-            def downloader():
-                try:
-                    with urllib.request.urlopen(url) as response, open(args.template, 'wb') as out_file:
-                        shutil.copyfileobj(response, out_file)
-                except:
-                    print_warning('Your Python has issues with SSL validation, please fix it. Querying {} with disabled validation.'.format(url))
-                    import ssl
-                    ssl._create_default_https_context = ssl._create_unverified_context
+            try:
+                with urllib.request.urlopen(url) as response, open(args.template, 'wb') as out_file:
+                    shutil.copyfileobj(response, out_file)
+            except urllib.error.URLError as e:
+                print_warning('Your Python has issues with SSL validation, please fix it. Querying {} with disabled validation. Error: {}'.format(url, e))
+                import ssl
+                ssl._create_default_https_context = ssl._create_unverified_context
 
-                    with urllib.request.urlopen(url) as response, open(args.template, 'wb') as out_file:
-                        shutil.copyfileobj(response, out_file)
-
-        except:
-            import urllib2
-            print_debug('Using module urllib2')
-
-            def downloader():
-                response = urllib2.urlopen(url)
-                with open(args.template, 'wb') as out_file:
-                    out_file.write(response.read())
-
-        downloader()
+                with urllib.request.urlopen(url) as response, open(args.template, 'wb') as out_file:
+                    shutil.copyfileobj(response, out_file)
+        except ImportError as e:
+            print_warning('urllib.request not available: {}'.format(e))
+            raise
 
 args.template = os.path.abspath(os.path.expanduser(args.template))
 
@@ -454,10 +468,10 @@ if not in_file:
 
     if os.path.exists(in_file):
         print_debug("{} already exists, remove it first".format(in_file))
-        os.system('sudo rm -f "{}"'.format(in_file))
+        subprocess.run(['sudo', 'rm', '-f', in_file], check=False)
 
     print_debug('Running "profiles" command, sudo password may be required...')
-    os.system('sudo profiles show -output "{}"'.format(in_file))
+    subprocess.run(['sudo', 'profiles', 'show', '-output', in_file], check=True)
 
 in_file = os.path.abspath(os.path.expanduser(in_file))
 

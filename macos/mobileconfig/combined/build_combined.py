@@ -76,8 +76,8 @@ args = parser.parse_args()
 
 try:
     plist_template = read_plist(args.template)
-except:
-    print_error("Cannot read template {}".format(args.template))
+except (OSError, plistlib.InvalidFileException) as e:
+    print_error("Cannot read template {}: {}".format(args.template, e))
     sys.exit(1)
 
 plist_template['PayloadContent'] = []
@@ -100,8 +100,8 @@ for f_in in getattr(args, 'in'):
                 continue
 
             plist_template['PayloadContent'].append(payload)
-    except:
-        print_error("Cannot read input file {}".format(f_in))
+    except (OSError, plistlib.InvalidFileException, KeyError) as e:
+        print_error("Cannot read input file {}: {}".format(f_in, e))
 
 if tcc_payload is not None:
     plist_template['PayloadContent'].append(tcc_payload)

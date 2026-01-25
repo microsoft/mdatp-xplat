@@ -1,65 +1,23 @@
 #!/bin/bash
-
+#
+# shellcheck disable=SC1091
 # This script is used to download offline signature updates for Microsoft Defender for Endpoint on Linux / macOS.
-
+#
 # This script has dependencies on jq and curl. Please ensure that these programs are installed on the system before running the script.
 # The script does not take any command line arguments, but uses inputs from the settings.json file.
 # Please copy the settings.json file to the same directory as this script, and update the details in the file correctly before running the script.
-# As of this version of the script (0.0.2), scheduled tasks for downloading update packages cannot be created, and only full signature packages can be downloaded (no delta packages). 
-# All possible signature update packages specified as part of the settings.json file are downloaded within a specific nested directory structure:
-#   /home/user/wdav-update/latest
-#   ├── mac
-#   │   ├── preview_back
-#   │   │   ├── arch_arm64
-#   │   │   └── arch_x86_64
-#   │   ├── preview
-#   │   │   ├── arch_arm64
-#   │   │   │   ├── manifest.json
-#   │   │   │   └── updates.zip
-#   │   │   └── arch_x86_64
-#   │   │       ├── manifest.json
-#   │   │       └── updates.zip
-#   │   ├── production_back
-#   │   │   ├── arch_arm64
-#   │   │   └── arch_x86_64
-#   │   └── production
-#   │       ├── arch_arm64
-#   │       │   ├── manifest.json
-#   │       │   └── updates.zip
-#   │       └── arch_x86_64
-#   │           ├── manifest.json
-#   │           └── updates.zip
-#   └── linux
-#       ├── preview
-#       │   ├── arch_x86_64
-#       │   │   ├── manifest.json
-#       │   │   └── updates.zip
-#       │   ├── arch_arm64
-#       │   │   ├── manifest.json
-#       │   │   └── updates.zip
-#       ├── preview_back
-#       │   ├── arch_x86_64
-#       │   │   ├── manifest.json
-#       │   │   └── updates.zip
-#       │   ├── arch_arm64
-#       │   │   ├── manifest.json
-#       │   │   └── updates.zip
-#       ├── production
-#       │   ├── arch_x86_64
-#       │   │   ├── manifest.json
-#       │   │   └── updates.zip
-#       │   ├── arch_arm64
-#       │   │   ├── manifest.json
-#       │   │   └── updates.zip
-#       └── production_back
-#           ├── arch_x86_64
-#           │   ├── manifest.json
-#           │   └── updates.zip
-#           └── arch_arm64
-#               ├── manifest.json
-#               └── updates.zip
 
-scriptVersion="0.0.2"
+# Strict mode for better error handling
+set -euo pipefail
+
+# Read version from central VERSION file if it exists
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." 2>/dev/null && pwd)" || REPO_ROOT=""
+if [[ -n "${REPO_ROOT}" ]] && [[ -f "${REPO_ROOT}/VERSION" ]]; then
+    scriptVersion=$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION")
+else
+    scriptVersion="1.2.0"  # Fallback version
+fi
 defaultBaseUpdateUrl="https://go.microsoft.com/fwlink/"
 defaultDownloadFolder="$HOME/wdav-update"
 defaultLogFilePath="/tmp/mdatp_offline_updates.log"
@@ -124,10 +82,10 @@ function handle_error()
 
 
     echo "Error ($exit_code): $error_message"
-    if [ -f "$cleanupUpdateFile" ]; then
+    if [[ -f "$cleanupUpdateFile" ]]; then
         rm -rf "$cleanupUpdateFile"
     fi
-    if [ -f "$cleanupManifestFile" ]; then
+    if [[ -f "$cleanupManifestFile" ]]; then
         rm -rf "$cleanupManifestFile"
     fi
     exit "$exit_code"
@@ -140,7 +98,16 @@ function is_latest_update_downloaded()
 {
     manifestJsonFile=$1
     manifestUrl=$2
-    tempFile="temp.txt"
+
+    # Use secure temp file creation
+    local tempFile
+    tempFile=$(mktemp -t "mdatp_manifest.XXXXXX") || {
+        echo "Failed to create secure temporary file"
+        return 1
+    }
+
+    # Ensure temp file is cleaned up on function exit
+    trap 'rm -f "$tempFile"' RETURN
 
     # Use jq to extract the Engine and Definition versions from the JSON file
     engine_version_prev=$(jq -r '.EngineVersion' "$manifestJsonFile")
@@ -153,25 +120,23 @@ function is_latest_update_downloaded()
     sync
     echo "Curl success"
     # Extract and log the engine version
-    engine_version=$(awk -F'</?engine>' 'NF>1{print $2}' $tempFile)
+    engine_version=$(awk -F'</?engine>' 'NF>1{print $2}' "$tempFile")
     # Extract and log the definition version using sed
-    definition_version=$(sed -n 's/.*<signatures date=".*">\([^<]*\)<\/signatures>.*/\1/p' $tempFile)
-    
+    definition_version=$(sed -n 's/.*<signatures date=".*">\([^<]*\)<\/signatures>.*/\1/p' "$tempFile")
+
 
     # Print the extracted versions
     echo "Engine Version: $engine_version"
     echo "Definition Version: $definition_version"
     echo "Engine version Prev: $engine_version_prev"
     echo "Definiton Version Prev: $definition_version_prev"
-    rm -rf $tempFile
 
     # check for version for match
-    if [ "$engine_version_prev" = "$engine_version" ] && [ "$definition_version_prev" = "$definition_version" ]; then
+    if [[ "$engine_version_prev" = "$engine_version" ]] && [[ "$definition_version_prev" = "$definition_version" ]]; then
         return 0
     else
         return 1
     fi
-    sync
 }
 
 # Constructs the list of URLs and downloads the signature updates.
@@ -234,7 +199,7 @@ function invoke_download_all_updates()
                 if [[ ! -d "$backupPath" ]]; then
                     mkdir -p "$backupPath"
                 fi
-                if [ -f "$savePath" ] && [ -f "$currentManifestPath" ]; then
+                if [[ -f "$savePath" ]] && [[ -f "$currentManifestPath" ]]; then
                     echo "copying from $path to $backupPath"
                     cp -rf "$savePath" "$backupPath"
                     cp -rf "$currentManifestPath" "$backupPath"
@@ -279,17 +244,17 @@ scriptDir="$(dirname "$0")"
 
 echo "The script is being executed from: $scriptDir"
 
-if ! [ -x "$(command -v jq)" ]; then
+if ! [[ -x "$(command -v jq)" ]]; then
     echo "Exiting script since jq is not installed. Please install jq and then re-run the script."
     exit 0
 fi
 
-if ! [ -x "$(command -v curl)" ]; then
+if ! [[ -x "$(command -v curl)" ]]; then
     echo "Exiting script since curl is not installed. Please install curl and then re-run the script."
     exit 0
 fi
 
-if [ -f "$scriptDir/settings.json" ]; then
+if [[ -f "$scriptDir/settings.json" ]]; then
     echo "Reading input parameters from settings.json file"
 else
     echo "Exiting script since settings.json file does not exist. Please copy the settings.json file to the same directory as the script and then re-run the script."

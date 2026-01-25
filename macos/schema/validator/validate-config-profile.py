@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse, shutil, subprocess, sys, tempfile
 from jschon import create_catalog, JSON, JSONSchema
 
@@ -11,7 +12,7 @@ parser.add_argument('file', type=str, nargs='+')
 
 try:
     args = parser.parse_args()
-except:
+except SystemExit:
     print(parser.print_help())
     sys.exit(2)
 
@@ -46,7 +47,7 @@ def load_plist(path: str):
         with open(path, 'rb') as f:
             debug("Probe as a plain plist")
             data = plistlib.load(f)
-    except:
+    except plistlib.InvalidFileException:
         debug("Probe as a signed mobileconfig file")
         temp_file = tempfile.NamedTemporaryFile()
         subprocess.run(["/usr/bin/security", "cms", "-D", "-i", path, "-o", temp_file.name])
@@ -87,7 +88,7 @@ def load_plist(path: str):
 def load_file(path: str):
     try:
         return load_plist(path)
-    except:
+    except (plistlib.InvalidFileException, OSError):
         return load_json(path)
     
 def report(node: dict, found_nodes: set, offset: int = 0):
@@ -172,31 +173,20 @@ def download_schema():
     schema = schema_temp_file.name
 
     info("Downloading schema from {}".format(url))
+    import urllib.request
+    import urllib.error
+    debug('Using module urllib.request')
+
     try:
-        import urllib.request
-        debug('Using module urllib.request')
+        with urllib.request.urlopen(url) as response, open(schema, 'wb') as out_file:
+            shutil.copyfileobj(response, out_file)
+    except urllib.error.URLError as e:
+        warn('Your Python has issues with SSL validation, please fix it. Querying {} with disabled validation. Error: {}'.format(url, e))
+        import ssl
+        ssl._create_default_https_context = ssl._create_unverified_context
 
-        def downloader():
-            try:
-                with urllib.request.urlopen(url) as response, open(schema, 'wb') as out_file:
-                    shutil.copyfileobj(response, out_file)
-            except:
-                warning('Your Python has issues with SSL validation, please fix it. Querying {} with disabled validation.'.format(url))
-                import ssl
-                ssl._create_default_https_context = ssl._create_unverified_context
-
-                with urllib.request.urlopen(url) as response, open(schema, 'wb') as out_file:
-                    shutil.copyfileobj(response, out_file)        
-    except:
-        import urllib2
-        debug('Using module urllib2')
-
-        def downloader():
-            response = urllib2.urlopen(url)
-            with open(schema, 'wb') as out_file:
-                out_file.write(response.read())
-
-    downloader()
+        with urllib.request.urlopen(url) as response, open(schema, 'wb') as out_file:
+            shutil.copyfileobj(response, out_file)
     debug("Downloaded schema to {}".format(schema))
 
 schema_temp_file = None

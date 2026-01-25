@@ -1,0 +1,17 @@
+# ShellCheck configuration
+# https://www.shellcheck.net/wiki/
+
+# Use bash as default shell
+shell=bash
+
+# Set minimum severity to warning
+severity=warning
+
+# Don't follow sourced files (they may not exist during linting)
+disable=SC1091
+
+# Enable all optional checks
+enable=all
+
+# Allow external sources
+external-sources=true

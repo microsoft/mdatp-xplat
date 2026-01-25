@@ -1,11 +1,138 @@
-# Editor backup files
-**/*~
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Python precompiled files
-**/*.pyc
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.env
 
-# microsoft.asc
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ruff
+.ruff_cache/
+
+# ==========================
+# Shell / Scripts
+# ==========================
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# ==========================
+# IDE / Editors
+# ==========================
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains (PyCharm, IntelliJ, etc.)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*~
+*.swp
+*.swo
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+Sessionx.vim
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ==========================
+# OS-specific
+# ==========================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+
+# ==========================
+# Project-specific
+# ==========================
+# Downloaded GPG keys
 **/*.asc
 
-# macOS system files
-.DS_Store
+# Test outputs
+test-results/
+junit.xml
+coverage.xml
+
+# Log files
+*.log
+logs/
+
+# Temporary installer artifacts
+microsoft.list
+
+# Pre-commit cache
+.pre-commit-cache/

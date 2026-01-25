@@ -1,0 +1,23 @@
+# Default owners for everything in the repo
+* @microsoft/defender-xplat-maintainers
+
+# Linux specific files
+/linux/ @microsoft/defender-xplat-linux
+
+# macOS specific files
+/macos/ @microsoft/defender-xplat-macos
+
+# CI/CD and infrastructure
+/.github/ @microsoft/defender-xplat-devops
+/pyproject.toml @microsoft/defender-xplat-devops
+/.pre-commit-config.yaml @microsoft/defender-xplat-devops
+/.shellcheckrc @microsoft/defender-xplat-devops
+/.yamllint.yml @microsoft/defender-xplat-devops
+
+# Documentation
+/docs/ @microsoft/defender-xplat-maintainers
+/README.md @microsoft/defender-xplat-maintainers
+/CHANGELOG.md @microsoft/defender-xplat-maintainers
+
+# Security-sensitive files
+/SECURITY.md @microsoft/defender-xplat-security
