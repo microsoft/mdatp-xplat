@@ -3,6 +3,7 @@
 # Load this file in your test with:
 # load test_helper
 
+# shellcheck disable=SC2154  # BATS_TEST_FILENAME is provided by BATS framework
 # Get the project root directory
 get_project_root() {
     cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd
@@ -54,6 +55,7 @@ assert_file_contains() {
 # Assert that output contains a pattern
 assert_output_contains() {
     local pattern="$1"
+    # shellcheck disable=SC2154  # output is provided by BATS framework
     [[ "$output" =~ $pattern ]] || {
         echo "Output does not contain pattern: $pattern"
         echo "Actual output: $output"
