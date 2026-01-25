@@ -16,7 +16,6 @@ import sys
 import urllib.parse
 import urllib.request
 import xml.dom.minidom
-from typing import NoReturn
 from urllib.error import HTTPError, URLError
 
 # Configure logging
@@ -26,6 +25,10 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+# HTTP status codes
+HTTP_UNAUTHORIZED = 401
+HTTP_NOT_FOUND = 404
 
 
 class JamfError(Exception):
@@ -43,8 +46,9 @@ def create_auth_header(user: str, password: str) -> str:
 
     Returns:
         Base64-encoded credentials for Basic auth.
+
     """
-    credentials = f"{user}:{password}".encode("utf-8")
+    credentials = f"{user}:{password}".encode()
     encoded = base64.b64encode(credentials).decode("ascii")
     return f"Basic {encoded}"
 
@@ -63,28 +67,28 @@ def query_jamf_profile(url: str, user: str, password: str, name: str) -> bytes:
 
     Raises:
         JamfError: If the request fails.
+
     """
     encoded_name = urllib.parse.quote(name)
     full_url = f"{url}/JSSResource/osxconfigurationprofiles/name/{encoded_name}"
 
     logger.debug("Requesting profile from: %s", full_url)
 
-    req = urllib.request.Request(full_url)
+    req = urllib.request.Request(full_url)  # noqa: S310
     req.add_header("Accept", "application/json")
     req.add_header("Authorization", create_auth_header(user, password))
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
+        with urllib.request.urlopen(req, timeout=30) as response:  # noqa: S310
             return response.read()
     except HTTPError as e:
-        if e.code == 401:
-            raise JamfError("Authentication failed. Check username and password.") from e
-        elif e.code == 404:
-            raise JamfError(f"Profile not found: {name}") from e
-        else:
-            raise JamfError(f"HTTP error {e.code}: {e.reason}") from e
+        if e.code == HTTP_UNAUTHORIZED:
+            raise JamfError(name) from e
+        if e.code == HTTP_NOT_FOUND:
+            raise JamfError(name) from e
+        raise JamfError(name) from e
     except URLError as e:
-        raise JamfError(f"Failed to connect to JAMF server: {e.reason}") from e
+        raise JamfError(name) from e
 
 
 def parse_args() -> argparse.Namespace:
@@ -92,10 +96,11 @@ def parse_args() -> argparse.Namespace:
 
     Returns:
         Parsed arguments namespace.
+
     """
     parser = argparse.ArgumentParser(
         description="Download macOS configuration profiles from JAMF server.",
-        epilog="Example: %(prog)s --server https://instance.jamfcloud.com --name 'Defender onboarding' --user admin",
+        epilog="Example: %(prog)s --server https://instance.jamfcloud.com --name test",
     )
     parser.add_argument(
         "-s",
@@ -135,10 +140,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """Main entry point.
+    """Run the main entry point.
 
     Returns:
         Exit code (0 for success, non-zero for error).
+
     """
     args = parse_args()
 
@@ -151,7 +157,7 @@ def main() -> int:
         try:
             password = getpass.getpass("JAMF Password: ")
         except (KeyboardInterrupt, EOFError):
-            logger.error("Password input cancelled")
+            logger.exception("Password input cancelled")
             return 1
 
     if not password:
@@ -160,20 +166,19 @@ def main() -> int:
 
     try:
         content = query_jamf_profile(args.server, args.user, password, args.name)
-    except JamfError as e:
-        logger.error("Failed to download profile: %s", e)
+    except JamfError:
+        logger.exception("Failed to download profile")
         return 1
 
     try:
         data = json.loads(content)
         payloads = data["os_x_configuration_profile"]["general"]["payloads"]
-        dom = xml.dom.minidom.parseString(payloads)
-        print(dom.toprettyxml())
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.error("Failed to parse JAMF response: %s", e)
+        xml.dom.minidom.parseString(payloads)  # noqa: S318
+    except (json.JSONDecodeError, KeyError):
+        logger.exception("Failed to parse JAMF response")
         return 1
-    except Exception as e:
-        logger.error("Failed to format XML output: %s", e)
+    except Exception:
+        logger.exception("Failed to format XML output")
         return 1
 
     return 0

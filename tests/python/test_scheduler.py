@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 
 class TestScheduleScan:
@@ -32,13 +31,12 @@ class TestScheduleScan:
             [sys.executable, "-m", "py_compile", str(script_path)],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
     def test_script_imports(self, scheduler_dir: Path) -> None:
         """Test that the script can be imported without errors."""
-        import importlib.util
-
         script_path = scheduler_dir / "schedule_scan.py"
         spec = importlib.util.spec_from_file_location("schedule_scan", script_path)
         assert spec is not None, "Could not create module spec"
@@ -60,5 +58,6 @@ class TestScheduleUpdate:
             [sys.executable, "-m", "py_compile", str(script_path)],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"

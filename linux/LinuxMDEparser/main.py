@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
 
     Returns:
         Parsed arguments namespace.
+
     """
     parser = argparse.ArgumentParser(
         prog="LinuxMDEparser",
@@ -104,37 +105,44 @@ def validate_path(path: Path, must_exist: bool = False, must_be_file: bool = Fal
 
     Raises:
         ValueError: If path validation fails.
+
     """
     # Convert to absolute path
     try:
         resolved = path.resolve()
     except (OSError, RuntimeError) as e:
-        raise ValueError(f"Invalid path: {path}") from e
+        msg = f"Invalid path: {path}"
+        raise ValueError(msg) from e
 
     # Check for path traversal attempts
     path_str = str(resolved)
     if ".." in str(path):
-        raise ValueError(f"Path traversal not allowed: {path}")
+        msg = f"Path traversal not allowed: {path}"
+        raise ValueError(msg)
 
     # Check for shell metacharacters
     dangerous_chars = set(";|&$`(){}[]<>!")
     if any(c in path_str for c in dangerous_chars):
-        raise ValueError(f"Path contains invalid characters: {path}")
+        msg = f"Path contains invalid characters: {path}"
+        raise ValueError(msg)
 
     if must_exist and not resolved.exists():
-        raise ValueError(f"Path does not exist: {resolved}")
+        msg = f"Path does not exist: {resolved}"
+        raise ValueError(msg)
 
     if must_be_file and must_exist and not resolved.is_file():
-        raise ValueError(f"Path is not a file: {resolved}")
+        msg = f"Path is not a file: {resolved}"
+        raise ValueError(msg)
 
     return resolved
 
 
 def main() -> int:
-    """Main entry point.
+    """Run the main entry point.
 
     Returns:
         Exit code (0 for success, non-zero for error).
+
     """
     args = parse_args()
 
@@ -146,17 +154,18 @@ def main() -> int:
     try:
         input_file = validate_path(Path(args.input), must_exist=True, must_be_file=True)
         output_file = validate_path(Path(args.output), must_exist=False)
-    except ValueError as e:
-        logger.error("Path validation failed: %s", e)
+    except ValueError:
+        logger.exception("Path validation failed")
         return 1
 
     try:
         converter = Json2Excel(input_file, output_file)
         success = converter.convert()
-        return 0 if success else 1
-    except ConversionError as e:
-        logger.error("Conversion failed: %s", e)
+    except ConversionError:
+        logger.exception("Conversion failed")
         return 1
+    else:
+        return 0 if success else 1
 
 
 if __name__ == "__main__":

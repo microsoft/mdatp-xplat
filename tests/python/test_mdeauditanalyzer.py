@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 
 class TestMDEAuditAnalyzer:
@@ -32,6 +31,7 @@ class TestMDEAuditAnalyzer:
             [sys.executable, "-m", "py_compile", str(script_path)],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
@@ -45,7 +45,6 @@ class TestMDEAuditAnalyzer:
         """Test that the script does not have bare except clauses."""
         script_path = mdeauditanalyzer_dir / "MDEAuditAnalyzer.py"
         content = script_path.read_text()
-        import re
         bare_except = re.search(r'\bexcept\s*:', content)
         assert bare_except is None, "Script should not have bare except: clauses"
 
@@ -76,6 +75,7 @@ class TestMDEAuditAnalyzer:
             [sys.executable, str(script_path), "--help"],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"Help option failed: {result.stderr}"
         assert "usage" in result.stdout.lower() or "help" in result.stdout.lower()

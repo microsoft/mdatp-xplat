@@ -114,8 +114,9 @@ function is_latest_update_downloaded()
     definition_version_prev=$(jq -r '.DefinitionVersion' "$manifestJsonFile")
 
     if ! curl -L -o "$tempFile" "$manifestUrl"; then
+        local curl_exit_code=$?
         echo "Curl failed"
-        handle_error $? "Failed to download manifest from $manifestUrl"
+        handle_error "$curl_exit_code" "Failed to download manifest from $manifestUrl"
     fi
     sync
     echo "Curl success"

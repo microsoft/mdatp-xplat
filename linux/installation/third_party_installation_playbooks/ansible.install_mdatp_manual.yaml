@@ -45,7 +45,7 @@
        update_cache: yes
        enablerepo: packages-microsoft-prod
      when: ansible_os_family == "RedHat"
-  
+
    - name: Register mdatp_onboard.json
      stat:
        path: /etc/opt/microsoft/mdatp/mdatp_onboard.json

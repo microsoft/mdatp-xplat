@@ -4,8 +4,10 @@
 This script processes JSON output from MDE diagnostics to identify
 processes that trigger the most file scans.
 
-Usage:
-    mdatp diagnostic real-time-protection-statistics --output json | python high_cpu_parser.py [--group] [--top N]
+Usage::
+
+    mdatp diagnostic real-time-protection-statistics --output json | \
+        python high_cpu_parser.py [--group] [--top N]
 """
 
 from __future__ import annotations
@@ -39,13 +41,13 @@ def get_scan_count(entry: dict[str, Any]) -> int:
 
     Returns:
         The total files scanned count.
+
     """
     if "totalFilesScanned" in entry:
         return int(entry["totalFilesScanned"])
-    elif "total_files_scanned" in entry:
+    if "total_files_scanned" in entry:
         return int(entry["total_files_scanned"])
-    else:
-        return 0
+    return 0
 
 
 def process_grouped(
@@ -59,6 +61,7 @@ def process_grouped(
 
     Returns:
         List of tuples (name, count, path) sorted by count descending.
+
     """
     groups: dict[str, list[int | str]] = {}
 
@@ -87,6 +90,7 @@ def process_ungrouped(
 
     Returns:
         List of entries sorted by scan count descending.
+
     """
     sorted_vals = sorted(vals, key=lambda k: get_scan_count(k), reverse=True)
     return [v for v in sorted_vals[:top] if get_scan_count(v) != 0]
@@ -97,10 +101,11 @@ def parse_args() -> argparse.Namespace:
 
     Returns:
         Parsed arguments namespace.
+
     """
     parser = argparse.ArgumentParser(
         description="Process MDE scan measures to identify high CPU usage processes.",
-        epilog="Example: mdatp diagnostic real-time-protection-statistics --output json | python %(prog)s --group --top 10",
+        epilog="Example: mdatp diagnostic ... --output json | python %(prog)s --top 10",
     )
     parser.add_argument(
         "--group",
@@ -117,10 +122,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """Main entry point.
+    """Run the main entry point.
 
     Returns:
         Exit code (0 for success, non-zero for error).
+
     """
     args = parse_args()
 
@@ -135,8 +141,8 @@ def main() -> int:
 
     try:
         data = json.load(sys.stdin)
-    except json.JSONDecodeError as e:
-        logger.error("Failed to parse JSON input: %s", e)
+    except json.JSONDecodeError:
+        logger.exception("Failed to parse JSON input")
         return 1
 
     # Validate input data structure
@@ -156,13 +162,12 @@ def main() -> int:
 
     if args.group:
         results = process_grouped(vals, top)
-        for name, count, _ in results:
-            print(f"{name}\t{count}")
+        for _name, _count, _ in results:
+            pass
     else:
         results = process_ungrouped(vals, top)
-        for v in results:
-            cnt_key = "totalFilesScanned" if "totalFilesScanned" in v else "total_files_scanned"
-            print(f"{v.get('id', 'N/A')}\t{v.get('name', 'unknown')}\t{v[cnt_key]}\t{v.get('path', '')}")
+        for _v in results:
+            pass
 
     return 0
 

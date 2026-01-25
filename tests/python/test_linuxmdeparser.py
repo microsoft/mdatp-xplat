@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 
 class TestJson2Excel:
@@ -32,6 +31,7 @@ class TestJson2Excel:
             [sys.executable, "-m", "py_compile", str(script_path)],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
@@ -46,7 +46,6 @@ class TestJson2Excel:
         script_path = linuxmdeparser_dir / "json2excel.py"
         content = script_path.read_text()
         # Check for bare except: (with colon and possible whitespace)
-        import re
         bare_except = re.search(r'\bexcept\s*:', content)
         assert bare_except is None, "Script should not have bare except: clauses"
 
@@ -88,6 +87,7 @@ class TestMain:
             [sys.executable, "-m", "py_compile", str(script_path)],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
@@ -101,7 +101,6 @@ class TestMain:
         """Test that the script does not have bare except clauses."""
         script_path = linuxmdeparser_dir / "main.py"
         content = script_path.read_text()
-        import re
         bare_except = re.search(r'\bexcept\s*:', content)
         assert bare_except is None, "Script should not have bare except: clauses"
 
@@ -119,6 +118,7 @@ class TestMain:
             [sys.executable, str(script_path), "--help"],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"Help option failed: {result.stderr}"
         assert "usage" in result.stdout.lower() or "help" in result.stdout.lower()

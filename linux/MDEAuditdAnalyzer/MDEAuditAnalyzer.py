@@ -44,6 +44,7 @@ def extract_executable(line: str) -> str | None:
 
     Returns:
         The executable path if found, None otherwise.
+
     """
     match = EXE_PATTERN.search(line)
     if match:
@@ -59,6 +60,7 @@ def is_mdatp_syscall_line(line: str) -> bool:
 
     Returns:
         True if the line matches MDE audit criteria.
+
     """
     return 'key="mdatp"' in line and "type=SYSCALL" in line
 
@@ -71,6 +73,7 @@ def analyze_audit_file(audit_file: TextIO) -> Counter[str]:
 
     Returns:
         Counter of executable paths.
+
     """
     executables: list[str] = []
 
@@ -92,6 +95,7 @@ def format_results(counts: Counter[str], top: int | None = None) -> str:
 
     Returns:
         Formatted string table.
+
     """
     if not counts:
         return "No MDE-related audit entries found."
@@ -119,6 +123,7 @@ def parse_args() -> argparse.Namespace:
 
     Returns:
         Parsed arguments namespace.
+
     """
     parser = argparse.ArgumentParser(
         description="Analyze auditd logs for MDE-related syscalls.",
@@ -148,10 +153,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """Main entry point.
+    """Run the main entry point.
 
     Returns:
         Exit code (0 for success, non-zero for error).
+
     """
     args = parse_args()
 
@@ -174,18 +180,21 @@ def main() -> int:
         with open(audit_path, encoding="utf-8", errors="replace") as audit_file:
             counts = analyze_audit_file(audit_file)
     except PermissionError:
-        logger.error(
+        logger.exception(
             "Permission denied reading %s. Try running with sudo.", audit_path
         )
         return 1
-    except OSError as e:
-        logger.error("Failed to read audit file: %s", e)
+    except OSError:
+        logger.exception("Failed to read audit file")
         return 1
 
-    output = format_results(counts, args.top)
-    print(output)
+    format_results(counts, args.top)
 
-    logger.debug("Found %d unique executables in %d total entries", len(counts), sum(counts.values()))
+    logger.debug(
+        "Found %d unique executables in %d total entries",
+        len(counts),
+        sum(counts.values()),
+    )
 
     return 0
 

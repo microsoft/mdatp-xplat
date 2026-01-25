@@ -34,6 +34,7 @@ class Json2Excel:
     Attributes:
         logfile: Path to the input JSON file.
         filename: Path to the output CSV file.
+
     """
 
     def __init__(self, logfile: str | Path, filename: str | Path) -> None:
@@ -42,6 +43,7 @@ class Json2Excel:
         Args:
             logfile: Path to the input JSON file.
             filename: Path to the output CSV file.
+
         """
         self.logfile = Path(logfile)
         self.filename = Path(filename)
@@ -54,6 +56,7 @@ class Json2Excel:
 
         Raises:
             ConversionError: If the conversion fails.
+
         """
         try:
             with open(self.logfile, encoding="utf-8") as json_file:
@@ -78,21 +81,21 @@ class Json2Excel:
                 writer.writeheader()
                 writer.writerows(data)
 
+        except json.JSONDecodeError as e:
+            logger.exception("Failed to parse JSON file %s", self.logfile)
+            raise ConversionError(self.logfile) from e
+        except FileNotFoundError:
+            logger.exception("File not found: %s", self.logfile)
+            raise ConversionError(self.logfile) from None
+        except (KeyError, IndexError):
+            logger.exception("Unexpected JSON structure in %s", self.logfile)
+            raise ConversionError(self.logfile) from None
+        except OSError:
+            logger.exception("I/O error")
+            raise ConversionError(self.logfile) from None
+        else:
             logger.info("Successfully created %s", self.filename)
             return True
-
-        except json.JSONDecodeError as e:
-            logger.error("Failed to parse JSON file %s: %s", self.logfile, e)
-            raise ConversionError(f"Invalid JSON in {self.logfile}") from e
-        except FileNotFoundError as e:
-            logger.error("File not found: %s", self.logfile)
-            raise ConversionError(f"File not found: {self.logfile}") from e
-        except (KeyError, IndexError) as e:
-            logger.error("Unexpected JSON structure in %s: %s", self.logfile, e)
-            raise ConversionError(f"Unexpected JSON structure: {e}") from e
-        except OSError as e:
-            logger.error("I/O error: %s", e)
-            raise ConversionError(f"I/O error: {e}") from e
 
     # Alias for backward compatibility
     def json2excel(self) -> bool:
@@ -100,5 +103,6 @@ class Json2Excel:
 
         Returns:
             True if conversion was successful, False otherwise.
+
         """
         return self.convert()

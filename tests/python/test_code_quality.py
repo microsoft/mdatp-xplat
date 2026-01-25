@@ -12,8 +12,6 @@ import sys
 from pathlib import Path
 from typing import Iterator
 
-import pytest
-
 
 def get_python_files(root: Path) -> Iterator[Path]:
     """Yield all Python files in the project, excluding __pycache__."""
@@ -24,8 +22,7 @@ def get_python_files(root: Path) -> Iterator[Path]:
 
 def get_shell_files(root: Path) -> Iterator[Path]:
     """Yield all shell script files in the project."""
-    for sh_file in root.rglob("*.sh"):
-        yield sh_file
+    yield from root.rglob("*.sh")
 
 
 class TestBannedPythonPatterns:
@@ -71,6 +68,7 @@ class TestBannedPythonPatterns:
                 [sys.executable, "-m", "py_compile", str(py_file)],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             if result.returncode != 0:
                 failures.append(f"{py_file}: {result.stderr}")
@@ -149,6 +147,7 @@ class TestShellScriptStandards:
                 ["bash", "-n", str(sh_file)],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             if result.returncode != 0:
                 failures.append(f"{sh_file}: {result.stderr}")

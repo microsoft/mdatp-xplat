@@ -6,12 +6,9 @@ and prevent regressions.
 
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 
 class TestSEC002InputValidation:
@@ -52,8 +49,10 @@ class TestSEC002InputValidation:
         """Test that --onboard option uses validation."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "validate_script_path" in content and "onboarding" in content, \
+        assert "validate_script_path" in content, \
             "--onboard should use validate_script_path"
+        assert "onboarding" in content, \
+            "--onboard should reference onboarding"
 
     def test_install_path_uses_validation(self, scripts_dir: Path) -> None:
         """Test that --install-path option uses validation."""
@@ -157,7 +156,9 @@ class TestREL006TimeoutHandling:
         """Test that timeout logs appropriate message."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "timeout" in content.lower() and "timed out" in content.lower(), \
+        assert "timeout" in content.lower(), \
+            "Timeout handling should exist"
+        assert "timed out" in content.lower(), \
             "Timeout should log timeout message"
 
 
@@ -218,7 +219,9 @@ class TestCQPY007PythonInputValidation:
         """Test that high_cpu_parser.py validates --top argument."""
         script_path = diagnostic_dir / "high_cpu_parser.py"
         content = script_path.read_text()
-        assert "args.top" in content and "<= 0" in content, \
+        assert "args.top" in content, \
+            "high_cpu_parser.py should check args.top"
+        assert "<= 0" in content, \
             "high_cpu_parser.py should validate --top is positive"
 
 
@@ -232,16 +235,21 @@ class TestShellScriptSyntax:
             ["bash", "-n", str(script_path)],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
     def test_xplat_offline_updates_syntax(self, project_root: Path) -> None:
         """Test xplat_offline_updates_download.sh has valid syntax."""
-        script_path = project_root / "linux" / "definition_downloader" / "xplat_offline_updates_download.sh"
+        script_path = (
+            project_root / "linux" / "definition_downloader"
+            / "xplat_offline_updates_download.sh"
+        )
         result = subprocess.run(
             ["bash", "-n", str(script_path)],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
@@ -261,7 +269,7 @@ class TestPythonScriptSyntax:
             "macos/jamf/download_profile.py",
             "macos/mdm/analyze_profiles.py",
         ]
-        
+
         for py_file in python_files:
             script_path = project_root / py_file
             if script_path.exists():
@@ -269,5 +277,6 @@ class TestPythonScriptSyntax:
                     [sys.executable, "-m", "py_compile", str(script_path)],
                     capture_output=True,
                     text=True,
+                    check=False,
                 )
                 assert result.returncode == 0, f"{py_file}: {result.stderr}"

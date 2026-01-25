@@ -42,10 +42,11 @@ def backup_cron_jobs(debug: bool = False) -> Path:
 
     Raises:
         CronError: If backup fails.
+
     """
     today = datetime.today().date()
     formatted_date = today.strftime("%Y%m%d")
-    backup_path = Path(f"/tmp/cron_schedule_scan_backup_{formatted_date}")
+    backup_path = Path(f"/tmp/cron_schedule_scan_backup_{formatted_date}")  # noqa: S108
 
     if debug:
         logger.debug("Would backup cron to: %s", backup_path)
@@ -66,13 +67,13 @@ def backup_cron_jobs(debug: bool = False) -> Path:
         else:
             logger.info("No existing crontab to backup")
 
+    except OSError as e:
+        raise CronError(backup_path) from e
+    else:
         return backup_path
 
-    except OSError as e:
-        raise CronError(f"Failed to backup cron jobs: {e}") from e
 
-
-def create_cron_job(
+def create_cron_job(  # noqa: PLR0913
     minute: str = "*",
     hour: str = "2",
     day_of_month: str = "*",
@@ -94,6 +95,7 @@ def create_cron_job(
 
     Raises:
         CronError: If cron job creation fails.
+
     """
     cron_expression = f"{minute} {hour} {day_of_month} {month} {day_of_week} {command}"
 
@@ -139,13 +141,13 @@ def create_cron_job(
             temp_path.unlink(missing_ok=True)
 
     except subprocess.CalledProcessError as e:
-        raise CronError(f"Failed to create cron job: {e.stderr}") from e
+        raise CronError(cron_expression) from e
     except OSError as e:
-        raise CronError(f"Failed to create cron job: {e}") from e
+        raise CronError(cron_expression) from e
 
 
 def main() -> NoReturn:
-    """Main entry point."""
+    """Run the main entry point."""
     parser = argparse.ArgumentParser(
         description="Create a cron job for scheduled MDE virus scans."
     )
@@ -177,7 +179,7 @@ def main() -> NoReturn:
         "-L",
         "--log",
         dest="log_file",
-        default="/tmp/mdatp_scheduled_scan.log",
+        default="/tmp/mdatp_scheduled_scan.log",  # noqa: S108
         help="Log file location for scan output. Default: /tmp/mdatp_scheduled_scan.log",
     )
     parser.add_argument(
@@ -205,8 +207,8 @@ def main() -> NoReturn:
         )
         sys.exit(0)
 
-    except CronError as e:
-        logger.error(str(e))
+    except CronError:
+        logger.exception("Cron job creation failed")
         sys.exit(1)
     except KeyboardInterrupt:
         logger.info("Interrupted")

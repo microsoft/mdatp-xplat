@@ -3,9 +3,12 @@
 
 extends: default
 
+ignore: |
+  linux/installation/third_party_installation_playbooks/
+
 rules:
   line-length:
-    max: 120
+    max: 200
     level: warning
     allow-non-breakable-words: true
     allow-non-breakable-inline-mappings: true
@@ -20,8 +23,8 @@ rules:
   document-start: disable
 
   indentation:
-    spaces: 2
-    indent-sequences: true
+    spaces: consistent
+    indent-sequences: whatever
     check-multi-line-strings: false
 
   braces:

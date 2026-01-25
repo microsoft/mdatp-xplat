@@ -6,8 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 
 class TestHighCpuParser:
     """Test cases for high_cpu_parser functionality."""
@@ -33,5 +31,6 @@ class TestHighCpuParser:
             [sys.executable, "-m", "py_compile", str(script_path)],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"

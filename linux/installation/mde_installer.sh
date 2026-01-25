@@ -255,7 +255,7 @@ script_exit()
 # Validate that a path is safe (no path traversal, valid characters)
 validate_path() {
     local path="$1"
-    local path_type="$2"  # "file" or "directory"
+    # Note: path_type parameter was removed as it was unused
     
     # Check for empty path
     if [[ -z "$path" ]]; then
@@ -582,15 +582,15 @@ run_quietly()
     fi
 
     local out exit_code
-    local cmd="$1"
+    local command_str="$1"
 
     if [[ "$DEBUG" != "0" ]]; then
-        log_debug "[>] Running command: $cmd"
+        log_debug "[>] Running command: $command_str"
     fi
 
     # Use bash -c instead of eval for slightly better isolation
     # Note: Still requires trusted input - do not pass user-controlled data
-    if out=$(bash -c "$cmd" 2>&1); then
+    if out=$(bash -c "$command_str" 2>&1); then
         exit_code=0
     else
         exit_code=$?
@@ -1055,9 +1055,9 @@ install_required_pkgs()
         log_info "[>] installing $pkgs_to_be_installed"
 
         if [[ "$exit_on_failure" -eq 1 ]]; then
-            run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)" $ERR_FAILED_DEPENDENCY
+            run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages" $ERR_FAILED_DEPENDENCY
         else
-            run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages ($?)"
+            run_quietly "$PKG_MGR_INVOKER install $pkgs_to_be_installed" "Unable to install the required packages"
         fi
     else
         log_info "[v] required pkgs are installed"
@@ -1305,15 +1305,15 @@ install_on_debian()
     ### Install MDE ###
     log_info "[>] installing MDE"
     if [[ -z "$CHANNEL" ]]; then
-        run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+        run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE" $ERR_INSTALLATION_FAILED
     elif [[ "$CHANNEL" == "prod" ]]; then
         if [[ -z "$VERSION_NAME" ]]; then
-            run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+            run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE" $ERR_INSTALLATION_FAILED
         else
-            run_quietly "$PKG_MGR_INVOKER -t $VERSION_NAME install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+            run_quietly "$PKG_MGR_INVOKER -t $VERSION_NAME install mdatp$version" "unable to install MDE" $ERR_INSTALLATION_FAILED
         fi
     else
-        run_quietly "$PKG_MGR_INVOKER -t $CHANNEL install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+        run_quietly "$PKG_MGR_INVOKER -t $CHANNEL install mdatp$version" "unable to install MDE" $ERR_INSTALLATION_FAILED
     fi
 
     sleep 5
@@ -1491,9 +1491,9 @@ install_on_fedora()
     log_info "[>] installing MDE"
 
     if [[ "$ARCHITECTURE" == "aarch64" ]] || [[ -z "$repo_name" ]]; then
-        run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+        run_quietly "$PKG_MGR_INVOKER install mdatp$version" "unable to install MDE" $ERR_INSTALLATION_FAILED
     else
-        run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp$version" "unable to install MDE ($?)" $ERR_INSTALLATION_FAILED
+        run_quietly "$PKG_MGR_INVOKER --enablerepo=$repo_name install mdatp$version" "unable to install MDE" $ERR_INSTALLATION_FAILED
     fi
 
     sleep 5
@@ -1607,8 +1607,8 @@ remove_repo()
         yum -q repolist $repo_name | grep "$repo_name" &> /dev/null
         cmd_status=$?
         if [[ $cmd_status -eq 0 ]]; then
-            run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo ($?)" $ERR_FAILED_REPO_CLEANUP
-            run_quietly "find /etc/yum.repos.d -exec grep -lqR \"\[$repo_name\]\" '{}' \; -delete" "Unable to remove repo ($?)" $ERR_FAILED_REPO_CLEANUP
+            run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo" $ERR_FAILED_REPO_CLEANUP
+            run_quietly "find /etc/yum.repos.d -exec grep -lqR \"\[$repo_name\]\" '{}' \; -delete" "Unable to remove repo" $ERR_FAILED_REPO_CLEANUP
         else
             log_info "[i] nothing to clean up"
         fi
@@ -1621,10 +1621,10 @@ remove_repo()
         local new_repo_file="/etc/apt/sources.list.d/microsoft-${DISTRO}-${codename}-${CHANNEL}.list"
         
         if [[ -f "$old_repo_file" ]]; then
-            run_quietly "rm -f '$old_repo_file'" "unable to remove repo list ($?)" $ERR_FAILED_REPO_CLEANUP
+            run_quietly "rm -f '$old_repo_file'" "unable to remove repo list" $ERR_FAILED_REPO_CLEANUP
         fi
         if [[ -f "$new_repo_file" ]]; then
-            run_quietly "rm -f '$new_repo_file'" "unable to remove repo list ($?)" $ERR_FAILED_REPO_CLEANUP
+            run_quietly "rm -f '$new_repo_file'" "unable to remove repo list" $ERR_FAILED_REPO_CLEANUP
         fi
     elif [[ "$DISTRO_FAMILY" == "mariner" ]]; then # in case of mariner, do not remove the repo
         log_info "[i] nothing to clean up"

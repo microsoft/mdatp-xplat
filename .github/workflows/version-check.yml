@@ -86,20 +86,20 @@ jobs:
         run: |
           # Files that have their own version variables that should match VERSION
           # These files read from VERSION file at runtime, so check they have fallback versions
-          
+
           CENTRAL_VERSION=$(cat VERSION)
           ERRORS=0
-          
+
           echo "Checking embedded version consistency..."
           echo "Central VERSION: $CENTRAL_VERSION"
           echo ""
-          
+
           # Check mde_installer.sh has proper fallback version
           if [ -f "linux/installation/mde_installer.sh" ]; then
             # Check if it reads from VERSION file
             if grep -q 'REPO_ROOT.*VERSION' linux/installation/mde_installer.sh; then
               echo "✅ mde_installer.sh reads from central VERSION file"
-              
+
               # Check fallback version matches
               FALLBACK=$(grep 'SCRIPT_VERSION="[0-9]' linux/installation/mde_installer.sh | head -1 | sed 's/.*SCRIPT_VERSION="\([^"]*\)".*/\1/')
               if [ -n "$FALLBACK" ] && [ "$FALLBACK" != "$CENTRAL_VERSION" ]; then
@@ -115,7 +115,7 @@ jobs:
               fi
             fi
           fi
-          
+
           # Check Python scripts with __version__
           for pyfile in $(find . -name "*.py" -type f); do
             if grep -q '__version__' "$pyfile"; then
@@ -125,13 +125,13 @@ jobs:
               fi
             fi
           done
-          
+
           if [ "$ERRORS" -gt 0 ]; then
             echo ""
             echo "::error::Found $ERRORS version inconsistencies"
             exit 1
           fi
-          
+
           echo ""
           echo "✅ Embedded version check passed"
 
