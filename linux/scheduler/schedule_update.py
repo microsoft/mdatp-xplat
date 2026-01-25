@@ -123,9 +123,7 @@ def create_cron_job(  # noqa: PLR0913
         new_crontab = existing_crontab.rstrip() + "\n" + cron_expression + "\n"
 
         # Write to temp file and load
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".cron", delete=False
-        ) as temp_file:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".cron", delete=False) as temp_file:
             temp_file.write(new_crontab)
             temp_path = Path(temp_file.name)
 

@@ -39,15 +39,14 @@ class TestBannedPythonPatterns:
                     if "os.system(" in line:
                         violations.append(f"{py_file}:{i}: {line.strip()}")
 
-        assert not violations, (
-            "os.system() calls found. Use subprocess.run() instead:\n"
-            + "\n".join(violations)
-        )
+        assert (
+            not violations
+        ), "os.system() calls found. Use subprocess.run() instead:\n" + "\n".join(violations)
 
     def test_no_bare_except_anywhere(self, project_root: Path) -> None:
         """Test that bare except: clauses are not used in any Python file."""
         violations = []
-        bare_except_pattern = re.compile(r'\bexcept\s*:')
+        bare_except_pattern = re.compile(r"\bexcept\s*:")
 
         for py_file in get_python_files(project_root):
             content = py_file.read_text()
@@ -55,9 +54,8 @@ class TestBannedPythonPatterns:
                 if bare_except_pattern.search(line):
                     violations.append(f"{py_file}:{i}: {line.strip()}")
 
-        assert not violations, (
-            "Bare except: clauses found. Use specific exceptions:\n"
-            + "\n".join(violations)
+        assert not violations, "Bare except: clauses found. Use specific exceptions:\n" + "\n".join(
+            violations
         )
 
     def test_all_python_files_compile(self, project_root: Path) -> None:
@@ -92,9 +90,7 @@ class TestBannedPythonPatterns:
                     if py2_import in line:
                         violations.append(f"{py_file}:{i}: {line.strip()}")
 
-        assert not violations, (
-            "Python 2-only imports found:\n" + "\n".join(violations)
-        )
+        assert not violations, "Python 2-only imports found:\n" + "\n".join(violations)
 
 
 class TestPythonShebangStandards:
@@ -131,9 +127,7 @@ class TestPythonShebangStandards:
                 else:
                     violations.append(f"{script_rel}: missing shebang")
 
-        assert not violations, (
-            "Shebang issues found:\n" + "\n".join(violations)
-        )
+        assert not violations, "Shebang issues found:\n" + "\n".join(violations)
 
 
 class TestShellScriptStandards:
@@ -164,9 +158,7 @@ class TestShellScriptStandards:
             if not first_line.startswith("#!"):
                 violations.append(f"{sh_file}: missing shebang")
             elif "bash" not in first_line and "sh" not in first_line:
-                violations.append(
-                    f"{sh_file}: shebang '{first_line}' should reference bash or sh"
-                )
+                violations.append(f"{sh_file}: shebang '{first_line}' should reference bash or sh")
 
         assert not violations, "Shebang issues found:\n" + "\n".join(violations)
 
@@ -184,10 +176,8 @@ class TestVersionConsistency:
         version_file = project_root / "VERSION"
         version = version_file.read_text().strip()
         # Semantic versioning pattern
-        semver_pattern = re.compile(r'^\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$')
-        assert semver_pattern.match(version), (
-            f"VERSION '{version}' does not match semver format"
-        )
+        semver_pattern = re.compile(r"^\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$")
+        assert semver_pattern.match(version), f"VERSION '{version}' does not match semver format"
 
     def test_changelog_exists(self, project_root: Path) -> None:
         """Test that CHANGELOG.md exists."""
@@ -200,6 +190,4 @@ class TestVersionConsistency:
         version = version_file.read_text().strip()
         changelog = project_root / "CHANGELOG.md"
         changelog_content = changelog.read_text()
-        assert version in changelog_content, (
-            f"CHANGELOG.md does not reference version {version}"
-        )
+        assert version in changelog_content, f"CHANGELOG.md does not reference version {version}"

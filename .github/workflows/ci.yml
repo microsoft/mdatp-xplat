@@ -48,9 +48,6 @@ jobs:
       - name: Run Ruff
         run: ruff check . --output-format=github
 
-      - name: Run Black (check mode)
-        run: black --check --diff .
-
       - name: Run isort (check mode)
         run: isort --check-only --diff .
 

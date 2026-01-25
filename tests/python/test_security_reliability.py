@@ -42,24 +42,22 @@ class TestSEC002InputValidation:
         """Test that shell metacharacter check exists."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "metacharacters" in content.lower() or "shell" in content.lower(), \
-            "Shell metacharacter check should be documented"
+        assert (
+            "metacharacters" in content.lower() or "shell" in content.lower()
+        ), "Shell metacharacter check should be documented"
 
     def test_onboard_uses_validation(self, scripts_dir: Path) -> None:
         """Test that --onboard option uses validation."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "validate_script_path" in content, \
-            "--onboard should use validate_script_path"
-        assert "onboarding" in content, \
-            "--onboard should reference onboarding"
+        assert "validate_script_path" in content, "--onboard should use validate_script_path"
+        assert "onboarding" in content, "--onboard should reference onboarding"
 
     def test_install_path_uses_validation(self, scripts_dir: Path) -> None:
         """Test that --install-path option uses validation."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "validate_install_path" in content, \
-            "--install-path should use validate_install_path"
+        assert "validate_install_path" in content, "--install-path should use validate_install_path"
 
 
 class TestSEC007GPGKeyVerification:
@@ -69,30 +67,34 @@ class TestSEC007GPGKeyVerification:
         """Test that GPG fingerprint constants are defined."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "MICROSOFT_GPG_FINGERPRINT" in content, \
-            "MICROSOFT_GPG_FINGERPRINT constant should be defined"
+        assert (
+            "MICROSOFT_GPG_FINGERPRINT" in content
+        ), "MICROSOFT_GPG_FINGERPRINT constant should be defined"
 
     def test_verify_gpg_key_fingerprint_function_exists(self, scripts_dir: Path) -> None:
         """Test that verify_gpg_key_fingerprint function exists."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "verify_gpg_key_fingerprint()" in content, \
-            "verify_gpg_key_fingerprint function should exist"
+        assert (
+            "verify_gpg_key_fingerprint()" in content
+        ), "verify_gpg_key_fingerprint function should exist"
 
     def test_download_and_verify_gpg_key_function_exists(self, scripts_dir: Path) -> None:
         """Test that download_and_verify_gpg_key function exists."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "download_and_verify_gpg_key()" in content, \
-            "download_and_verify_gpg_key function should exist"
+        assert (
+            "download_and_verify_gpg_key()" in content
+        ), "download_and_verify_gpg_key function should exist"
 
     def test_gpg_verification_used_in_debian_install(self, scripts_dir: Path) -> None:
         """Test that GPG verification is used during Debian installation."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
         # Check that download_and_verify_gpg_key is called
-        assert content.count("download_and_verify_gpg_key") >= 2, \
-            "download_and_verify_gpg_key should be called for key downloads"
+        assert (
+            content.count("download_and_verify_gpg_key") >= 2
+        ), "download_and_verify_gpg_key should be called for key downloads"
 
 
 class TestSEC008ModernAptKeyHandling:
@@ -102,15 +104,13 @@ class TestSEC008ModernAptKeyHandling:
         """Test that keys are stored in /usr/share/keyrings/."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "/usr/share/keyrings/" in content, \
-            "Should use /usr/share/keyrings/ for GPG keys"
+        assert "/usr/share/keyrings/" in content, "Should use /usr/share/keyrings/ for GPG keys"
 
     def test_gpg_key_file_defined(self, scripts_dir: Path) -> None:
         """Test that gpg_key_file variable is properly set."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "microsoft-prod.gpg" in content, \
-            "Should use microsoft-prod.gpg keyring file"
+        assert "microsoft-prod.gpg" in content, "Should use microsoft-prod.gpg keyring file"
 
 
 class TestREL003ErrorReporting:
@@ -142,24 +142,22 @@ class TestREL006TimeoutHandling:
         """Test that run_with_timeout function exists."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "run_with_timeout()" in content, \
-            "run_with_timeout function should exist"
+        assert "run_with_timeout()" in content, "run_with_timeout function should exist"
 
     def test_timeout_kills_process(self, scripts_dir: Path) -> None:
         """Test that timeout function kills hung processes."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "kill -TERM" in content or "kill -KILL" in content, \
-            "Timeout handling should kill hung processes"
+        assert (
+            "kill -TERM" in content or "kill -KILL" in content
+        ), "Timeout handling should kill hung processes"
 
     def test_timeout_logs_message(self, scripts_dir: Path) -> None:
         """Test that timeout logs appropriate message."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert "timeout" in content.lower(), \
-            "Timeout handling should exist"
-        assert "timed out" in content.lower(), \
-            "Timeout should log timeout message"
+        assert "timeout" in content.lower(), "Timeout handling should exist"
+        assert "timed out" in content.lower(), "Timeout should log timeout message"
 
 
 class TestCQSH001QuotedVariables:
@@ -170,22 +168,21 @@ class TestCQSH001QuotedVariables:
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
         # Check for quoted usage in run_quietly
-        assert '"$ONBOARDING_SCRIPT"' in content, \
-            "ONBOARDING_SCRIPT should be quoted in execution"
+        assert '"$ONBOARDING_SCRIPT"' in content, "ONBOARDING_SCRIPT should be quoted in execution"
 
     def test_offboarding_script_quoted_in_execution(self, scripts_dir: Path) -> None:
         """Test that OFFBOARDING_SCRIPT is quoted when executed."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert '"$OFFBOARDING_SCRIPT"' in content, \
-            "OFFBOARDING_SCRIPT should be quoted in execution"
+        assert (
+            '"$OFFBOARDING_SCRIPT"' in content
+        ), "OFFBOARDING_SCRIPT should be quoted in execution"
 
     def test_install_path_quoted_in_mkdir(self, scripts_dir: Path) -> None:
         """Test that INSTALL_PATH is quoted in mkdir commands."""
         script_path = scripts_dir / "mde_installer.sh"
         content = script_path.read_text()
-        assert 'mkdir -p "$INSTALL_PATH"' in content, \
-            "INSTALL_PATH should be quoted in mkdir"
+        assert 'mkdir -p "$INSTALL_PATH"' in content, "INSTALL_PATH should be quoted in mkdir"
 
 
 class TestCQPY007PythonInputValidation:
@@ -219,10 +216,8 @@ class TestCQPY007PythonInputValidation:
         """Test that high_cpu_parser.py validates --top argument."""
         script_path = diagnostic_dir / "high_cpu_parser.py"
         content = script_path.read_text()
-        assert "args.top" in content, \
-            "high_cpu_parser.py should check args.top"
-        assert "<= 0" in content, \
-            "high_cpu_parser.py should validate --top is positive"
+        assert "args.top" in content, "high_cpu_parser.py should check args.top"
+        assert "<= 0" in content, "high_cpu_parser.py should validate --top is positive"
 
 
 class TestShellScriptSyntax:
@@ -242,8 +237,7 @@ class TestShellScriptSyntax:
     def test_xplat_offline_updates_syntax(self, project_root: Path) -> None:
         """Test xplat_offline_updates_download.sh has valid syntax."""
         script_path = (
-            project_root / "linux" / "definition_downloader"
-            / "xplat_offline_updates_download.sh"
+            project_root / "linux" / "definition_downloader" / "xplat_offline_updates_download.sh"
         )
         result = subprocess.run(
             ["bash", "-n", str(script_path)],

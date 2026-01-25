@@ -50,9 +50,7 @@ def get_scan_count(entry: dict[str, Any]) -> int:
     return 0
 
 
-def process_grouped(
-    vals: list[dict[str, Any]], top: int
-) -> list[tuple[str, int, str]]:
+def process_grouped(vals: list[dict[str, Any]], top: int) -> list[tuple[str, int, str]]:
     """Process and group scan data by process name.
 
     Args:
@@ -79,9 +77,7 @@ def process_grouped(
     return [(name, groups[name][0], groups[name][1]) for name in sorted_names[:top]]
 
 
-def process_ungrouped(
-    vals: list[dict[str, Any]], top: int
-) -> list[dict[str, Any]]:
+def process_ungrouped(vals: list[dict[str, Any]], top: int) -> list[dict[str, Any]]:
     """Process scan data without grouping.
 
     Args:

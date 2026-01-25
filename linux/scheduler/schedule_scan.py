@@ -123,9 +123,7 @@ def create_cron_job(  # noqa: PLR0913
         new_crontab = existing_crontab.rstrip() + "\n" + cron_expression + "\n"
 
         # Write to temp file and load
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".cron", delete=False
-        ) as temp_file:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".cron", delete=False) as temp_file:
             temp_file.write(new_crontab)
             temp_path = Path(temp_file.name)
 
@@ -148,9 +146,7 @@ def create_cron_job(  # noqa: PLR0913
 
 def main() -> NoReturn:
     """Run the main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Create a cron job for scheduled MDE virus scans."
-    )
+    parser = argparse.ArgumentParser(description="Create a cron job for scheduled MDE virus scans.")
     parser.add_argument(
         "-H",
         "--hour",

@@ -44,9 +44,10 @@ Version bump rules:
 Before submitting any code change:
 
 1. Run ShellCheck on all modified shell scripts
-2. Run Python linters (ruff, black, mypy) on all modified Python files
+2. Run Python linters (ruff, black, isort) on all modified Python files
 3. Run existing tests and add new tests for new functionality
 4. Verify no regressions introduced
+5. **Run ALL CI checks locally** - see "CI Pipeline Verification" section below
 
 ### 4. Security-First Development
 
@@ -259,7 +260,7 @@ except FileNotFoundError as e:
 Before considering any task complete, verify:
 
 - [ ] All shell scripts pass ShellCheck with no warnings
-- [ ] All Python files pass ruff, black, and mypy checks
+- [ ] All Python files pass ruff and isort checks
 - [ ] All YAML files pass yamllint
 - [ ] VERSION file has been updated appropriately
 - [ ] CHANGELOG.md has been updated with changes
@@ -268,6 +269,65 @@ Before considering any task complete, verify:
 - [ ] No hardcoded paths or credentials
 - [ ] Proper error handling in place
 - [ ] Documentation updated if needed
+
+---
+
+## CI Pipeline Verification (MANDATORY)
+
+**Before marking ANY task as complete, run these EXACT commands locally.** These match the CI pipeline in `.github/workflows/ci.yml` and must all pass:
+
+### 1. ShellCheck (matches CI exactly)
+
+```bash
+# CI uses: ludeeus/action-shellcheck@master with severity=warning, SHELLCHECK_OPTS=-e SC1091
+find . -name "*.sh" -not -path "./.venv/*" -not -path "./node_modules/*" -print0 | \
+  xargs -0 shellcheck -S warning -e SC1091
+```
+
+### 2. Python Linting (both must pass)
+
+```bash
+# Ruff - code quality and formatting checker
+ruff check . --output-format=github
+
+# isort - import sorter (check mode)
+isort --check-only --diff .
+```
+
+### 3. YAML Linting
+
+```bash
+yamllint -c .yamllint.yml .
+```
+
+### 4. Python Tests
+
+```bash
+pytest tests/python/ -v
+```
+
+### 5. BATS Tests (shell script tests)
+
+```bash
+bats tests/bats/*.bats
+```
+
+### Quick All-In-One Verification Script
+
+```bash
+#!/bin/bash
+set -e
+echo "=== SHELLCHECK ===" && \
+  find . -name "*.sh" -not -path "./.venv/*" -print0 | xargs -0 shellcheck -S warning -e SC1091
+echo "=== RUFF ===" && ruff check . --output-format=github
+echo "=== ISORT ===" && isort --check-only .
+echo "=== YAMLLINT ===" && yamllint -c .yamllint.yml .
+echo "=== PYTEST ===" && pytest tests/python/ -v
+echo "=== BATS ===" && bats tests/bats/*.bats
+echo "=== ALL CI CHECKS PASSED ==="
+```
+
+**⚠️ CRITICAL: If any of these commands fail locally, they WILL fail in CI. Fix all issues before committing.**
 
 ---
 

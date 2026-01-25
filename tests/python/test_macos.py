@@ -45,7 +45,7 @@ class TestDownloadProfile:
         """Test that the script does not have bare except clauses."""
         script_path = jamf_dir / "download_profile.py"
         content = script_path.read_text()
-        bare_except = re.search(r'\bexcept\s*:', content)
+        bare_except = re.search(r"\bexcept\s*:", content)
         assert bare_except is None, "Script should not have bare except: clauses"
 
     def test_uses_logging_module(self, jamf_dir: Path) -> None:
@@ -92,7 +92,7 @@ class TestAnalyzeProfiles:
         """Test that the script does not have bare except clauses."""
         script_path = mdm_dir / "analyze_profiles.py"
         content = script_path.read_text()
-        bare_except = re.search(r'\bexcept\s*:', content)
+        bare_except = re.search(r"\bexcept\s*:", content)
         assert bare_except is None, "Script should not have bare except: clauses"
 
 
@@ -133,7 +133,7 @@ class TestBuildCombined:
         """Test that the script does not have bare except clauses."""
         script_path = mobileconfig_dir / "combined" / "build_combined.py"
         content = script_path.read_text()
-        bare_except = re.search(r'\bexcept\s*:', content)
+        bare_except = re.search(r"\bexcept\s*:", content)
         assert bare_except is None, "Script should not have bare except: clauses"
 
 
@@ -174,5 +174,5 @@ class TestValidateConfigProfile:
         """Test that the script does not have bare except clauses."""
         script_path = schema_dir / "validator" / "validate-config-profile.py"
         content = script_path.read_text()
-        bare_except = re.search(r'\bexcept\s*:', content)
+        bare_except = re.search(r"\bexcept\s*:", content)
         assert bare_except is None, "Script should not have bare except: clauses"

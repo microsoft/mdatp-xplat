@@ -46,7 +46,7 @@ class TestJson2Excel:
         script_path = linuxmdeparser_dir / "json2excel.py"
         content = script_path.read_text()
         # Check for bare except: (with colon and possible whitespace)
-        bare_except = re.search(r'\bexcept\s*:', content)
+        bare_except = re.search(r"\bexcept\s*:", content)
         assert bare_except is None, "Script should not have bare except: clauses"
 
     def test_uses_logging_module(self, linuxmdeparser_dir: Path) -> None:
@@ -60,8 +60,9 @@ class TestJson2Excel:
         script_path = linuxmdeparser_dir / "json2excel.py"
         content = script_path.read_text()
         # Check for common type hint patterns
-        assert "-> " in content or ": str" in content or ": Path" in content, \
-            "Script should have type hints"
+        assert (
+            "-> " in content or ": str" in content or ": Path" in content
+        ), "Script should have type hints"
 
 
 class TestMain:
@@ -101,15 +102,16 @@ class TestMain:
         """Test that the script does not have bare except clauses."""
         script_path = linuxmdeparser_dir / "main.py"
         content = script_path.read_text()
-        bare_except = re.search(r'\bexcept\s*:', content)
+        bare_except = re.search(r"\bexcept\s*:", content)
         assert bare_except is None, "Script should not have bare except: clauses"
 
     def test_uses_argparse(self, linuxmdeparser_dir: Path) -> None:
         """Test that the script uses argparse for argument parsing."""
         script_path = linuxmdeparser_dir / "main.py"
         content = script_path.read_text()
-        assert "import argparse" in content or "from argparse" in content, \
-            "Script should use argparse module"
+        assert (
+            "import argparse" in content or "from argparse" in content
+        ), "Script should use argparse module"
 
     def test_help_option(self, linuxmdeparser_dir: Path) -> None:
         """Test that the script supports --help option."""

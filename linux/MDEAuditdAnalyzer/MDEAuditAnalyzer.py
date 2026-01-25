@@ -180,9 +180,7 @@ def main() -> int:
         with open(audit_path, encoding="utf-8", errors="replace") as audit_file:
             counts = analyze_audit_file(audit_file)
     except PermissionError:
-        logger.exception(
-            "Permission denied reading %s. Try running with sudo.", audit_path
-        )
+        logger.exception("Permission denied reading %s. Try running with sudo.", audit_path)
         return 1
     except OSError:
         logger.exception("Failed to read audit file")

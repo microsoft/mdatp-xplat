@@ -38,25 +38,30 @@ class _TerminalColors:
 
 
 if sys.stdout.isatty():
+
     class _TerminalColorsEnabled(_TerminalColors):
         """Terminal colors when TTY is available."""
 
-        green = '\033[92m'
-        yellow = '\033[93m'
-        red = '\033[91m'
-        grey = '\033[2m'
-        cancel = '\033[0m'
+        green = "\033[92m"
+        yellow = "\033[93m"
+        red = "\033[91m"
+        grey = "\033[2m"
+        cancel = "\033[0m"
+
     tc: _TerminalColors = _TerminalColorsEnabled()
 else:
+
     class _TerminalColorsDisabled(_TerminalColors):
         """Terminal colors when TTY is not available."""
 
-        green = ''
-        yellow = ''
-        red = ''
-        grey = ''
-        cancel = ''
+        green = ""
+        yellow = ""
+        red = ""
+        grey = ""
+        cancel = ""
+
     tc = _TerminalColorsDisabled()
+
 
 class Payload:
     """Base class for MDM payloads."""
@@ -111,6 +116,7 @@ class Payload:
         """Return string representation."""
         return self.__str__()
 
+
 class PayloadTCC(Payload):
     """TCC (Transparency, Consent, and Control) payload."""
 
@@ -125,7 +131,7 @@ class PayloadTCC(Payload):
         """
         Payload.__init__(self, payload_type, payload)
         self.service_type = service_type
-        self.identifier = payload['Identifier']
+        self.identifier = payload["Identifier"]
 
     def get_ids(self) -> tuple:
         """Return the unique identifiers for this payload."""
@@ -133,7 +139,8 @@ class PayloadTCC(Payload):
 
     def __str__(self) -> str:
         """Return string representation."""
-        return f'{self.payload_type}/{self.service_type} ({self.identifier})'
+        return f"{self.payload_type}/{self.service_type} ({self.identifier})"
+
 
 class PayloadKEXT(Payload):
     """Kernel extension payload."""
@@ -155,7 +162,8 @@ class PayloadKEXT(Payload):
 
     def __str__(self) -> str:
         """Return string representation."""
-        return f'{self.payload_type} ({self.kext_id})'
+        return f"{self.payload_type} ({self.kext_id})"
+
 
 class PayloadSysExt(Payload):
     """System extension payload."""
@@ -179,7 +187,8 @@ class PayloadSysExt(Payload):
 
     def __str__(self) -> str:
         """Return string representation."""
-        return f'{self.payload_type} ({self.team_id}, {self.bundle_id})'
+        return f"{self.payload_type} ({self.team_id}, {self.bundle_id})"
+
 
 class PayloadWebContentFilter(Payload):
     """Web content filter payload."""
@@ -193,15 +202,15 @@ class PayloadWebContentFilter(Payload):
 
         """
         Payload.__init__(self, payload_type, payload)
-        self.filter_id = payload['FilterDataProviderBundleIdentifier']
+        self.filter_id = payload["FilterDataProviderBundleIdentifier"]
         self.properties: dict = {}
 
         filter_props = (
-            'FilterDataProviderDesignatedRequirement',
-            'FilterGrade',
-            'FilterSockets',
-            'FilterType',
-            'PluginBundleID',
+            "FilterDataProviderDesignatedRequirement",
+            "FilterGrade",
+            "FilterSockets",
+            "FilterType",
+            "PluginBundleID",
         )
         for p in filter_props:
             self.properties[p] = payload[p]
@@ -212,7 +221,8 @@ class PayloadWebContentFilter(Payload):
 
     def __str__(self) -> str:
         """Return string representation."""
-        return f'{self.payload_type} ({self.filter_id})'
+        return f"{self.payload_type} ({self.filter_id})"
+
 
 class PayloadNotifications(Payload):
     """Notifications payload."""
@@ -226,7 +236,7 @@ class PayloadNotifications(Payload):
 
         """
         Payload.__init__(self, payload_type, payload)
-        self.notification_id = payload['BundleIdentifier']
+        self.notification_id = payload["BundleIdentifier"]
 
     def get_ids(self) -> tuple:
         """Return the unique identifiers for this payload."""
@@ -234,7 +244,8 @@ class PayloadNotifications(Payload):
 
     def __str__(self) -> str:
         """Return string representation."""
-        return f'{self.payload_type} ({self.notification_id})'
+        return f"{self.payload_type} ({self.notification_id})"
+
 
 class PayloadServiceManagement(Payload):
     """Service management payload."""
@@ -248,7 +259,7 @@ class PayloadServiceManagement(Payload):
 
         """
         Payload.__init__(self, payload_type, payload)
-        self.service_id = '{}={}'.format(payload['RuleType'], payload['RuleValue'])
+        self.service_id = "{}={}".format(payload["RuleType"], payload["RuleValue"])
 
     def get_ids(self) -> tuple:
         """Return the unique identifiers for this payload."""
@@ -256,7 +267,8 @@ class PayloadServiceManagement(Payload):
 
     def __str__(self) -> str:
         """Return string representation."""
-        return f'{self.payload_type} ({self.service_id})'
+        return f"{self.payload_type} ({self.service_id})"
+
 
 class PayloadOnboardingInfo(Payload):
     """Onboarding info payload."""
@@ -277,7 +289,8 @@ class PayloadOnboardingInfo(Payload):
 
     def __str__(self) -> str:
         """Return string representation."""
-        return f'{self.payload_type}'
+        return f"{self.payload_type}"
+
 
 class PayloadConfiguration(Payload):
     """Configuration payload."""
@@ -298,7 +311,8 @@ class PayloadConfiguration(Payload):
 
     def __str__(self) -> str:
         """Return string representation."""
-        return f'{self.payload_type}'
+        return f"{self.payload_type}"
+
 
 def _print_warning(msg: str) -> None:
     """Print a warning message.
@@ -339,6 +353,7 @@ def _print_debug(msg: str) -> None:
     """
     _ = msg  # Suppress unused argument
 
+
 def read_plist(path: str) -> dict:
     """Read a plist file and return its contents.
 
@@ -349,13 +364,14 @@ def read_plist(path: str) -> dict:
         Dictionary containing plist contents.
 
     """
-    _print_debug(f'Reading {path}')
+    _print_debug(f"Reading {path}")
 
-    if 'load' in plistlib.__all__:
-        with open(path, 'rb') as f:
+    if "load" in plistlib.__all__:
+        with open(path, "rb") as f:
             return plistlib.load(f)
     else:
         return plistlib.readPlist(path)
+
 
 def get_tcc(definition: dict, service_type: str) -> PayloadTCC:
     """Create a TCC payload from a definition.
@@ -368,17 +384,20 @@ def get_tcc(definition: dict, service_type: str) -> PayloadTCC:
         PayloadTCC instance.
 
     """
-    return PayloadTCC('com.apple.TCC.configuration-profile-policy', service_type, {
-        'Allowed': definition.get('Allowed'),
-        'CodeRequirement': definition.get('CodeRequirement'),
-        'IdentifierType': definition.get('IdentifierType'),
-        'Identifier': definition.get('Identifier'),
-        'StaticCode': definition.get('StaticCode'),
-    })
+    return PayloadTCC(
+        "com.apple.TCC.configuration-profile-policy",
+        service_type,
+        {
+            "Allowed": definition.get("Allowed"),
+            "CodeRequirement": definition.get("CodeRequirement"),
+            "IdentifierType": definition.get("IdentifierType"),
+            "Identifier": definition.get("Identifier"),
+            "StaticCode": definition.get("StaticCode"),
+        },
+    )
 
-def get_payloads(  # noqa: PLR0912
-    payload_type: str, content: dict, profile: dict | None
-) -> list:
+
+def get_payloads(payload_type: str, content: dict, profile: dict | None) -> list:  # noqa: PLR0912
     """Extract payloads from profile content.
 
     Args:
@@ -392,80 +411,84 @@ def get_payloads(  # noqa: PLR0912
     """
     if profile:
         profile_desc = ' in profile "{}" ({})'.format(
-            profile['ProfileDisplayName'], profile['ProfileIdentifier']
+            profile["ProfileDisplayName"], profile["ProfileIdentifier"]
         )
     else:
-        profile_desc = ''
-    if payload_type == 'com.apple.TCC.configuration-profile-policy':
-        if 'Services' in content:
-            for service_type, definition_array in content['Services'].items():
+        profile_desc = ""
+    if payload_type == "com.apple.TCC.configuration-profile-policy":
+        if "Services" in content:
+            for service_type, definition_array in content["Services"].items():
                 for definition in definition_array:
-                    if service_type in {'SystemPolicyAllFiles', 'Accessibility'}:
+                    if service_type in {"SystemPolicyAllFiles", "Accessibility"}:
                         yield get_tcc(definition, service_type)
                     else:
                         _print_warning(
-                            f'Unexpected payload type: {payload_type}, '
-                            f'{service_type}{profile_desc}'
+                            f"Unexpected payload type: {payload_type}, "
+                            f"{service_type}{profile_desc}"
                         )
         else:
             _print_warning(
-                f'Profile contains com.apple.TCC.configuration-profile-policy '
-                f'policy but no Services{profile_desc}'
+                f"Profile contains com.apple.TCC.configuration-profile-policy "
+                f"policy but no Services{profile_desc}"
             )
-    elif payload_type == 'com.apple.syspolicy.kernel-extension-policy':
+    elif payload_type == "com.apple.syspolicy.kernel-extension-policy":
         for kext_id in content["AllowedTeamIdentifiers"]:
             yield PayloadKEXT(payload_type, kext_id)
-    elif payload_type == 'com.apple.system-extension-policy':
-        if 'AllowedSystemExtensions' in content:
-            for team_id, bundle_ids in content['AllowedSystemExtensions'].items():
+    elif payload_type == "com.apple.system-extension-policy":
+        if "AllowedSystemExtensions" in content:
+            for team_id, bundle_ids in content["AllowedSystemExtensions"].items():
                 for bundle_id in bundle_ids:
                     yield PayloadSysExt(payload_type, team_id, bundle_id)
         else:
             _print_warning(
-                f'Profile contains com.apple.system-extension-policy '
-                f'policy but no AllowedSystemExtensions{profile_desc}'
+                f"Profile contains com.apple.system-extension-policy "
+                f"policy but no AllowedSystemExtensions{profile_desc}"
             )
-    elif payload_type == 'com.apple.webcontent-filter':
-        yield PayloadWebContentFilter(payload_type, {
-            'FilterType': content.get('FilterType'),
-            'PluginBundleID': content.get('PluginBundleID'),
-            'FilterSockets': content.get('FilterSockets'),
-            'FilterDataProviderBundleIdentifier': content.get(
-                'FilterDataProviderBundleIdentifier'
-            ),
-            'FilterDataProviderDesignatedRequirement': content.get(
-                'FilterDataProviderDesignatedRequirement'
-            ),
-            'FilterGrade': content.get('FilterGrade'),
-        })
-    elif payload_type == 'com.apple.notificationsettings':
-        for definition in content['NotificationSettings']:
+    elif payload_type == "com.apple.webcontent-filter":
+        yield PayloadWebContentFilter(
+            payload_type,
+            {
+                "FilterType": content.get("FilterType"),
+                "PluginBundleID": content.get("PluginBundleID"),
+                "FilterSockets": content.get("FilterSockets"),
+                "FilterDataProviderBundleIdentifier": content.get(
+                    "FilterDataProviderBundleIdentifier"
+                ),
+                "FilterDataProviderDesignatedRequirement": content.get(
+                    "FilterDataProviderDesignatedRequirement"
+                ),
+                "FilterGrade": content.get("FilterGrade"),
+            },
+        )
+    elif payload_type == "com.apple.notificationsettings":
+        for definition in content["NotificationSettings"]:
             yield PayloadNotifications(payload_type, definition)
-    elif payload_type == 'com.apple.servicemanagement':
-        for definition in content['Rules']:
+    elif payload_type == "com.apple.servicemanagement":
+        for definition in content["Rules"]:
             yield PayloadServiceManagement(payload_type, definition)
     elif (
-        payload_type == 'com.apple.ManagedClient.preferences'
-        and 'PayloadContentManagedPreferences' in content
+        payload_type == "com.apple.ManagedClient.preferences"
+        and "PayloadContentManagedPreferences" in content
     ):
-        preferences = content['PayloadContentManagedPreferences']
+        preferences = content["PayloadContentManagedPreferences"]
 
         for domain, settings in preferences.items():
-            if 'Forced' in settings:
-                forced = settings['Forced']
+            if "Forced" in settings:
+                forced = settings["Forced"]
 
                 for setting in forced:
-                    if 'mcx_preference_settings' in setting:
-                        mcx_preference_settings = setting['mcx_preference_settings']
+                    if "mcx_preference_settings" in setting:
+                        mcx_preference_settings = setting["mcx_preference_settings"]
 
-                        if domain == 'com.microsoft.wdav.atp':
-                            if 'OnboardingInfo' in mcx_preference_settings:
-                                onboarding_info = mcx_preference_settings['OnboardingInfo']
-                                payload_key = payload_type + '/' + domain
+                        if domain == "com.microsoft.wdav.atp":
+                            if "OnboardingInfo" in mcx_preference_settings:
+                                onboarding_info = mcx_preference_settings["OnboardingInfo"]
+                                payload_key = payload_type + "/" + domain
                                 yield PayloadOnboardingInfo(payload_key, onboarding_info)
-                        elif domain in {'com.microsoft.wdav', 'com.microsoft.wdav.ext'}:
-                            payload_key = payload_type + '/' + domain
+                        elif domain in {"com.microsoft.wdav", "com.microsoft.wdav.ext"}:
+                            payload_key = payload_type + "/" + domain
                             yield PayloadConfiguration(payload_key, mcx_preference_settings)
+
 
 def parse_profiles(path: str) -> dict:
     """Parse profiles from plist file.
@@ -482,24 +505,27 @@ def parse_profiles(path: str) -> dict:
 
     for level, profiles in plist.items():
         for profile in profiles:
-            for item in profile['ProfileItems']:
-                payload_type = item['PayloadType']
-                content = item['PayloadContent']
+            for item in profile["ProfileItems"]:
+                payload_type = item["PayloadType"]
+                content = item["PayloadContent"]
 
                 for payload in get_payloads(payload_type, content, profile):
                     result_payloads = result.get(payload, [])
 
-                    result_payloads.append({
-                        'payload': payload,
-                        'path': path,
-                        'level': level,
-                        'name': profile['ProfileDisplayName'],
-                        'time': profile['ProfileInstallDate']
-                    })
+                    result_payloads.append(
+                        {
+                            "payload": payload,
+                            "path": path,
+                            "level": level,
+                            "name": profile["ProfileDisplayName"],
+                            "time": profile["ProfileInstallDate"],
+                        }
+                    )
 
                     result[payload] = result_payloads
 
     return result
+
 
 def parse_expected(path: str) -> list:
     """Parse expected payloads from plist file.
@@ -513,16 +539,17 @@ def parse_expected(path: str) -> list:
     """
     result: list = []
 
-    for item in read_plist(path)['PayloadContent']:
-        payload_type = item['PayloadType']
+    for item in read_plist(path)["PayloadContent"]:
+        payload_type = item["PayloadType"]
         payloads = list(get_payloads(payload_type, item, None))
 
         if len(payloads) == 0:
-            _print_warning(f'Unexpected payload type: {payload_type}, {item}')
+            _print_warning(f"Unexpected payload type: {payload_type}, {item}")
 
         result += payloads
 
     return result
+
 
 def parse_tcc(path: str) -> dict:
     """Parse TCC overrides from plist file.
@@ -535,36 +562,34 @@ def parse_tcc(path: str) -> dict:
 
     """
     result: dict = {}
-    mdm_tcc = '/tmp/MDMOverrides.plist'  # noqa: S108
+    mdm_tcc = "/tmp/MDMOverrides.plist"  # noqa: S108
 
     try:
         shutil.copy(path, mdm_tcc)
-        subprocess.run(
-            ['plutil', '-convert', 'xml1', mdm_tcc],
-            check=True, capture_output=True
-        )
+        subprocess.run(["plutil", "-convert", "xml1", mdm_tcc], check=True, capture_output=True)
         tcc = read_plist(mdm_tcc)
     except (OSError, subprocess.CalledProcessError) as e:
         tcc = None
         _print_warning(
-            f'No {path} found or conversion failed, '
-            f'is the machine enrolled into MDM? Error: {e}'
+            f"No {path} found or conversion failed, "
+            f"is the machine enrolled into MDM? Error: {e}"
         )
 
     if tcc:
         for service in tcc.values():
-            if 'kTCCServiceSystemPolicyAllFiles' in service:
-                definition = service['kTCCServiceSystemPolicyAllFiles']
-                d = get_tcc(definition, 'SystemPolicyAllFiles')
-                _ = definition['CodeRequirementData']  # Access for validation
+            if "kTCCServiceSystemPolicyAllFiles" in service:
+                definition = service["kTCCServiceSystemPolicyAllFiles"]
+                d = get_tcc(definition, "SystemPolicyAllFiles")
+                _ = definition["CodeRequirementData"]  # Access for validation
                 result[d] = {
-                    'CodeRequirement': definition.get('CodeRequirement'),
-                    'IdentifierType': definition.get('IdentifierType'),
-                    'Identifier': definition.get('Identifier'),
-                    'Allowed': definition.get('Allowed'),
+                    "CodeRequirement": definition.get("CodeRequirement"),
+                    "IdentifierType": definition.get("IdentifierType"),
+                    "Identifier": definition.get("Identifier"),
+                    "Allowed": definition.get("Allowed"),
                 }
 
     return result
+
 
 def format_location(profile_data: dict) -> str:
     """Format profile location for display.
@@ -577,8 +602,9 @@ def format_location(profile_data: dict) -> str:
 
     """
     return '{}, profile: "{}", deployed: {}'.format(
-        profile_data['path'], profile_data['name'], profile_data['time']
+        profile_data["path"], profile_data["name"], profile_data["time"]
     )
+
 
 def report_configurations(name: str, configs: list, is_ext: bool) -> None:
     """Report configuration payload status.
@@ -604,12 +630,12 @@ def report_configurations(name: str, configs: list, is_ext: bool) -> None:
         for config in configs:
             _print_debug(f"  {i}: {config}")
 
-            for k, v in config['payload'].payload.items():
+            for k, v in config["payload"].payload.items():
                 if k in settings_map:
                     settings_list = settings_map[k]
-                    settings_list.append({'settings': v, 'config': config})
+                    settings_list.append({"settings": v, "config": config})
                 else:
-                    settings_list = [{'settings': v, 'config': config}]
+                    settings_list = [{"settings": v, "config": config}]
                     settings_map[k] = settings_list
 
             i += 1
@@ -622,14 +648,11 @@ def report_configurations(name: str, configs: list, is_ext: bool) -> None:
                 )
                 i = 1
                 for v in values:
-                    _print_debug(
-                        "  {}: {} -> {}".format(i, v['config'], v['settings'])
-                    )
+                    _print_debug("  {}: {} -> {}".format(i, v["config"], v["settings"]))
                     i += 1
 
-def report(  # noqa: PLR0912, PLR0915
-    path_profiles: str, path_expected: str, path_tcc: str
-) -> None:
+
+def report(path_profiles: str, path_expected: str, path_tcc: str) -> None:  # noqa: PLR0912, PLR0915
     """Generate report on MDM profile status.
 
     Args:
@@ -650,8 +673,8 @@ def report(  # noqa: PLR0912, PLR0915
             check_tcc = False
 
             is_tcc_type = (
-                expected.payload_type == 'com.apple.TCC.configuration-profile-policy'
-                and expected.service_type == 'SystemPolicyAllFiles'
+                expected.payload_type == "com.apple.TCC.configuration-profile-policy"
+                and expected.service_type == "SystemPolicyAllFiles"
             )
             if is_tcc_type:
                 if tcc and expected in tcc:
@@ -660,8 +683,8 @@ def report(  # noqa: PLR0912, PLR0915
                 check_tcc = True
 
             if len(m) == 1:
-                if expected.payload == m[0]['payload'].payload:
-                    if not check_tcc or t == m[0]['payload'].payload:
+                if expected.payload == m[0]["payload"].payload:
+                    if not check_tcc or t == m[0]["payload"].payload:
                         _print_success(f"Found {expected} in {format_location(m[0])}")
                     else:
                         _print_error(
@@ -673,26 +696,24 @@ def report(  # noqa: PLR0912, PLR0915
                         f"Found, but does not match expected {expected} "
                         f"in {format_location(m[0])}"
                     )
-                    _print_debug("    Found: {}".format(m[0]['payload'].payload))
+                    _print_debug("    Found: {}".format(m[0]["payload"].payload))
             else:
-                _print_error(
-                    f"Duplicate definitions, only one of them is active: {expected}"
-                )
+                _print_error(f"Duplicate definitions, only one of them is active: {expected}")
 
                 n = 1
                 for d in m:
-                    if expected.payload == d['payload'].payload:
-                        match_label = f'{tc.green}[Match]{tc.cancel}'
+                    if expected.payload == d["payload"].payload:
+                        match_label = f"{tc.green}[Match]{tc.cancel}"
                     else:
-                        match_label = f'{tc.red}[Mismatch]{tc.cancel}'
+                        match_label = f"{tc.red}[Mismatch]{tc.cancel}"
 
                     if check_tcc:
-                        if t == d['payload'].payload:
-                            tcc_label = f' {tc.green}[In TCC]{tc.cancel}'
+                        if t == d["payload"].payload:
+                            tcc_label = f" {tc.green}[In TCC]{tc.cancel}"
                         else:
-                            tcc_label = f' {tc.red}[Not in TCC]{tc.cancel}'
+                            tcc_label = f" {tc.red}[Not in TCC]{tc.cancel}"
                     else:
-                        tcc_label = ''
+                        tcc_label = ""
 
                     _print_debug(
                         f"    Candidate {n}: {format_location(d)} "
@@ -707,11 +728,11 @@ def report(  # noqa: PLR0912, PLR0915
     configs: list = []
     configs_ext: list = []
     for k, v in map_profiles.items():
-        if k.payload_type == 'com.apple.ManagedClient.preferences/com.microsoft.wdav.atp':
+        if k.payload_type == "com.apple.ManagedClient.preferences/com.microsoft.wdav.atp":
             onboarding_infos += v
-        elif k.payload_type == 'com.apple.ManagedClient.preferences/com.microsoft.wdav':
+        elif k.payload_type == "com.apple.ManagedClient.preferences/com.microsoft.wdav":
             configs += v
-        elif k.payload_type == 'com.apple.ManagedClient.preferences/com.microsoft.wdav.ext':
+        elif k.payload_type == "com.apple.ManagedClient.preferences/com.microsoft.wdav.ext":
             configs_ext += v
 
     if len(onboarding_infos) == 1:
@@ -725,8 +746,9 @@ def report(  # noqa: PLR0912, PLR0915
             _print_debug(f"  {i}: {info}")
             i += 1
 
-    report_configurations('com.microsoft.wdav', configs, False)
-    report_configurations('com.microsoft.wdav.ext', configs_ext, True)
+    report_configurations("com.microsoft.wdav", configs, False)
+    report_configurations("com.microsoft.wdav.ext", configs_ext, True)
+
 
 def main() -> int:
     """Analyze MDM profiles for Defender.
@@ -735,71 +757,60 @@ def main() -> int:
         Exit code (0 for success, non-zero for error).
 
     """
-    parser = argparse.ArgumentParser(
-        description="Validate MDM profiles for Defender"
-    )
-    parser.add_argument(
-        "--template", type=str,
-        help="Template file from mdatp-xplat repo"
-    )
-    parser.add_argument(
-        "--in", type=str,
-        help="Optional, read exported profiles from it"
-    )
-    parser.add_argument(
-        "--tcc", type=str,
-        help="Optional, read TCC overrides from it"
-    )
+    parser = argparse.ArgumentParser(description="Validate MDM profiles for Defender")
+    parser.add_argument("--template", type=str, help="Template file from mdatp-xplat repo")
+    parser.add_argument("--in", type=str, help="Optional, read exported profiles from it")
+    parser.add_argument("--tcc", type=str, help="Optional, read TCC overrides from it")
     args = parser.parse_args()
 
     if not args.template:
         args.template = os.path.join(
-            os.path.dirname(os.path.realpath(__file__)), 'mdatp.mobileconfig'
+            os.path.dirname(os.path.realpath(__file__)), "mdatp.mobileconfig"
         )
 
         if not os.path.exists(args.template):
             url = (
-                'https://raw.githubusercontent.com/microsoft/mdatp-xplat/'
-                'master/macos/mobileconfig/combined/mdatp.mobileconfig'
+                "https://raw.githubusercontent.com/microsoft/mdatp-xplat/"
+                "master/macos/mobileconfig/combined/mdatp.mobileconfig"
             )
-            args.template = '/tmp/mdatp.mobileconfig'  # noqa: S108
+            args.template = "/tmp/mdatp.mobileconfig"  # noqa: S108
             _print_debug(f"Downloading template from {url}")
 
-            _print_debug('Using module urllib.request')
+            _print_debug("Using module urllib.request")
 
             try:
                 with urllib.request.urlopen(url) as response:  # noqa: S310, SIM117
-                    with open(args.template, 'wb') as out_file:
+                    with open(args.template, "wb") as out_file:
                         shutil.copyfileobj(response, out_file)
             except urllib.error.URLError as e:
                 _print_warning(
-                    f'Your Python has issues with SSL validation, please fix it. '
-                    f'Querying {url} with disabled validation. Error: {e}'
+                    f"Your Python has issues with SSL validation, please fix it. "
+                    f"Querying {url} with disabled validation. Error: {e}"
                 )
                 ssl._create_default_https_context = ssl._create_unverified_context
 
                 with urllib.request.urlopen(url) as response:  # noqa: S310, SIM117
-                    with open(args.template, 'wb') as out_file:
+                    with open(args.template, "wb") as out_file:
                         shutil.copyfileobj(response, out_file)
 
     args.template = os.path.abspath(os.path.expanduser(args.template))
 
-    in_file = getattr(args, 'in')
+    in_file = getattr(args, "in")
 
     if not in_file:
-        in_file = '/tmp/profiles.xml'  # noqa: S108
+        in_file = "/tmp/profiles.xml"  # noqa: S108
 
         if os.path.exists(in_file):
             _print_debug(f"{in_file} already exists, remove it first")
-            subprocess.run(['sudo', 'rm', '-f', in_file], check=False)
+            subprocess.run(["sudo", "rm", "-f", in_file], check=False)
 
         _print_debug('Running "profiles" command, sudo password may be required...')
-        subprocess.run(['sudo', 'profiles', 'show', '-output', in_file], check=True)
+        subprocess.run(["sudo", "profiles", "show", "-output", in_file], check=True)
 
     in_file = os.path.abspath(os.path.expanduser(in_file))
 
     if not args.tcc:
-        args.tcc = '/Library/Application Support/com.apple.TCC/MDMOverrides.plist'
+        args.tcc = "/Library/Application Support/com.apple.TCC/MDMOverrides.plist"
 
     args.tcc = os.path.abspath(os.path.expanduser(args.tcc))
 

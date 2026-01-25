@@ -45,7 +45,7 @@ class TestMDEAuditAnalyzer:
         """Test that the script does not have bare except clauses."""
         script_path = mdeauditanalyzer_dir / "MDEAuditAnalyzer.py"
         content = script_path.read_text()
-        bare_except = re.search(r'\bexcept\s*:', content)
+        bare_except = re.search(r"\bexcept\s*:", content)
         assert bare_except is None, "Script should not have bare except: clauses"
 
     def test_uses_logging_module(self, mdeauditanalyzer_dir: Path) -> None:
@@ -58,8 +58,9 @@ class TestMDEAuditAnalyzer:
         """Test that the script uses argparse for argument parsing."""
         script_path = mdeauditanalyzer_dir / "MDEAuditAnalyzer.py"
         content = script_path.read_text()
-        assert "import argparse" in content or "from argparse" in content, \
-            "Script should use argparse module"
+        assert (
+            "import argparse" in content or "from argparse" in content
+        ), "Script should use argparse module"
 
     def test_has_type_hints(self, mdeauditanalyzer_dir: Path) -> None:
         """Test that the script has type hints."""
