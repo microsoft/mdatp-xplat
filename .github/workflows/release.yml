@@ -6,6 +6,9 @@ on:
     paths:
       - VERSION
 
+permissions:
+  contents: read
+
 jobs:
   create-release:
     name: Create Release
@@ -14,9 +17,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Get version
         id: version
@@ -27,10 +31,12 @@ jobs:
 
       - name: Check if tag exists
         id: check-tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "::notice::Tag v${{ steps.version.outputs.version }} already exists"
+            echo "::notice::Tag v$VERSION already exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
@@ -38,8 +44,9 @@ jobs:
       - name: Extract changelog for version
         if: steps.check-tag.outputs.exists == 'false'
         id: changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
           # Extract section for this version from CHANGELOG.md
           CHANGELOG=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
 
@@ -56,7 +63,7 @@ jobs:
 
       - name: Create Release
         if: steps.check-tag.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: Release v${{ steps.version.outputs.version }}
