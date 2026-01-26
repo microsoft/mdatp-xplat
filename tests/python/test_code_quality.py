@@ -19,6 +19,7 @@ def get_python_files(root: Path, exclude_tests: bool = False) -> Iterator[Path]:
     Args:
         root: Project root directory.
         exclude_tests: If True, exclude files in the tests/ directory.
+
     """
     for py_file in root.rglob("*.py"):
         py_file_str = str(py_file)
