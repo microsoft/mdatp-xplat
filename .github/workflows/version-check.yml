@@ -26,12 +26,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           # Get list of changed files using git diff instead of vulnerable action
-          git fetch origin ${{ github.base_ref }} --depth=1 2>/dev/null || true
+          git fetch origin "$BASE_REF" --depth=1 2>/dev/null || true
 
           # Get changed files matching our patterns
-          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD 2>/dev/null | \
+          CHANGED_FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" 2>/dev/null | \
             grep -E '^(linux/.*\.(sh|py)|macos/.*\.(py|sh)|macos/mobileconfig/|macos/schema/)' || true)
 
           if [ -n "$CHANGED_FILES" ]; then
