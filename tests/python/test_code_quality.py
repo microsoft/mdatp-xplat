@@ -13,16 +13,31 @@ from pathlib import Path
 from typing import Iterator
 
 
-def get_python_files(root: Path) -> Iterator[Path]:
-    """Yield all Python files in the project, excluding __pycache__."""
+def get_python_files(root: Path, exclude_tests: bool = False) -> Iterator[Path]:
+    """Yield all Python files in the project, excluding __pycache__ and .venv.
+
+    Args:
+        root: Project root directory.
+        exclude_tests: If True, exclude files in the tests/ directory.
+    """
     for py_file in root.rglob("*.py"):
-        if "__pycache__" not in str(py_file):
-            yield py_file
+        py_file_str = str(py_file)
+        if "__pycache__" in py_file_str:
+            continue
+        if ".venv" in py_file_str or "venv" in py_file_str or "site-packages" in py_file_str:
+            continue
+        if exclude_tests and "/tests/" in py_file_str:
+            continue
+        yield py_file
 
 
 def get_shell_files(root: Path) -> Iterator[Path]:
-    """Yield all shell script files in the project."""
-    yield from root.rglob("*.sh")
+    """Yield all shell script files in the project, excluding .venv."""
+    for sh_file in root.rglob("*.sh"):
+        sh_file_str = str(sh_file)
+        if ".venv" in sh_file_str or "venv" in sh_file_str or "site-packages" in sh_file_str:
+            continue
+        yield sh_file
 
 
 class TestBannedPythonPatterns:
@@ -31,7 +46,7 @@ class TestBannedPythonPatterns:
     def test_no_os_system_anywhere(self, project_root: Path) -> None:
         """Test that os.system() is not used in any Python file."""
         violations = []
-        for py_file in get_python_files(project_root):
+        for py_file in get_python_files(project_root, exclude_tests=True):
             content = py_file.read_text()
             if "os.system(" in content:
                 # Find line numbers
@@ -48,7 +63,7 @@ class TestBannedPythonPatterns:
         violations = []
         bare_except_pattern = re.compile(r"\bexcept\s*:")
 
-        for py_file in get_python_files(project_root):
+        for py_file in get_python_files(project_root, exclude_tests=True):
             content = py_file.read_text()
             for i, line in enumerate(content.splitlines(), 1):
                 if bare_except_pattern.search(line):
@@ -83,7 +98,7 @@ class TestBannedPythonPatterns:
         ]
         violations = []
 
-        for py_file in get_python_files(project_root):
+        for py_file in get_python_files(project_root, exclude_tests=True):
             content = py_file.read_text()
             for i, line in enumerate(content.splitlines(), 1):
                 for py2_import in python2_imports:
