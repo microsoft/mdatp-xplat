@@ -563,12 +563,33 @@ virsh list --all
 export VAGRANT_LOG=debug
 python3 runner.py --distro ubuntu:22.04
 
-# Clean up stale VMs
+# Clean up stale VMs (simple)
 vagrant global-status --prune
-
-# Force destroy all test VMs
 vagrant destroy -f
 ```
+
+### Cleaning Up After Interrupted Tests
+
+If a test is interrupted (Ctrl+C, system crash, etc.), VMs and state can be left behind in multiple locations. Use the cleanup script to remove all dangling resources:
+
+```bash
+# Preview what will be cleaned (dry run)
+./scripts/cleanup_vms.sh --dry-run
+
+# Interactive cleanup (prompts before each action)
+./scripts/cleanup_vms.sh
+
+# Force cleanup without prompts
+./scripts/cleanup_vms.sh --force
+```
+
+The cleanup script checks and cleans:
+- **Libvirt domains** (`qemu:///system`) - running or stopped VMs
+- **Libvirt domain configs** (`/etc/libvirt/qemu/mde-*.xml`) - orphaned XML definitions
+- **Libvirt disk images** (`/var/lib/libvirt/images/mde-*.img`) - orphaned disk files
+- **Vagrant state** (`.vagrant/machines/`) - stale machine state
+
+**Note:** The script requires `sudo` for some operations (removing libvirt configs and images).
 
 ### Health Check Failures
 
