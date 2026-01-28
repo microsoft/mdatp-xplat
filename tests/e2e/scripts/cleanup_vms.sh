@@ -133,11 +133,11 @@ fi
 
 # 3. Check libvirt disk images in /var/lib/libvirt/images/
 log_info "Checking libvirt disk images (/var/lib/libvirt/images/)..."
-while IFS= read -r line; do
-    if [[ -n "$line" ]]; then
-        FOUND_IMAGES+=("/var/lib/libvirt/images/$line")
+for img in /var/lib/libvirt/images/${VM_PREFIX}*; do
+    if [[ -f "$img" ]]; then
+        FOUND_IMAGES+=("$img")
     fi
-done < <(ls /var/lib/libvirt/images/ 2>/dev/null | grep "^${VM_PREFIX}" || true)
+done
 
 if [[ ${#FOUND_IMAGES[@]} -gt 0 ]]; then
     log_warn "Found ${#FOUND_IMAGES[@]} disk image(s):"

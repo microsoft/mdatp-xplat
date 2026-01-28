@@ -18,19 +18,12 @@ vagrant:
     memory_mb: 2048          # Each VM gets 2GB RAM
     disk_size_gb: 50         # Disk size for each VM (needs space for package upgrades)
 
-test:
-  preserve_on_failure: true
-  max_health_check_attempts: 30
-  health_check_interval_sec: 10
-
 distros:
   # Distro filtering for testing
   # Leave empty arrays to auto-discover all from mde_installer.sh
   # Or explicitly set to test only certain distros
-
   include: []    # Empty = test all discovered distros
   # Example: ["ubuntu", "debian", "rocky"]
-  
   exclude: []    # Distros to skip (empty = test all)
   # Example: ["rhel"]  (RHEL is automatically mapped to rocky)
 
@@ -38,11 +31,9 @@ test:
   # Behavior on test failure
   preserve_on_failure: false # Keep VM running for manual debugging
   capture_logs: true         # Capture installation and system logs
-  
   # Health check configuration
   health_check_interval_sec: 5      # Wait between health checks
   max_health_check_attempts: 30     # Max retries (5sec * 30 = 2.5min timeout)
-  
   # Test phases to execute
   tests:
     - install       # Test installation of mde_installer.sh
