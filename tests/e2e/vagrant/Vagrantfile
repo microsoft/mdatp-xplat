@@ -1,0 +1,200 @@
+# tests/e2e/vagrant/Vagrantfile
+# -*- mode: ruby -*-
+# Vagrant configuration for MDE installer e2e testing
+# Supports libvirt provider only
+
+Vagrant.configure("2") do |config|
+  # Get configuration from environment
+  distro = ENV['TEST_DISTRO'] || 'ubuntu'
+  version = ENV['TEST_VERSION'] || '22.04'
+  cpus = (ENV['TEST_CPUS'] || 1).to_i
+  memory = (ENV['TEST_MEMORY'] || 2048).to_i
+  disk_size = (ENV['TEST_DISK_SIZE'] || 30).to_i
+  
+  # Box name passed from runner (e.g., generic/ubuntu2204)
+  box = ENV['TEST_VAGRANT_BOX'] || select_box(distro, version)
+  
+  # Generate a consistent VM name based on distro and version
+  # This ensures predictable libvirt domain and disk names for parallel runs
+  # Format: mde-<distro>-<version> (e.g., mde-ubuntu-2204, mde-debian-11)
+  vm_name = "mde-#{distro}-#{version.gsub('.', '')}"
+  
+  # Define VM with explicit name (avoids using 'default' which causes conflicts)
+  config.vm.define vm_name do |node|
+    node.vm.box = box
+    # Only set hostname for non-local boxes (local boxes have a Vagrant bug with hostname setting)
+    unless box.start_with?('local/')
+      node.vm.hostname = "mde-test-#{distro}-#{version.gsub('.', '-')}"
+    end
+    
+    # Libvirt provider configuration
+    node.vm.provider :libvirt do |libvirt|
+      # Set empty prefix so libvirt domain name matches our vm_name exactly
+      # Without this, libvirt prepends the directory name (e.g., vagrant_mde-ubuntu-2204)
+      libvirt.default_prefix = ''
+      
+      libvirt.cpus = cpus
+      libvirt.memory = memory
+      libvirt.machine_virtual_size = disk_size  # Disk size in GB (overrides box default)
+      libvirt.disk_bus = 'virtio'
+      libvirt.graphics_type = 'none'  # No graphics for headless testing
+      libvirt.management_network_name = 'default'
+      libvirt.management_network_address = '192.168.122.0/24'
+      
+      # Add QEMU guest agent channel (for boxes that have it installed)
+      libvirt.channel :type => 'unix', :target_name => 'org.qemu.guest_agent.0', :target_type => 'virtio'
+      libvirt.qemu_use_agent = false
+      
+      # Use host-passthrough to avoid CPU model xml errors
+      libvirt.cpu_mode = 'host-passthrough'
+    end
+    
+    # Increase boot timeout for slower boxes (default is 300)
+    node.vm.boot_timeout = 600
+
+    # Disable the default synced folder (prevents NFS from boxes like alvistack)
+    node.vm.synced_folder ".", "/vagrant", disabled: true
+
+    # Shared folder for installer script and secrets (use rsync to avoid NFS/sudo)
+    node.vm.synced_folder "../../..", "/mde_repo", type: "rsync", rsync__exclude: ['.git', 'node_modules', '.venv', '__pycache__', 'tests/e2e/scripts/build', 'tests/e2e/scripts/boxes', '*.qcow2', '*.box']
+
+    # Run provisioning script based on distro family
+    family = get_distro_family(distro)
+    provision_script = "provision_#{family}.sh"
+    
+    node.vm.provision "shell" do |s|
+      s.path = "templates/#{provision_script}"
+      s.args = [distro, version]
+      s.env = {
+        'TEST_DISTRO' => distro,
+        'TEST_VERSION' => version,
+        'TEST_SCALED_VERSION' => ENV['TEST_SCALED_VERSION'] || version,
+        'ONBOARDING_JSON' => ENV['ONBOARDING_JSON'] || '',
+        'MANAGED_CONFIG_JSON' => ENV['MANAGED_CONFIG_JSON'] || '',
+        'OFFBOARDING_JSON' => ENV['OFFBOARDING_JSON'] || '',
+      }
+    end
+  end
+end
+
+# Fallback box selection if TEST_VAGRANT_BOX not provided
+def select_box(distro, version)
+  boxes = {
+    'ubuntu' => {
+      '18.04' => 'generic/ubuntu1804',
+      '20.04' => 'generic/ubuntu2004',
+      '22.04' => 'generic/ubuntu2204',
+      '24.04' => 'generic/ubuntu2404',
+    },
+    'debian' => {
+      '10' => 'generic/debian10',
+      '11' => 'generic/debian11',
+      '12' => 'generic/debian12',
+    },
+    'centos' => {
+      '7' => 'generic/centos7',
+      '8' => 'generic/centos8s',
+      '9' => 'generic/centos9s',
+    },
+    'rocky' => {
+      '8' => 'generic/rocky8',
+      '9' => 'generic/rocky9',
+    },
+    'almalinux' => {
+      '8' => 'generic/alma8',
+      '9' => 'generic/alma9',
+    },
+    'fedora' => {
+      '39' => 'generic/fedora39',
+      '40' => 'generic/fedora40',
+    },
+    'ol' => {
+      '8' => 'generic/oracle8',
+      '9' => 'generic/oracle9',
+    },
+    'amzn' => {
+      '2' => 'generic/amazon2',
+    },
+    'sles' => {
+      '15' => 'generic/sles15',
+    },
+    'opensuse-leap' => {
+      '15' => 'generic/opensuse15',
+    },
+  }
+
+  if boxes[distro] && boxes[distro][version]
+    return boxes[distro][version]
+  elsif boxes[distro]
+    # Return first available version for this distro
+    return boxes[distro].values.first
+  else
+    raise "Unknown distro/version combination: #{distro}/#{version}"
+  end
+end
+
+# Get distro family for provisioning script selection
+def get_distro_family(distro)
+  families = {
+    'ubuntu' => 'debian',
+    'debian' => 'debian',
+    'rhel' => 'rhel',
+    'centos' => 'rhel',
+    'rocky' => 'rhel',
+    'almalinux' => 'rhel',
+    'ol' => 'rhel',
+    'fedora' => 'rhel',
+    'amzn' => 'rhel',
+    'mariner' => 'mariner',
+    'azurelinux' => 'azurelinux',
+    'sles' => 'sles',
+    'opensuse-leap' => 'sles',
+    'opensuse-tumbleweed' => 'sles',
+  }
+  families[distro] || distro
+end
+
+# Get scaled version (matches mde_installer.sh logic)
+def get_scaled_version(distro, version)
+  family = get_distro_family(distro)
+  
+  case family
+  when 'debian'
+    if distro == 'ubuntu'
+      valid = ['16.04', '18.04', '20.04', '22.04', '24.04', '25.04', '25.10']
+      valid.include?(version) ? version : '18.04'
+    else
+      version.to_i.to_s
+    end
+  when 'rhel'
+    case version.to_i
+    when 6
+      '6'
+    when 7
+      '7'
+    when 8
+      '8'
+    when 9
+      ['almalinux', 'rocky', 'ol'].include?(distro) ? '9' : '9.0'
+    when 10
+      ['centos', 'rhel', 'ol', 'rocky'].include?(distro) ? '10' : version
+    else
+      version
+    end
+  when 'sles'
+    case version.to_i
+    when 12
+      '12'
+    when 15
+      '15'
+    else
+      version
+    end
+  when 'mariner'
+    version.start_with?('2') ? '2' : version
+  when 'azurelinux'
+    version.start_with?('3') ? '3' : version
+  else
+    version
+  end
+end

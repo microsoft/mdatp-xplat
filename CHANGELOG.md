@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-01-27
+
+### Added
+
+- **E2E Test Suite**: Extended distro coverage with 4 new Linux distributions
+  - Amazon Linux 2 (using `crystax/amazon2` Vagrant box with libvirt provider)
+  - Amazon Linux 2023 (using `crystax/amazon2023` Vagrant box with libvirt provider)
+  - Fedora 42 (using `alvistack/fedora-42` Vagrant box with libvirt provider)
+  - Fedora 43 (using locally converted cloud image as `local/fedora43`)
+- **convert_cloud_image.sh**: Added Fedora support for cloud image to Vagrant box conversion
+  - Added `create_fedora_customize_script()` function for Fedora-specific VM customization
+  - Added `get_distro_family()` and `get_guest_type()` helper functions
+  - Added Fedora 43 cloud image URL to CLOUD_IMAGES array
+  - Supports dnf package manager, sshd service, and wheel group for Fedora
+- **distro_parser.py**: Added Fedora 42, Fedora 43, Amazon Linux 2, and Amazon Linux 2023 entries
+
+## [1.4.1] - 2026-01-26
+
+### Fixed
+
+- **mde_installer.sh**: Fixed null byte validation that incorrectly rejected all paths
+  - The pattern `*$'\0'*` expands to `**` in bash since bash strings cannot contain null bytes
+  - Removed the broken check as bash naturally strips null bytes from input
+- **mde_installer.sh**: Fixed multiple `set -u` (unbound variable) compatibility issues:
+  - Added initialization of `log_path`, `SKIP_PMC_SETUP`, `INSTALL_PATH` variables at script startup
+  - Fixed `http_proxy` and `ftp_proxy` access using `${var:-}` syntax in `get_rpm_proxy_params()`
+  - Fixed `tags` associative array access check to avoid unbound error when empty
+- **mde_installer.sh**: Fixed `set -eo pipefail` compatibility issues causing silent script exits:
+  - Fixed `find_service()` to use `|| true` when checking non-existent services
+  - Fixed `verify_conflicting_applications()` fanotify detection pipeline to use `|| true`
+  - Fixed yum repolist check in `install_on_fedora()` to use if-statement instead of exit-code capture
+- **mde_installer.sh**: Updated fallback version constant from 1.2.0 to 1.4.1
+
+## [1.4.0] - 2026-01-26
+
+### Added
+
+- **E2E Test Suite**: Comprehensive end-to-end testing infrastructure for MDE Linux installer
+  - Vagrant-based test automation with libvirt KVM provider support
+  - Automatic distro discovery from `mde_installer.sh` (13+ distros: Ubuntu, Debian, RHEL family, SLES, Azure Linux)
+  - Full installation and onboarding workflow testing on isolated VMs
+  - Device health validation using `mdatp health --output json`
+  - Parallel test execution with configurable CPU/memory budgeting
+  - Failure log collection and markdown summary reporting
+  - Secret management for sensitive onboarding/managed config/offboarding JSON files
+  - Per-distro provisioning scripts handling OS-specific setup
+  - Flexible test filtering (--all, --distro, --family, --distros)
+  - Dry-run capability and custom resource allocation options
+  - Comprehensive documentation in `tests/e2e/README.md`
+
 ## [1.3.0] - 2026-01-25
 
 ### Security
@@ -27,7 +77,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Legacy fallback maintained for older systems with fingerprint verification
 
 ### Fixed
-
 - **REL-003: Improved Error Reporting**
   - Rewrote `script_exit()` function with clear `[SUCCESS]` and `[FAILED]` prefixes
   - Added hints for common error codes to help users troubleshoot

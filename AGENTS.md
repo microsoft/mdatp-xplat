@@ -49,7 +49,49 @@ Before submitting any code change:
 4. Verify no regressions introduced
 5. **Run ALL CI checks locally** - see "CI Pipeline Verification" section below
 
-### 4. Security-First Development
+### 4. Running E2E Tests (Long-Running VM Tests)
+
+The e2e tests in `tests/e2e/` use Vagrant VMs and take significant time to complete.
+
+**⚠️ CRITICAL: E2E tests MUST run as FOREGROUND processes (`isBackground: false`)**
+
+Do NOT try to monitor these tests in real-time or use background processes.
+
+**Correct procedure:**
+
+1. **Clear old results first:**
+   ```bash
+   rm -f tests/e2e/results/summary.md
+   ```
+
+2. **Run the test as a FOREGROUND process** (`isBackground: false`):
+   ```bash
+   cd tests/e2e && python3 runner.py --distro ubuntu:22.04
+   ```
+   This will block until the test completes (may take 15-45 minutes per distro).
+
+3. **Check results ONLY after completion:**
+   ```bash
+   cat tests/e2e/results/summary.md
+   ```
+
+**NEVER do these:**
+- ❌ Run tests as background processes then try to monitor terminal output
+- ❌ Use `sleep` commands followed by `get_terminal_output` - this does NOT work
+- ❌ Try to interpret live Vagrant output to determine test status
+- ❌ Read results files while tests are still running
+- ❌ Make repeated short checks thinking you're "waiting" - you're just wasting cycles
+- ❌ Set `isBackground: true` for run_in_terminal with e2e tests
+
+**Expected durations:**
+- VM boot + provisioning: 5-10 minutes
+- Package upgrades (older boxes): 10-20 minutes
+- MDE install/onboard/uninstall cycle: 5-10 minutes
+- **Total per distro: 20-45 minutes**
+
+**If the foreground process is too long:** Tell the user you cannot effectively monitor long-running tests and ask them to run it manually. Do NOT attempt workarounds with sleep/check loops - they do not work.
+
+### 5. Security-First Development
 
 When modifying code:
 

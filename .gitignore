@@ -136,3 +136,24 @@ microsoft.list
 
 # Pre-commit cache
 .pre-commit-cache/
+
+# ==========================
+# E2E Test Secrets
+# ==========================
+# MDE onboarding/offboarding JSON files (contain sensitive data)
+tests/e2e/mdatp_onboard.json
+tests/e2e/mdatp_offboard.json
+tests/e2e/mdatp_managed.json
+
+# E2E test results (generated locally)
+tests/e2e/results/
+
+# Vagrant artifacts
+tests/e2e/vagrant/.vagrant/
+tests/e2e/vagrant/Vagrantfile.local
+
+# Cloud image conversion artifacts
+tests/e2e/scripts/build/
+tests/e2e/scripts/boxes/
+*.qcow2
+*.box

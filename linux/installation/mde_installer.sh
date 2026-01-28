@@ -24,7 +24,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." 2>/dev/null && pwd)" || REPO_ROOT=""
 if [[ -n "${REPO_ROOT}" ]] && [[ -f "${REPO_ROOT}/VERSION" ]]; then
     SCRIPT_VERSION=$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION")
 else
-    SCRIPT_VERSION="1.2.0"  # Fallback version
+    SCRIPT_VERSION="1.4.1"  # Fallback version - updated to match latest
 fi
 ASSUMEYES=-y
 CHANNEL=
@@ -34,6 +34,7 @@ DISTRO_FAMILY=
 ARCHITECTURE=
 PKG_MGR=
 INSTALL_MODE=
+INSTALL_PATH=
 DEBUG=0
 VERBOSE=
 PMC_URL=https://packages.microsoft.com/config
@@ -43,11 +44,13 @@ ONBOARDING_SCRIPT=
 OFFBOARDING_SCRIPT=
 MIN_REQUIREMENTS=
 SKIP_CONFLICTING_APPS=
+SKIP_PMC_SETUP=
 PASSIVE_MODE=
 RTP_MODE=
 MIN_CORES=1
 MIN_MEM_MB=1024
 MIN_DISK_SPACE_MB=2048
+log_path=
 declare -A tags
 
 # Error codes
@@ -263,11 +266,10 @@ validate_path() {
         return 1
     fi
     
-    # Check for null bytes (command injection attempt)
-    if [[ "$path" == *$'\0'* ]]; then
-        log_error "[!] Invalid path: contains null bytes"
-        return 1
-    fi
+    # Note: Null byte check removed - bash strings cannot contain null bytes,
+    # so any input reaching this function has already had null bytes stripped.
+    # The previous check using *$'\0'* was ineffective as $'\0' expands to
+    # an empty string in bash, making the pattern ** which matches everything.
     
     # Check for path traversal attempts
     if [[ "$path" == *".."* ]]; then
@@ -375,7 +377,7 @@ validate_install_path() {
 
 # Microsoft GPG key fingerprints (official)
 MICROSOFT_GPG_FINGERPRINT="BC52 8686 B50D 79E3 39D3  721C EB3E 94AD BE12 29CF"
-MICROSOFT_2025_GPG_FINGERPRINT="BC52 8686 B50D 79E3 39D3  721C EB3E 94AD BE12 29CF"
+MICROSOFT_2025_GPG_FINGERPRINT="AA86 F75E 427A 19DD 3334  6403 EE4D 7792 F748 182B"
 
 # Verify GPG key fingerprint
 verify_gpg_key_fingerprint() {
@@ -388,8 +390,29 @@ verify_gpg_key_fingerprint() {
     fi
     
     # Extract fingerprint from key file
-    local actual_fingerprint
-    actual_fingerprint=$(gpg --show-keys --fingerprint "$key_file" 2>/dev/null | grep -A1 "pub" | tail -1 | tr -d ' ' | tr '[:lower:]' '[:upper:]')
+    # Use multiple methods for compatibility with different GPG versions
+    local actual_fingerprint=""
+    
+    # Method 1: Try --show-keys (GPG 2.2.9+)
+    if [[ -z "$actual_fingerprint" ]]; then
+        actual_fingerprint=$(gpg --show-keys --fingerprint "$key_file" 2>/dev/null | grep -A1 "pub" | tail -1 | tr -d ' ' | tr '[:lower:]' '[:upper:]')
+    fi
+    
+    # Method 2: Try --with-fingerprint --with-colons for binary keys (older GPG)
+    if [[ -z "$actual_fingerprint" ]]; then
+        actual_fingerprint=$(gpg --with-fingerprint --with-colons "$key_file" 2>/dev/null | grep "^fpr:" | head -1 | cut -d: -f10 | tr '[:lower:]' '[:upper:]')
+    fi
+    
+    # Method 3: Import into temporary keyring and extract (fallback)
+    if [[ -z "$actual_fingerprint" ]]; then
+        local temp_gpg_home
+        temp_gpg_home=$(mktemp -d)
+        chmod 700 "$temp_gpg_home"
+        gpg --homedir "$temp_gpg_home" --batch --yes --import "$key_file" 2>/dev/null
+        actual_fingerprint=$(gpg --homedir "$temp_gpg_home" --fingerprint --with-colons 2>/dev/null | grep "^fpr:" | head -1 | cut -d: -f10 | tr '[:lower:]' '[:upper:]')
+        rm -rf "$temp_gpg_home"
+    fi
+    
     local expected_clean
     expected_clean=$(echo "$expected_fingerprint" | tr -d ' ' | tr '[:lower:]' '[:upper:]')
     
@@ -429,7 +452,7 @@ download_and_verify_gpg_key() {
     local temp_gpg
     temp_gpg=$(create_secure_temp_file) || { rm -f "$temp_key"; return 1; }
     
-    if ! gpg --dearmor -o "$temp_gpg" < "$temp_key" 2>/dev/null; then
+    if ! gpg --batch --yes --dearmor -o "$temp_gpg" < "$temp_key" 2>/dev/null; then
         log_error "[!] Failed to dearmor GPG key"
         rm -f "$temp_key" "$temp_gpg"
         return 1
@@ -534,7 +557,7 @@ EOF
 
 get_rpm_proxy_params() {
     proxy_params=""
-    if [[ -n "$http_proxy" ]]; then
+    if [[ -n "${http_proxy:-}" ]]; then
 	    proxy_host=$(parse_uri "$http_proxy" | sed -n '2p')
         if [[ -n "$proxy_host" ]]; then
            proxy_params="$proxy_params --httpproxy $proxy_host"
@@ -545,7 +568,7 @@ get_rpm_proxy_params() {
            proxy_params="$proxy_params --httpport $proxy_port"
         fi
     fi
-    if [[ -n "$ftp_proxy" ]]; then
+    if [[ -n "${ftp_proxy:-}" ]]; then
        proxy_host=$(parse_uri "$ftp_proxy" | sed -n '2p')
        if [[ -n "$proxy_host" ]]; then
           proxy_params="$proxy_params --ftpproxy $proxy_host"
@@ -825,7 +848,8 @@ find_service()
         script_exit "INTERNAL ERROR. find_service requires an argument" $ERR_INTERNAL
     fi
 
-	lines=$(systemctl status $1 2>&1 | grep "Active: active" | wc -l)
+    # Use || true to prevent pipefail from causing script exit when service doesn't exist
+    lines=$(systemctl status "$1" 2>&1 | grep "Active: active" | wc -l || true)
 	
     if [[ $lines -eq 0 ]]; then
 		return 1
@@ -877,10 +901,11 @@ verify_conflicting_applications()
     fi
 
     # find applications that are using fanotify
+    # Use || true to prevent pipefail from causing script exit when no fanotify users found
     local conflicting_apps
     conflicting_apps=$(timeout 5m find /proc/*/fdinfo/ -type f -print0 2>/dev/null \
         | xargs -r0 grep -Fl "fanotify mnt_id" 2>/dev/null \
-        | xargs -I {} -r sh -c 'tr "\0" "" < "$(dirname {})/../cmdline"' 2>/dev/null)
+        | xargs -I {} -r sh -c 'tr "\0" "" < "$(dirname {})/../cmdline"' 2>/dev/null || true)
 
     if [[ -n "$conflicting_apps" ]]; then
         if [[ "$conflicting_apps" == "/opt/microsoft/mdatp/sbin/wdavdaemon" ]]; then
@@ -1258,13 +1283,13 @@ install_on_debian()
         ### Fetch the gpg key with fingerprint verification (SEC-007) ###
 		
 		local gpg_key_file="/usr/share/keyrings/microsoft-prod.gpg"
-        # Use new GPG key format for Ubuntu 24.04+, Debian 12+
-        if { [[ "$DISTRO" == "ubuntu" ]] && [[ "$VERSION" == "24.04" || "$VERSION" == "25.04" || "$VERSION" == "25.10" ]]; } || { [[ "$DISTRO" == "debian" ]] && [[ "$VERSION" == "12" ]]; }; then    
+        # Use new GPG key format for Ubuntu 24.04-25.04, Debian 12
+        if { [[ "$DISTRO" == "ubuntu" ]] && [[ "$VERSION" == "24.04" || "$VERSION" == "25.04" ]]; } || { [[ "$DISTRO" == "debian" ]] && [[ "$VERSION" == "12" ]]; }; then    
             if [[ ! -f "$gpg_key_file" ]]; then
                 download_and_verify_gpg_key "https://packages.microsoft.com/keys/microsoft.asc" "$gpg_key_file" "$MICROSOFT_GPG_FINGERPRINT" || script_exit "GPG key verification failed" $ERR_FAILED_REPO_SETUP
             fi
-		# Use 2025 GPG key for Debian 13+
-		elif { [[ "$DISTRO" == "debian" ]] && [[ "$VERSION" == "13" ]]; }; then
+		# Use 2025 GPG key for Ubuntu 25.10+, Debian 13+
+		elif { [[ "$DISTRO" == "debian" ]] && [[ "$VERSION" == "13" ]]; } || { [[ "$DISTRO" == "ubuntu" ]] && [[ "$VERSION" == "25.10" ]]; }; then
 			if [[ -f "$gpg_key_file" ]]; then
 				run_quietly "rm -f $gpg_key_file" "unable to remove existing microsoft-prod.gpg" $ERR_FAILED_REPO_SETUP
             fi
@@ -1277,7 +1302,7 @@ install_on_debian()
             # Verify fingerprint before adding
             local temp_gpg
             temp_gpg=$(create_secure_temp_file) || { rm -f "$temp_key"; script_exit "Failed to create temp file" $ERR_FAILED_REPO_SETUP; }
-            gpg --dearmor -o "$temp_gpg" < "$temp_key" 2>/dev/null || { rm -f "$temp_key" "$temp_gpg"; script_exit "Failed to dearmor GPG key" $ERR_FAILED_REPO_SETUP; }
+            gpg --batch --yes --dearmor -o "$temp_gpg" < "$temp_key" 2>/dev/null || { rm -f "$temp_key" "$temp_gpg"; script_exit "Failed to dearmor GPG key" $ERR_FAILED_REPO_SETUP; }
             verify_gpg_key_fingerprint "$temp_gpg" "$MICROSOFT_GPG_FINGERPRINT" || { rm -f "$temp_key" "$temp_gpg"; script_exit "GPG key verification failed" $ERR_FAILED_REPO_SETUP; }
             run_quietly "apt-key add $temp_key" "unable to add the gpg key" $ERR_FAILED_REPO_SETUP
             rm -f "$temp_key" "$temp_gpg"
@@ -1457,9 +1482,8 @@ install_on_fedora()
         fi
 
         # Configure repository if it does not exist
-        yum -q repolist "$repo_name" | grep "$repo_name"
-        found_repo=$?
-        if [[ $found_repo -eq 0 ]]; then
+        # Use || true to prevent pipefail from causing script exit when repo not found
+        if yum -q repolist "$repo_name" 2>/dev/null | grep -q "$repo_name"; then
             log_info "[i] repository already configured"
         else
             log_info "[>] configuring the repository"
@@ -1715,7 +1739,7 @@ scale_version_id()
         elif [[ $VERSION == 8* ]] || [[ "$DISTRO" == "fedora" ]]; then
             SCALED_VERSION=8
         elif [[ $VERSION == 9* ]]; then
-            if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" || $DISTRO == "ol" ]]; then
+            if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" || $DISTRO == "ol" || $DISTRO == "centos" ]]; then
                 SCALED_VERSION=9
             else
                 SCALED_VERSION=9.0
@@ -2298,7 +2322,8 @@ if [[ -n "$OFFBOARDING_SCRIPT" ]]; then
     offboard_device
 fi
 
-if [[ ${#tags[@]} -gt 0 ]]; then
+# Check if tags array has any elements (use +x to avoid unbound variable error)
+if [[ -n "${tags[*]+x}" ]] && [[ ${#tags[@]} -gt 0 ]]; then
     set_device_tags
 fi
 
