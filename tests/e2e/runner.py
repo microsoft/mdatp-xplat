@@ -9,6 +9,7 @@ import argparse
 import contextlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -16,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 import yaml
 from distro_parser import DistroParser
@@ -45,6 +46,169 @@ class MissingSecretsError(Exception):
     """Raised when required secrets are missing."""
 
     pass
+
+
+class BoxBuilder:
+    """Handles building local Vagrant boxes from cloud images."""
+
+    def __init__(self, scripts_dir: Path):
+        """Initialize box builder.
+
+        Args:
+            scripts_dir: Path to tests/e2e/scripts directory
+
+        """
+        self.scripts_dir = scripts_dir
+        self.convert_script = scripts_dir / "convert_cloud_image.sh"
+
+    def get_installed_boxes(self) -> Set[str]:
+        """Get set of installed Vagrant box names.
+
+        Returns:
+            Set of box names (e.g., {'local/debian12', 'generic/ubuntu2204'})
+
+        """
+        try:
+            result = subprocess.run(
+                ["vagrant", "box", "list"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                return set()
+
+            boxes = set()
+            for line in result.stdout.strip().split("\n"):
+                if line:
+                    # Format: "box_name (provider, version, arch)"
+                    match = re.match(r"^(\S+)\s+\(", line)
+                    if match:
+                        boxes.add(match.group(1))
+            return boxes
+        except Exception:
+            return set()
+
+    def is_local_box(self, box_name: str) -> bool:
+        """Check if a box is a local/ box that we can build.
+
+        Args:
+            box_name: Vagrant box name
+
+        Returns:
+            True if this is a local/ box
+
+        """
+        return box_name.startswith("local/")
+
+    def parse_local_box_name(self, box_name: str) -> Optional[tuple]:
+        """Parse a local box name into distro and version.
+
+        Args:
+            box_name: Box name like 'local/fedora40' or 'local/debian12'
+
+        Returns:
+            Tuple of (distro, version) or None if not parseable
+
+        """
+        if not self.is_local_box(box_name):
+            return None
+
+        # Remove 'local/' prefix
+        name = box_name.replace("local/", "")
+
+        # Try to split into distro and version
+        # Patterns: debian12, fedora40, fedora43
+        patterns = [
+            (r"^(debian)(\d+)$", lambda m: (m.group(1), m.group(2))),
+            (r"^(fedora)(\d+)$", lambda m: (m.group(1), m.group(2))),
+            (r"^(ubuntu)(\d+)$", lambda m: (m.group(1), m.group(2))),
+        ]
+
+        for pattern, extractor in patterns:
+            match = re.match(pattern, name)
+            if match:
+                return extractor(match)
+
+        return None
+
+    def build_box(self, box_name: str) -> bool:
+        """Build a local box from cloud image.
+
+        Args:
+            box_name: Box name like 'local/fedora40'
+
+        Returns:
+            True if build succeeded
+
+        """
+        parsed = self.parse_local_box_name(box_name)
+        if not parsed:
+            print(f"  ❌ Cannot parse box name: {box_name}")
+            return False
+
+        distro, version = parsed
+        print(f"  📦 Building {box_name} from cloud image...")
+
+        if not self.convert_script.exists():
+            print(f"  ❌ Convert script not found: {self.convert_script}")
+            return False
+
+        try:
+            result = subprocess.run(
+                [str(self.convert_script), distro, version],
+                cwd=self.scripts_dir,
+                timeout=1800,  # 30 minute timeout for image conversion
+            )
+            return result.returncode == 0
+        except subprocess.TimeoutExpired:
+            print(f"  ❌ Build timed out for {box_name}")
+            return False
+        except Exception as e:
+            print(f"  ❌ Build failed for {box_name}: {e}")
+            return False
+
+    def ensure_boxes_available(self, distros: List[Dict]) -> List[Dict]:
+        """Ensure all required local boxes are available, building if needed.
+
+        Args:
+            distros: List of distro configs from get_test_matrix()
+
+        Returns:
+            Updated distro list (unchanged distros if all boxes available,
+            or filtered list if some couldn't be built)
+
+        """
+        installed = self.get_installed_boxes()
+
+        # Find missing local boxes
+        missing_local = []
+        for distro in distros:
+            box_name = distro["vagrant_box"]
+            if self.is_local_box(box_name) and box_name not in installed:
+                missing_local.append((distro, box_name))
+
+        if not missing_local:
+            return distros
+
+        print("\n🔧 Building missing local Vagrant boxes...")
+        print(f"   (Found {len(missing_local)} local box(es) that need to be built)\n")
+
+        failed_boxes = set()
+        for distro, box_name in missing_local:
+            if not self.build_box(box_name):
+                failed_boxes.add(box_name)
+                print(f"  ⚠️  Skipping {distro['distro']}:{distro['version']} - box build failed")
+            else:
+                print(f"  ✅ Built {box_name}")
+
+        # Filter out distros whose boxes failed to build
+        if failed_boxes:
+            print(f"\n⚠️  {len(failed_boxes)} box(es) failed to build")
+            distros = [d for d in distros if d["vagrant_box"] not in failed_boxes]
+
+        print("")
+        return distros
 
 
 class VagrantRunner:
@@ -684,7 +848,7 @@ class TestRunner:
 
     def print_summary(self):
         """Print summary to stdout."""
-        self.results_formatter.generate_summary_markdown()
+        print(self.results_formatter.generate_summary_markdown())
 
 
 def main():
@@ -806,6 +970,15 @@ def main():
 
     if args.dry_run:
         sys.exit(0)
+
+    # Ensure local boxes are available (build from cloud images if missing)
+    scripts_dir = Path(__file__).parent / "scripts"
+    box_builder = BoxBuilder(scripts_dir)
+    distros = box_builder.ensure_boxes_available(distros)
+
+    if not distros:
+        print("❌ No distros available to test after box building", file=sys.stderr)
+        sys.exit(1)
 
     # Run tests
 

@@ -75,7 +75,10 @@ declare -A CLOUD_IMAGES=(
     ["debian_11"]="https://cloud.debian.org/images/cloud/bullseye/latest/debian-11-nocloud-amd64.qcow2|local/debian11|bullseye"
     ["debian_10"]="https://cloud.debian.org/images/cloud/buster/latest/debian-10-nocloud-amd64.qcow2|local/debian10|buster"
     # Fedora uses "Generic" variant - works with libvirt without cloud-init
-    # Note: Fedora 42 has alvistack/fedora-42 with libvirt, so only 43 needs conversion
+    # Note: Fedora 40/41 are EOL and moved to archives.fedoraproject.org
+    # Fedora 42 has alvistack/fedora-42 with libvirt support
+    ["fedora_40"]="https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/40/Cloud/x86_64/images/Fedora-Cloud-Base-Generic.x86_64-40-1.14.qcow2|local/fedora40|40"
+    ["fedora_41"]="https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-41-1.4.x86_64.qcow2|local/fedora41|41"
     ["fedora_43"]="https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-43-1.6.x86_64.qcow2|local/fedora43|43"
 )
 

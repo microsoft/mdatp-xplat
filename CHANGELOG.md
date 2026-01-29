@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-01-29
+
+### Fixed
+
+- **E2E Test Suite**: Fixed Fedora 40 and 41 VM startup failures
+  - Root cause: Official `fedora/40-cloud-base` and `fedora/41-cloud-base` Vagrant boxes
+    return 404 errors when attempting to download from Vagrant Cloud
+  - Solution: Switched Fedora 40/41 to use locally converted cloud images (`local/fedora40`,
+    `local/fedora41`) matching the pattern used for Debian boxes and Fedora 43
+  - Added Fedora 40 and 41 cloud image URLs to `convert_cloud_image.sh`
+  - Updated `distro_parser.py` to reference local boxes for Fedora 40/41
+
+### Added
+
+- **E2E Test Suite**: Automatic local box building during test runs
+  - New `BoxBuilder` class in `runner.py` detects missing `local/*` Vagrant boxes
+  - Automatically runs `convert_cloud_image.sh` to build required boxes before tests
+  - Filters out distros if their box build fails, allowing remaining tests to continue
+  - Eliminates need to manually run `./scripts/convert_cloud_image.sh` before first test run
+
 ## [1.5.0] - 2026-01-27
 
 ### Added

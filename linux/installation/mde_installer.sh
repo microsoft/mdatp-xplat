@@ -24,7 +24,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." 2>/dev/null && pwd)" || REPO_ROOT=""
 if [[ -n "${REPO_ROOT}" ]] && [[ -f "${REPO_ROOT}/VERSION" ]]; then
     SCRIPT_VERSION=$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION")
 else
-    SCRIPT_VERSION="1.4.1"  # Fallback version - updated to match latest
+    SCRIPT_VERSION="1.5.1"  # Fallback version - updated to match latest
 fi
 ASSUMEYES=-y
 CHANNEL=

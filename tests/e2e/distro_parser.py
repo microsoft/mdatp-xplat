@@ -73,14 +73,15 @@ SUPPORTED_DISTROS = {
         ("8", "8", "generic/alma8"),
         ("9", "9", "generic/alma9"),
     ],
-    # Fedora (official cloud-base boxes from Fedora project)
+    # Fedora (uses local/ boxes converted from official cloud images)
     # Note: Fedora scales to version 8 for the RHEL-compatible repo
-    # Note: Fedora 43 uses local/ box converted from official cloud image.
-    # To create the box, run: ./scripts/convert_cloud_image.sh fedora 43
+    # Note: Fedora 40/41/43 use local/ boxes converted from official cloud images
+    # because the official fedora/XX-cloud-base Vagrant boxes return 404 on download.
+    # To create the boxes, run: ./scripts/convert_cloud_image.sh fedora <version>
     "fedora": [
         ("39", "8", "generic/fedora39"),
-        ("40", "8", "fedora/40-cloud-base"),
-        ("41", "8", "fedora/41-cloud-base"),
+        ("40", "8", "local/fedora40"),  # Converted from cloud image (official box 404s)
+        ("41", "8", "local/fedora41"),  # Converted from cloud image (official box 404s)
         ("42", "8", "alvistack/fedora-42"),  # alvistack has libvirt support
         ("43", "8", "local/fedora43"),  # Converted from cloud image
     ],

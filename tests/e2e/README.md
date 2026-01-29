@@ -203,6 +203,31 @@ The test suite automatically discovers supported distros from `mde_installer.sh`
 
 Some distros don't have pre-built Vagrant boxes with libvirt support on Vagrant Cloud. For these, we provide a conversion script that creates Vagrant boxes from official cloud images.
 
+### Automatic Box Building
+
+**The test runner automatically builds missing local boxes.** When you run tests, the runner:
+1. Checks which `local/*` Vagrant boxes are required
+2. Detects which ones are missing from your system
+3. Automatically runs `convert_cloud_image.sh` to build them
+4. Continues with testing once boxes are ready
+
+This means you can run tests immediately without manually pre-building boxes:
+
+```bash
+# This will auto-build local/fedora40 if missing, then run the test
+python3 runner.py --distro fedora:40
+```
+
+The following boxes are automatically built when needed:
+- `local/debian10`, `local/debian11`, `local/debian12`
+- `local/fedora40`, `local/fedora41`, `local/fedora43`
+
+If a box build fails, that distro is skipped and remaining tests continue.
+
+### Manual Box Building
+
+You can also build boxes manually if preferred:
+
 ### When to Build Custom Boxes
 
 You need to build a custom box when:
