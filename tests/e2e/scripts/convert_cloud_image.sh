@@ -146,7 +146,30 @@ create_fedora_customize_script() {
 #!/bin/bash
 set -e
 # Fedora uses dnf and sshd (not ssh)
-dnf install -y -q openssh-server sudo rsync
+dnf install -y -q openssh-server sudo rsync NetworkManager
+
+# Enable and configure NetworkManager for DHCP on all interfaces
+systemctl enable NetworkManager
+
+# Create a generic DHCP connection profile for the primary interface
+# This ensures DHCP works regardless of interface naming (eth0, enp1s0, etc.)
+cat > /etc/NetworkManager/system-connections/vagrant-dhcp.nmconnection << 'NMCONN'
+[connection]
+id=vagrant-dhcp
+type=ethernet
+autoconnect=true
+autoconnect-priority=100
+
+[ethernet]
+
+[ipv4]
+method=auto
+
+[ipv6]
+method=auto
+NMCONN
+chmod 600 /etc/NetworkManager/system-connections/vagrant-dhcp.nmconnection
+
 ssh-keygen -A
 systemctl enable sshd.service
 SCRIPT
@@ -230,7 +253,7 @@ convert_image() {
     # Create a working copy for customization
     log_info "Creating working copy of image..."
     
-    # Resize the disk - cloud images are typically 2GB which is too small
+    # Resize the disk - cloud images are typically small (5GB) which may be too small
     # virt-resize will copy and expand the partition in one step
     log_info "Resizing disk to 30GB (this may take a minute)..."
     
@@ -238,9 +261,15 @@ convert_image() {
     qemu-img create -f qcow2 "${qcow2_file}" 30G
     
     # Use virt-resize to copy and expand the main partition
-    # --expand /dev/sda1 expands the root partition to fill the disk
+    # Fedora uses /dev/sda4 (btrfs root), Debian uses /dev/sda1
+    # Detect which partition to expand based on distro
+    local expand_partition="/dev/sda1"
+    if [[ "$distro_family" == "rhel" ]]; then
+        expand_partition="/dev/sda4"
+    fi
+    
     export LIBGUESTFS_BACKEND=direct
-    if ! virt-resize --expand /dev/sda1 "${qcow2_orig}" "${qcow2_file}"; then
+    if ! virt-resize --expand "${expand_partition}" "${qcow2_orig}" "${qcow2_file}"; then
         log_error "Failed to resize image"
         return 1
     fi

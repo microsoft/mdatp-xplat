@@ -12,10 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **E2E Test Suite**: Fixed Fedora 40 and 41 VM startup failures
   - Root cause: Official `fedora/40-cloud-base` and `fedora/41-cloud-base` Vagrant boxes
     return 404 errors when attempting to download from Vagrant Cloud
-  - Solution: Switched Fedora 40/41 to use locally converted cloud images (`local/fedora40`,
-    `local/fedora41`) matching the pattern used for Debian boxes and Fedora 43
+  - Solution: Fedora 40 uses locally converted cloud image (`local/fedora40`), and
+    Fedora 41 uses `alvistack/fedora-41` community box (local conversion has DHCP issues)
   - Added Fedora 40 and 41 cloud image URLs to `convert_cloud_image.sh`
-  - Updated `distro_parser.py` to reference local boxes for Fedora 40/41
+  - Updated `distro_parser.py` to reference appropriate boxes for Fedora 40/41
 
 ### Added
 
