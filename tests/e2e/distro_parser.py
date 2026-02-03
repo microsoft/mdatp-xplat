@@ -40,9 +40,14 @@ SUPPORTED_DISTROS = {
     # Ubuntu LTS and interim releases (primary support)
     # Note: generic/ubuntu2404 doesn't exist, so we use cloud-image/ubuntu-24.04
     # Note: Ubuntu 25.x uses alvistack boxes (generic boxes not yet available)
+    # Note: Ubuntu 21.04/21.10 use local/ boxes converted from official cloud images
+    #       (EOL releases - no Vagrant boxes, but cloud images still accessible)
+    #       To create these boxes, run: ./scripts/convert_cloud_image.sh ubuntu 21.04
     "ubuntu": [
         ("18.04", "18.04", "generic/ubuntu1804"),
         ("20.04", "20.04", "generic/ubuntu2004"),
+        ("21.04", "21.04", "local/ubuntu2104"),  # Hirsute (EOL) - converted from cloud image
+        ("21.10", "21.10", "local/ubuntu2110"),  # Impish (EOL) - converted from cloud image
         ("22.04", "22.04", "generic/ubuntu2204"),
         ("24.04", "24.04", "cloud-image/ubuntu-24.04"),
         ("25.04", "25.04", "alvistack/ubuntu-25.04"),

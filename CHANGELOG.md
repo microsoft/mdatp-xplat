@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-02-02
+
+### Fixed
+
+- **mde_installer.sh**: Fixed Ubuntu version scaling for interim releases (21.04, 21.10, etc.)
+  - Previously, Ubuntu versions not in the explicit LTS list (16.04, 18.04, 20.04, 22.04, 24.04)
+    were incorrectly scaled to 18.04 even when Microsoft packages existed for the actual version
+  - Added all Ubuntu versions available in PMC to the known versions list: 20.10, 21.04, 21.10,
+    22.10, 23.04, 23.10, 24.10 (in addition to existing LTS and 25.x versions)
+  - Now uses a case statement for cleaner, more maintainable version matching
+
+- **mde_installer.sh**: Fixed apt repository refresh failing on Ubuntu 22.04 and newer
+  - Root cause: Ubuntu 22.04+ deprecates `apt-key` which caused warnings/errors during `apt-get update`
+  - Solution: Extended modern GPG keyring format (with `signed-by` directive) to Ubuntu 20.10+
+    and Debian 11+, not just 24.04+
+  - The script now automatically adds `signed-by=/usr/share/keyrings/microsoft-prod.gpg` to the
+    repository list file since Microsoft's `.list` files don't include this directive
+  - Legacy `apt-key` method retained only for Ubuntu 16.04/18.04/20.04 and Debian 10
+
+- **mde_installer.sh**: Fixed installation failing on EOL Ubuntu releases (21.04, 21.10, etc.)
+  - Root cause: EOL Ubuntu releases have their repos moved to old-releases.ubuntu.com
+  - The default sources.list points to servers that no longer exist, causing `apt-get` to fail
+  - Added `fix_eol_repos()` function that detects EOL releases and automatically updates
+    `/etc/apt/sources.list` to use old-releases.ubuntu.com before installing packages
+  - Supports EOL codenames: hirsute (21.04), impish (21.10), groovy (20.10), and older
+
 ## [1.5.1] - 2026-01-29
 
 ### Fixed

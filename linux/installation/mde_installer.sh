@@ -24,7 +24,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." 2>/dev/null && pwd)" || REPO_ROOT=""
 if [[ -n "${REPO_ROOT}" ]] && [[ -f "${REPO_ROOT}/VERSION" ]]; then
     SCRIPT_VERSION=$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION")
 else
-    SCRIPT_VERSION="1.5.1"  # Fallback version - updated to match latest
+    SCRIPT_VERSION="1.5.2"  # Fallback version - updated to match latest
 fi
 ASSUMEYES=-y
 CHANNEL=
@@ -968,6 +968,69 @@ set_package_manager()
     log_info "[v] set package manager: $PKG_MGR"
 }
 
+# Fix repositories for EOL Ubuntu releases
+# Ubuntu interim releases (XX.10) are only supported for 9 months,
+# after which their repos are moved to old-releases.ubuntu.com
+fix_eol_repos()
+{
+    if [[ "$DISTRO" != "ubuntu" ]]; then
+        return 0
+    fi
+
+    # Check if this is an EOL Ubuntu version by testing if the main repo works
+    # Known EOL versions that need old-releases: 21.04, 21.10, 20.10, etc.
+    local codename
+    codename=$(lsb_release -cs 2>/dev/null || echo "")
+    
+    if [[ -z "$codename" ]]; then
+        return 0
+    fi
+
+    # Check if repos are already pointing to old-releases
+    if grep -q "old-releases.ubuntu.com" /etc/apt/sources.list 2>/dev/null; then
+        log_info "[v] repositories already configured for EOL release"
+        return 0
+    fi
+
+    # Test if the current repos work by doing a quick apt-get update
+    # If it fails, try switching to old-releases
+    if ! apt-get update -qq 2>/dev/null; then
+        log_info "[>] current repositories unavailable, checking for EOL release..."
+        
+        # Known EOL codenames that need old-releases.ubuntu.com
+        case "$codename" in
+            hirsute|impish|groovy|eoan|disco|cosmic|artful|zesty|yakkety)
+                log_info "[>] detected EOL Ubuntu release ($codename), switching to old-releases.ubuntu.com"
+                
+                # Backup original sources.list
+                if [[ -f /etc/apt/sources.list ]]; then
+                    cp /etc/apt/sources.list /etc/apt/sources.list.bak 2>/dev/null || true
+                fi
+                
+                # Create new sources.list pointing to old-releases
+                cat > /etc/apt/sources.list << EOF
+deb http://old-releases.ubuntu.com/ubuntu ${codename} main restricted universe multiverse
+deb http://old-releases.ubuntu.com/ubuntu ${codename}-updates main restricted universe multiverse
+deb http://old-releases.ubuntu.com/ubuntu ${codename}-security main restricted universe multiverse
+EOF
+                
+                # Disable validity checking for archived repos
+                echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+                
+                # Update package lists with new repos
+                if ! apt-get update -qq 2>/dev/null; then
+                    log_warning "[!] failed to update package lists from old-releases.ubuntu.com"
+                else
+                    log_info "[v] successfully switched to EOL repositories"
+                fi
+                ;;
+            *)
+                log_warning "[!] apt-get update failed but codename '$codename' is not a known EOL release"
+                ;;
+        esac
+    fi
+}
+
 check_if_pkg_is_installed()
 {
     if [[ -z "$1" ]]; then
@@ -1278,24 +1341,72 @@ install_on_debian()
         local codename
         codename=$(lsb_release -cs 2>/dev/null || echo "$SCALED_VERSION")
         local repo_list_file="/etc/apt/sources.list.d/microsoft-${DISTRO}-${codename}-${CHANNEL}.list"
-        run_quietly "mv ./microsoft.list $repo_list_file" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
 
         ### Fetch the gpg key with fingerprint verification (SEC-007) ###
-		
-		local gpg_key_file="/usr/share/keyrings/microsoft-prod.gpg"
-        # Use new GPG key format for Ubuntu 24.04-25.04, Debian 12
-        if { [[ "$DISTRO" == "ubuntu" ]] && [[ "$VERSION" == "24.04" || "$VERSION" == "25.04" ]]; } || { [[ "$DISTRO" == "debian" ]] && [[ "$VERSION" == "12" ]]; }; then    
+        local gpg_key_file="/usr/share/keyrings/microsoft-prod.gpg"
+        local use_modern_keyring=false
+        local gpg_key_url="https://packages.microsoft.com/keys/microsoft.asc"
+        local gpg_fingerprint="$MICROSOFT_GPG_FINGERPRINT"
+
+        # Determine GPG key handling method based on distro/version
+        # Modern keyring format (signed-by) for Ubuntu 20.10+ and Debian 11+
+        # apt-key is deprecated in Ubuntu 22.04+ and causes warnings/errors
+        if [[ "$DISTRO" == "ubuntu" ]]; then
+            case "$VERSION" in
+                16.04|18.04|20.04)
+                    # Legacy Ubuntu - use apt-key
+                    use_modern_keyring=false
+                    ;;
+                25.10)
+                    # Ubuntu 25.10+ uses 2025 GPG key
+                    use_modern_keyring=true
+                    gpg_key_url="https://packages.microsoft.com/keys/microsoft-2025.asc"
+                    gpg_fingerprint="$MICROSOFT_2025_GPG_FINGERPRINT"
+                    ;;
+                *)
+                    # Ubuntu 20.10+ (including 21.04, 21.10, 22.04, etc.) - use modern keyring
+                    use_modern_keyring=true
+                    ;;
+            esac
+        elif [[ "$DISTRO" == "debian" ]]; then
+            case "$VERSION" in
+                10)
+                    # Debian 10 (Buster) - use apt-key
+                    use_modern_keyring=false
+                    ;;
+                13)
+                    # Debian 13+ uses 2025 GPG key
+                    use_modern_keyring=true
+                    gpg_key_url="https://packages.microsoft.com/keys/microsoft-2025.asc"
+                    gpg_fingerprint="$MICROSOFT_2025_GPG_FINGERPRINT"
+                    ;;
+                *)
+                    # Debian 11+ - use modern keyring
+                    use_modern_keyring=true
+                    ;;
+            esac
+        fi
+
+        if [[ "$use_modern_keyring" == "true" ]]; then
+            # Modern systems: use signed-by directive with keyring file
+            # Remove old keyring if switching GPG keys (e.g., to 2025 key)
+            if [[ "$gpg_key_url" == *"microsoft-2025.asc"* ]] && [[ -f "$gpg_key_file" ]]; then
+                run_quietly "rm -f $gpg_key_file" "unable to remove existing microsoft-prod.gpg" $ERR_FAILED_REPO_SETUP
+            fi
             if [[ ! -f "$gpg_key_file" ]]; then
-                download_and_verify_gpg_key "https://packages.microsoft.com/keys/microsoft.asc" "$gpg_key_file" "$MICROSOFT_GPG_FINGERPRINT" || script_exit "GPG key verification failed" $ERR_FAILED_REPO_SETUP
+                download_and_verify_gpg_key "$gpg_key_url" "$gpg_key_file" "$gpg_fingerprint" || script_exit "GPG key verification failed" $ERR_FAILED_REPO_SETUP
             fi
-		# Use 2025 GPG key for Ubuntu 25.10+, Debian 13+
-		elif { [[ "$DISTRO" == "debian" ]] && [[ "$VERSION" == "13" ]]; } || { [[ "$DISTRO" == "ubuntu" ]] && [[ "$VERSION" == "25.10" ]]; }; then
-			if [[ -f "$gpg_key_file" ]]; then
-				run_quietly "rm -f $gpg_key_file" "unable to remove existing microsoft-prod.gpg" $ERR_FAILED_REPO_SETUP
+            # Add signed-by directive to repo list if not already present
+            # Microsoft's .list files don't include signed-by, but modern apt requires it
+            if ! grep -q "signed-by=" microsoft.list 2>/dev/null; then
+                sed -i "s|^deb \[|deb [signed-by=$gpg_key_file |" microsoft.list || {
+                    log_warning "[!] Failed to add signed-by directive, continuing anyway"
+                }
             fi
-			download_and_verify_gpg_key "https://packages.microsoft.com/keys/microsoft-2025.asc" "$gpg_key_file" "$MICROSOFT_2025_GPG_FINGERPRINT" || script_exit "GPG key verification failed" $ERR_FAILED_REPO_SETUP
+            run_quietly "mv ./microsoft.list $repo_list_file" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
         else
-            # Legacy systems: still use apt-key but with verification (SEC-008 partial)
+            # Legacy systems: use apt-key with verification (SEC-008 partial)
+            run_quietly "mv ./microsoft.list $repo_list_file" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
             local temp_key
             temp_key=$(create_secure_temp_file) || script_exit "Failed to create temp file" $ERR_FAILED_REPO_SETUP
             run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc -o $temp_key" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
@@ -1771,10 +1882,23 @@ scale_version_id()
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [[ $DISTRO == "ubuntu" ]] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]] && [[ $VERSION != "24.04" ]] && [[ $VERSION != "25.04" ]] && [[ $VERSION != "25.10" ]]; then
-        SCALED_VERSION=18.04
+    elif [[ "$DISTRO" == "ubuntu" ]]; then
+        # Ubuntu versions available in PMC (checked 2026-02-02):
+        # LTS: 16.04, 18.04, 20.04, 22.04, 24.04
+        # Interim: 20.10, 21.04, 21.10, 22.10, 23.04, 23.10, 24.10, 25.04, 25.10
+        # See: https://packages.microsoft.com/config/ubuntu/
+        case "$VERSION" in
+            16.04|18.04|20.04|20.10|21.04|21.10|22.04|22.10|23.04|23.10|24.04|24.10|25.04|25.10)
+                SCALED_VERSION="$VERSION"
+                ;;
+            *)
+                # Unknown version - fall back to 18.04 for compatibility
+                SCALED_VERSION=18.04
+                log_warning "[!] Ubuntu $VERSION is not in the known versions list, scaling to 18.04"
+                ;;
+        esac
     else
-        # no problems with 
+        # no problems with distros that use major version only (RHEL, Debian, etc.)
         SCALED_VERSION=$VERSION
     fi
     log_info "[v] scaled: $SCALED_VERSION"
@@ -2240,6 +2364,9 @@ scale_version_id
 
 ### Set package manager ###
 set_package_manager
+
+### Fix EOL Ubuntu repositories (must be done before any package installation) ###
+fix_eol_repos
 
 ### Act according to arguments ###
 if [[ "$INSTALL_MODE" == "i" ]]; then
