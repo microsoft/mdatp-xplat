@@ -74,6 +74,10 @@ declare -A CLOUD_IMAGES=(
     ["debian_12"]="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-nocloud-amd64.qcow2|local/debian12|bookworm"
     ["debian_11"]="https://cloud.debian.org/images/cloud/bullseye/latest/debian-11-nocloud-amd64.qcow2|local/debian11|bullseye"
     ["debian_10"]="https://cloud.debian.org/images/cloud/buster/latest/debian-10-nocloud-amd64.qcow2|local/debian10|buster"
+    # Ubuntu EOL releases - no Vagrant boxes available, but cloud images still accessible
+    # These are used for regression testing the installer on older versions
+    ["ubuntu_21.04"]="https://cloud-images.ubuntu.com/releases/21.04/release/ubuntu-21.04-server-cloudimg-amd64.img|local/ubuntu2104|hirsute"
+    ["ubuntu_21.10"]="https://cloud-images.ubuntu.com/releases/21.10/release/ubuntu-21.10-server-cloudimg-amd64.img|local/ubuntu2110|impish"
     # Fedora uses "Generic" variant - works with libvirt without cloud-init
     # Note: Fedora 40/41 are EOL and moved to archives.fedoraproject.org
     # Fedora 42 has alvistack/fedora-42 with libvirt support
@@ -125,13 +129,114 @@ create_debian_customize_script() {
     cat > "$output_file" << 'SCRIPT'
 #!/bin/bash
 set -e
+
+# ============================================================================
+# REPOSITORY FIXES FOR EOL RELEASES
+# ============================================================================
+
 # Fix Debian 10 (buster) repos - it's archived
 if grep -q 'buster' /etc/os-release 2>/dev/null; then
     echo 'deb http://archive.debian.org/debian buster main' > /etc/apt/sources.list
     echo 'deb http://archive.debian.org/debian-security buster/updates main' >> /etc/apt/sources.list
     echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
 fi
+
+# Fix Ubuntu EOL releases (21.04 hirsute, 21.10 impish) - moved to old-releases
+if grep -qE 'VERSION_CODENAME=(hirsute|impish)' /etc/os-release 2>/dev/null; then
+    codename=$(grep VERSION_CODENAME /etc/os-release | cut -d= -f2)
+    cat > /etc/apt/sources.list << EOF
+deb http://old-releases.ubuntu.com/ubuntu ${codename} main restricted universe multiverse
+deb http://old-releases.ubuntu.com/ubuntu ${codename}-updates main restricted universe multiverse
+deb http://old-releases.ubuntu.com/ubuntu ${codename}-security main restricted universe multiverse
+EOF
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+fi
+
+# ============================================================================
+# CLOUD-INIT REMOVAL (CRITICAL!)
+# Generic Vagrant boxes don't have cloud-init. Cloud-init causes network
+# configuration issues because it tries to manage networking at boot.
+# We remove it completely to match how generic boxes work.
+# ============================================================================
+
+# COMPLETELY PURGE cloud-init - it interferes with network configuration
+# Generic vagrant boxes don't have cloud-init installed at all
+apt-get purge -y -qq cloud-init cloud-guest-utils 2>/dev/null || true
+apt-get autoremove -y -qq 2>/dev/null || true
+rm -rf /etc/cloud /var/lib/cloud 2>/dev/null || true
+
+# Clean up any leftover cloud-init services
+systemctl disable cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true
+systemctl mask cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true
+
+# ============================================================================
+# NETWORK CONFIGURATION (matching generic/ubuntu boxes)
+# ============================================================================
+
+# 1. Force classic network interface naming (eth0 instead of enp1s0)
+# This is exactly how generic/ubuntu boxes work
+if [ -f /etc/default/grub ]; then
+    # Use the same format as generic boxes (note the deliberate ==)
+    sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=" net.ifnames=0 biosdevname=0"/' /etc/default/grub
+    sed -i 's/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=""/' /etc/default/grub
+    # Update grub to apply changes
+    update-grub 2>/dev/null || grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null || true
+    
+    # CRITICAL: The above may fail in chroot. Directly patch grub.cfg as fallback.
+    # Add net.ifnames=0 biosdevname=0 to all kernel command lines
+    if [ -f /boot/grub/grub.cfg ]; then
+        # Only add if not already present
+        if ! grep -q 'net.ifnames=0' /boot/grub/grub.cfg; then
+            sed -i 's|\(linux.*root=UUID=[^ ]*\) ro|\1 ro net.ifnames=0 biosdevname=0|g' /boot/grub/grub.cfg
+        fi
+    fi
+    
+    # Regenerate initramfs to ensure kernel params are properly applied
+    update-initramfs -u 2>/dev/null || true
+fi
+
+# 2. Create netplan config for eth0 (matching generic/ubuntu boxes EXACTLY)
+# Generic boxes have only ONE netplan file
+rm -f /etc/netplan/*.yaml 2>/dev/null || true
+if command -v netplan &> /dev/null; then
+    cat > /etc/netplan/01-netcfg.yaml << 'NETPLAN'
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eth0:
+      dhcp4: true
+      dhcp6: false
+      optional: true
+      nameservers:
+        addresses: [4.2.2.1, 4.2.2.2, 208.67.220.220]
+NETPLAN
+    chmod 644 /etc/netplan/01-netcfg.yaml
+    netplan generate 2>/dev/null || true
+fi
+
+# 3. Ensure systemd-networkd is enabled (this is what netplan uses by default)
+systemctl unmask systemd-networkd.service 2>/dev/null || true
+systemctl enable systemd-networkd.service 2>/dev/null || true
+systemctl enable systemd-networkd-wait-online.service 2>/dev/null || true
+
+# ============================================================================
+# PACKAGE INSTALLATION
+# ============================================================================
+
+# Update package lists first (required for EOL releases after sources.list fix)
 apt-get update -qq
+
+# Create simple /etc/network/interfaces (like generic boxes)
+mkdir -p /etc/network/interfaces.d
+cat > /etc/network/interfaces << 'INTERFACES'
+# ifupdown has been replaced by netplan(5) on this system.  See
+# /etc/netplan for current configuration.
+# To re-enable ifupdown on this system, you can run:
+#    sudo apt install ifupdown
+INTERFACES
+
+# Install other required packages
 apt-get install -y -qq openssh-server sudo rsync
 ssh-keygen -A
 systemctl enable ssh.service

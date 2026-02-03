@@ -118,11 +118,13 @@ class BoxBuilder:
         name = box_name.replace("local/", "")
 
         # Try to split into distro and version
-        # Patterns: debian12, fedora40, fedora43
+        # Patterns: debian12, fedora40, fedora43, ubuntu2110
+        # Ubuntu versions need special handling: 2110 -> 21.10, 2104 -> 21.04
         patterns = [
             (r"^(debian)(\d+)$", lambda m: (m.group(1), m.group(2))),
             (r"^(fedora)(\d+)$", lambda m: (m.group(1), m.group(2))),
-            (r"^(ubuntu)(\d+)$", lambda m: (m.group(1), m.group(2))),
+            # Ubuntu box names like ubuntu2110 need to be converted to 21.10 format
+            (r"^(ubuntu)(\d{2})(\d{2})$", lambda m: (m.group(1), f"{m.group(2)}.{m.group(3)}")),
         ]
 
         for pattern, extractor in patterns:
