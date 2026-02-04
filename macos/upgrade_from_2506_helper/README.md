@@ -25,4 +25,4 @@ If you have any questions, please contact Microsoft support.
 - Updated Instructions to include clean-up instructions
 
 ## February 4, 2026
-- Fixes a regression where expired product dates caused a warning prefix in version output and prevented upgrades.
+- Fixed a regression where expired product dates caused a warning prefix in version output and prevented upgrades.
