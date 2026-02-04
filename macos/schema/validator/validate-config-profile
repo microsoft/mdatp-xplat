@@ -1,14 +1,14 @@
 #!/bin/bash
 
-cd $(dirname $0)
+cd "$(dirname "$0")" || exit 1
 venv=$(mktemp -d)
 
-python -m venv $venv
-source $venv/bin/activate
+python -m venv "$venv"
+source "$venv/bin/activate"
 python -m pip install -r requirements.txt
 
 python validate-config-profile.py "$@"
 EC=$?
 
-rm -rf $venv
+rm -rf "$venv"
 exit $EC

@@ -1,89 +1,188 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+"""Download macOS configuration profiles from JAMF server.
 
-from __future__ import print_function
-import base64, json, getopt, os, sys
+This script authenticates with a JAMF server and downloads
+the specified macOS configuration profile in XML format.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import getpass
+import json
+import logging
+import sys
+import urllib.parse
+import urllib.request
 import xml.dom.minidom
+from urllib.error import HTTPError, URLError
 
-try:
-    import urllib.parse as urllibquote
-    import urllib.request as urllibreq
-except:
-    import urllib as urllibquote
-    import urllib2 as urllibreq
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
-def usage(err = None):
-    if err:
-        print(err, file = sys.stderr)
-        print('', file = sys.stderr)
-        
-    print ("""Usage: %s --server=url --name=profile --user=username [ --password=password ]
-    --server=https://instance.jamfcloud.com    : JAMF server URL
-    --name='Defender onboarding settings'      : macOS Configuration Profile
-    --user=admin                               : JAMF user name
-    --password=12345                           : JAMF password
-    --help (or -h): Print out this help page and exit
+# HTTP status codes
+HTTP_UNAUTHORIZED = 401
+HTTP_NOT_FOUND = 404
 
-This tool downloads specified profile from JAMF server to stdout
-""" % sys.argv[0], file=sys.stderr)
 
-def query_jamf_profile(url, user, password, name):
-    credentials = base64.b64encode('{}:{}'.format(user, password).encode('ISO-8859-1'))
-    url = '{}/JSSResource/osxconfigurationprofiles/name/{}'.format(url, urllibquote.quote(name))
+class JamfError(Exception):
+    """Exception raised for JAMF-related errors."""
 
-    req = urllibreq.Request(url)
-    req.add_header('Accept', 'application/json')
-    req.add_header('authorization', 'Basic ' + credentials.decode())
+    pass
 
-    return urllibreq.urlopen(req).read()
 
-url = None
-user = None
-password = None
-name = None
+def create_auth_header(user: str, password: str) -> str:
+    """Create a Basic authentication header value.
 
-try:
-    opts, args = getopt.getopt(sys.argv[1:], 'hs:u:p:n:', ['help', 'server=', 'user=', 'password=', 'name='])
+    Args:
+        user: JAMF username.
+        password: JAMF password.
 
-    for k, v in opts:
-        if k == '-s' or k == '--server':
-            url = v
+    Returns:
+        Base64-encoded credentials for Basic auth.
 
-        if k == '-u' or k == '--user':
-            user = v
+    """
+    credentials = f"{user}:{password}".encode()
+    encoded = base64.b64encode(credentials).decode("ascii")
+    return f"Basic {encoded}"
 
-        if k == '-p' or k == '--password':
-            password = v
 
-        if k == '-n' or k == '--name':
-            name = v
+def query_jamf_profile(url: str, user: str, password: str, name: str) -> bytes:
+    """Query JAMF server for a configuration profile.
 
-        if k == '-h' or k == '--help':
-            usage()
-            exit(0)
+    Args:
+        url: JAMF server URL.
+        user: JAMF username.
+        password: JAMF password.
+        name: Profile name to download.
 
-except getopt.GetoptError as e:
-    usage(e)
-    exit(2)
+    Returns:
+        Raw response content from JAMF server.
 
-if not url:
-    usage('No server URL specified')
-    exit(1)
+    Raises:
+        JamfError: If the request fails.
 
-if not user:
-    usage('No user specified')
-    exit(1)
+    """
+    encoded_name = urllib.parse.quote(name)
+    full_url = f"{url}/JSSResource/osxconfigurationprofiles/name/{encoded_name}"
 
-if not name:
-    usage('No profile name specified')
-    exit(1)
+    logger.debug("Requesting profile from: %s", full_url)
 
-if not password:
-    import getpass
-    password = getpass.getpass('JAMF Password: ')
+    req = urllib.request.Request(full_url)  # noqa: S310
+    req.add_header("Accept", "application/json")
+    req.add_header("Authorization", create_auth_header(user, password))
 
-content = query_jamf_profile(url, user, password, name)
-data = json.loads(content)
-payloads = data['os_x_configuration_profile']['general']['payloads']
-dom = xml.dom.minidom.parseString(payloads)
-print(dom.toprettyxml())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:  # noqa: S310
+            return response.read()
+    except HTTPError as e:
+        if e.code == HTTP_UNAUTHORIZED:
+            raise JamfError(name) from e
+        if e.code == HTTP_NOT_FOUND:
+            raise JamfError(name) from e
+        raise JamfError(name) from e
+    except URLError as e:
+        raise JamfError(name) from e
 
+
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments.
+
+    Returns:
+        Parsed arguments namespace.
+
+    """
+    parser = argparse.ArgumentParser(
+        description="Download macOS configuration profiles from JAMF server.",
+        epilog="Example: %(prog)s --server https://instance.jamfcloud.com --name test",
+    )
+    parser.add_argument(
+        "-s",
+        "--server",
+        type=str,
+        required=True,
+        help="JAMF server URL (e.g., https://instance.jamfcloud.com)",
+    )
+    parser.add_argument(
+        "-n",
+        "--name",
+        type=str,
+        required=True,
+        help="macOS Configuration Profile name",
+    )
+    parser.add_argument(
+        "-u",
+        "--user",
+        type=str,
+        required=True,
+        help="JAMF username",
+    )
+    parser.add_argument(
+        "-p",
+        "--password",
+        type=str,
+        default=None,
+        help="JAMF password (will prompt if not provided)",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable verbose output",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Run the main entry point.
+
+    Returns:
+        Exit code (0 for success, non-zero for error).
+
+    """
+    args = parse_args()
+
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    # Prompt for password if not provided
+    password = args.password
+    if not password:
+        try:
+            password = getpass.getpass("JAMF Password: ")
+        except (KeyboardInterrupt, EOFError):
+            logger.exception("Password input cancelled")
+            return 1
+
+    if not password:
+        logger.error("Password is required")
+        return 1
+
+    try:
+        content = query_jamf_profile(args.server, args.user, password, args.name)
+    except JamfError:
+        logger.exception("Failed to download profile")
+        return 1
+
+    try:
+        data = json.loads(content)
+        payloads = data["os_x_configuration_profile"]["general"]["payloads"]
+        xml.dom.minidom.parseString(payloads)  # noqa: S318
+    except (json.JSONDecodeError, KeyError):
+        logger.exception("Failed to parse JAMF response")
+        return 1
+    except Exception:
+        logger.exception("Failed to format XML output")
+        return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

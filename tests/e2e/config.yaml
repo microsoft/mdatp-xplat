@@ -1,0 +1,47 @@
+# tests/e2e/config.yaml
+# E2E Test Suite Configuration
+# This file controls the Vagrant-based local testing infrastructure
+
+vagrant:
+  # Provider: libvirt is the only supported provider
+  provider: libvirt
+
+  # Resource budgeting for concurrent VM execution
+  # The test runner will parallelize VMs up to concurrent_vms limit
+  cpus_total: 8              # Total CPU cores available for all VMs
+  memory_total_mb: 16384     # Total RAM available for all VMs (16GB)
+  concurrent_vms: 4          # Max VMs running simultaneously
+
+  # Per-VM resource allocation
+  per_vm:
+    cpus: 1                  # Each VM gets 1 CPU
+    memory_mb: 2048          # Each VM gets 2GB RAM
+    disk_size_gb: 50         # Disk size for each VM (needs space for package upgrades)
+
+distros:
+  # Distro filtering for testing
+  # Leave empty arrays to auto-discover all from mde_installer.sh
+  # Or explicitly set to test only certain distros
+  include: []    # Empty = test all discovered distros
+  # Example: ["ubuntu", "debian", "rocky"]
+  exclude: []    # Distros to skip (empty = test all)
+  # Example: ["rhel"]  (RHEL is automatically mapped to rocky)
+
+test:
+  # Behavior on test failure
+  preserve_on_failure: false # Keep VM running for manual debugging
+  capture_logs: true         # Capture installation and system logs
+  # Health check configuration
+  health_check_interval_sec: 5      # Wait between health checks
+  max_health_check_attempts: 30     # Max retries (5sec * 30 = 2.5min timeout)
+  # Test phases to execute
+  tests:
+    - install       # Test installation of mde_installer.sh
+    - onboarding    # Test device onboarding
+    - uninstall     # Test uninstallation/offboarding (requires offboarding.json secret)
+
+reporting:
+  # Output and reporting configuration
+  output_dir: results/       # Directory for results/logs/summary
+  summary_format: markdown   # Output format: markdown, json, csv
+  timestamp_failures: true   # Append timestamp to failure log files

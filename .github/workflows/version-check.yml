@@ -1,0 +1,165 @@
+name: Version Bump Check
+
+on:
+  pull_request:
+    branches: [main, master]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check-version-bump:
+    name: Verify Version Bump
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Get changed files
+        id: changed-files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # Get list of changed files using git diff instead of vulnerable action
+          git fetch origin "$BASE_REF" --depth=1 2>/dev/null || true
+
+          # Get changed files matching our patterns
+          CHANGED_FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" 2>/dev/null | \
+            grep -E '^(linux/.*\.(sh|py)|macos/.*\.(py|sh)|macos/mobileconfig/|macos/schema/)' || true)
+
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "any_changed=true" >> $GITHUB_OUTPUT
+            echo "all_changed_files<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "any_changed=false" >> $GITHUB_OUTPUT
+            echo "all_changed_files=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if versioned files changed
+        id: check-versioned
+        env:
+          ANY_CHANGED: ${{ steps.changed-files.outputs.any_changed }}
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          if [ "$ANY_CHANGED" == "true" ]; then
+            echo "versioned_files_changed=true" >> $GITHUB_OUTPUT
+            echo "::notice::The following versioned files were changed:"
+            echo "$ALL_CHANGED_FILES"
+          else
+            echo "versioned_files_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check VERSION file bump
+        if: steps.check-versioned.outputs.versioned_files_changed == 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          # Check if VERSION file was modified
+          VERSION_CHANGED=$(git diff --name-only "origin/$BASE_REF"...HEAD | grep -c "^VERSION$" || true)
+          CHANGELOG_CHANGED=$(git diff --name-only "origin/$BASE_REF"...HEAD | grep -c "^CHANGELOG.md$" || true)
+
+          if [ "$VERSION_CHANGED" -eq "0" ]; then
+            echo "::error::VERSION file must be updated when modifying versioned files"
+            echo ""
+            echo "You have modified the following versioned files:"
+            echo "$ALL_CHANGED_FILES"
+            echo ""
+            echo "Please update the VERSION file with a new semantic version."
+            exit 1
+          fi
+
+          if [ "$CHANGELOG_CHANGED" -eq "0" ]; then
+            echo "::warning::CHANGELOG.md should be updated with your changes"
+          fi
+
+          # Verify version was actually incremented
+          git fetch origin "$BASE_REF" --depth=1
+          OLD_VERSION=$(git show "origin/$BASE_REF:VERSION" 2>/dev/null || echo "0.0.0")
+          NEW_VERSION=$(cat VERSION)
+
+          echo "Previous version: $OLD_VERSION"
+          echo "New version: $NEW_VERSION"
+
+          # Compare versions
+          if [ "$OLD_VERSION" = "$NEW_VERSION" ]; then
+            echo "::error::VERSION file exists but version number was not incremented"
+            exit 1
+          fi
+
+          # Validate semver format
+          if ! echo "$NEW_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$'; then
+            echo "::error::VERSION must follow semantic versioning (e.g., 1.0.0, 1.0.0-beta.1)"
+            exit 1
+          fi
+
+          echo "✅ Version bump verified: $OLD_VERSION -> $NEW_VERSION"
+
+      - name: Check embedded version consistency
+        if: steps.check-versioned.outputs.versioned_files_changed == 'true'
+        run: |
+          # Files that have their own version variables that should match VERSION
+          # These files read from VERSION file at runtime, so check they have fallback versions
+
+          CENTRAL_VERSION=$(cat VERSION)
+          ERRORS=0
+
+          echo "Checking embedded version consistency..."
+          echo "Central VERSION: $CENTRAL_VERSION"
+          echo ""
+
+          # Check mde_installer.sh has proper fallback version
+          if [ -f "linux/installation/mde_installer.sh" ]; then
+            # Check if it reads from VERSION file
+            if grep -q 'REPO_ROOT.*VERSION' linux/installation/mde_installer.sh; then
+              echo "✅ mde_installer.sh reads from central VERSION file"
+
+              # Check fallback version matches
+              FALLBACK=$(grep 'SCRIPT_VERSION="[0-9]' linux/installation/mde_installer.sh | head -1 | sed 's/.*SCRIPT_VERSION="\([^"]*\)".*/\1/')
+              if [ -n "$FALLBACK" ] && [ "$FALLBACK" != "$CENTRAL_VERSION" ]; then
+                echo "::warning::mde_installer.sh fallback version ($FALLBACK) differs from VERSION ($CENTRAL_VERSION)"
+                echo "Consider updating the fallback version to match"
+              fi
+            else
+              # Check for hardcoded version
+              EMBEDDED=$(grep -E '^SCRIPT_VERSION=' linux/installation/mde_installer.sh | head -1 | sed 's/SCRIPT_VERSION="\([^"]*\)"/\1/' | sed "s/SCRIPT_VERSION='\([^']*\)'/\1/")
+              if [ -n "$EMBEDDED" ] && [ "$EMBEDDED" != "$CENTRAL_VERSION" ]; then
+                echo "::error::mde_installer.sh has hardcoded version $EMBEDDED but VERSION is $CENTRAL_VERSION"
+                ERRORS=$((ERRORS + 1))
+              fi
+            fi
+          fi
+
+          # Check Python scripts with __version__
+          for pyfile in $(find . -name "*.py" -type f); do
+            if grep -q '__version__' "$pyfile"; then
+              PY_VERSION=$(grep '__version__' "$pyfile" | head -1 | sed 's/.*__version__[[:space:]]*=[[:space:]]*["\x27]\([^"\x27]*\)["\x27].*/\1/')
+              if [ -n "$PY_VERSION" ] && [ "$PY_VERSION" != "$CENTRAL_VERSION" ]; then
+                echo "::warning::$pyfile has __version__=$PY_VERSION but VERSION is $CENTRAL_VERSION"
+              fi
+            fi
+          done
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo ""
+            echo "::error::Found $ERRORS version inconsistencies"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ Embedded version check passed"
+
+      - name: Skip version check (no versioned files changed)
+        if: steps.check-versioned.outputs.versioned_files_changed == 'false'
+        run: |
+          echo "::notice::No versioned files were changed, skipping version bump check"
