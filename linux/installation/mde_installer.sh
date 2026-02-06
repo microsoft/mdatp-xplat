@@ -374,7 +374,7 @@ verify_privileges()
 
 verify_min_requirements()
 {
-    # verifying minimal reuirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space
+    # verifying minimal requirements: $MIN_CORES cores, $MIN_MEM_MB MB RAM, $MIN_DISK_SPACE_MB MB disk space
     
     local cores mem_mb disk_space_mb
 
@@ -845,7 +845,7 @@ install_on_debian()
     if [ ! -z "$MDE_VERSION" ]; then
         version=$(validate_mde_version)
         if [ -z "$version" ]; then
-            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installation" $ERR_INSTALLATION_FAILED
         fi
     fi
 
@@ -902,7 +902,7 @@ install_on_mariner()
     if [ ! -z "$MDE_VERSION" ]; then
         version=$(validate_mde_version)
         if [ -z "$version" ]; then
-            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installation" $ERR_INSTALLATION_FAILED
         fi
     fi
 
@@ -945,7 +945,7 @@ install_on_azurelinux()
     if [ ! -z "$MDE_VERSION" ]; then
         version=$(validate_mde_version)
         if [ -z "$version" ]; then
-            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installation" $ERR_INSTALLATION_FAILED
         fi
     fi
 
@@ -1030,7 +1030,7 @@ install_on_fedora()
     if [ ! -z "$MDE_VERSION" ]; then
         version=$(validate_mde_version)
         if [ -z "$version" ]; then
-            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installation" $ERR_INSTALLATION_FAILED
         fi
     fi
 
@@ -1093,7 +1093,7 @@ install_on_sles()
     if [ ! -z "$MDE_VERSION" ]; then
         version=$(validate_mde_version)
         if [ -z "$version" ]; then
-            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installion" $ERR_INSTALLATION_FAILED
+            script_exit "Couldn't find the version $MDE_VERSION for channel $CHANNEL. Aborting installation" $ERR_INSTALLATION_FAILED
         fi
     fi
 
@@ -1512,7 +1512,7 @@ usage()
     echo " -m|--min_req         enforce minimum requirements"
     echo " -x|--skip_conflict   skip conflicting application verification"
     echo " -w|--clean           remove repo from package manager for a specific channel"
-    echo " -y|--yes             assume yes for all mid-process prompts (default, depracated)"
+    echo " -y|--yes             assume yes for all mid-process prompts (default, deprecated)"
     echo " -n|--no              remove assume yes sign"
     echo " -s|--verbose         verbose output"
     echo " -v|--version         print out script version"
@@ -1692,7 +1692,7 @@ if command -v mdatp >/dev/null 2>&1; then
     INSTALLED_MDE_CHANNEL=$(get_mdatp_channel)
     if [ "$INSTALLED_MDE_CHANNEL" != "$CHANNEL" ] && [ "$INSTALL_MODE" != 'c' ]; then
         if [ ! -z "$CHANNEL" ]; then
-            echo "[i] MDE Installed with $INSTALLED_MDE_CHANNEL. Cannot switch channel to $CHANNEL. Channel is being set to $INSTALLED_MDE_CHANNEL. To update chanel remove and re-install MDE with $CHANNEL"
+            echo "[i] MDE Installed with $INSTALLED_MDE_CHANNEL. Cannot switch channel to $CHANNEL. Channel is being set to $INSTALLED_MDE_CHANNEL. To update channel remove and re-install MDE with $CHANNEL"
         fi
         CHANNEL=$INSTALLED_MDE_CHANNEL
     fi
@@ -1744,7 +1744,7 @@ fi
 # echo "--- mde_installer.sh v$SCRIPT_VERSION ---"
 log_info "--- mde_installer.sh v$SCRIPT_VERSION ---"
 
-### Validate mininum requirements ###
+### Validate minimum requirements ###
 if [ $MIN_REQUIREMENTS ]; then
     verify_min_requirements
 fi
@@ -1755,7 +1755,7 @@ detect_arch
 ### Detect the distro and version number ###
 detect_distro
 
-### Scale the version number according to repos avaiable on pmc ###
+### Scale the version number according to repos available on pmc ###
 scale_version_id
 
 ### Set package manager ###
