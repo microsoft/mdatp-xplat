@@ -1610,7 +1610,11 @@ install_on_fedora()
 
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
-                run_quietly "dnf config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
+                if command -v dnf5 >/dev/null 2>&1; then
+                    run_quietly "dnf config-manager addrepo --from-repofile=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
+                else
+                    run_quietly "dnf config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
+                fi
             else
                 run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
             fi
