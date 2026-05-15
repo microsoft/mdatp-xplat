@@ -633,7 +633,7 @@
                     "enum": ["enabled", "disabled"]
                 },
                 "performanceProfiles": {
-                    "default": "enabled",
+                    "default": "disabled",
                     "title": "Performance Profiles",
                     "type": "string",
                     "propertyOrder": 70,
@@ -648,7 +648,7 @@
                 }
             }
         },
-        "performanceProfilesConfiguration": {
+        "performanceProfiles": {
             "title": "Performance Profiles Configuration",
             "description": "Properties for configuring performance profiles",
             "propertyOrder": 55,
