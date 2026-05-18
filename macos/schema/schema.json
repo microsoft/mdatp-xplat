@@ -664,7 +664,7 @@
                         "type": "string"
                     }
                 },
-                "merge_policy": {
+                "mergePolicy": {
                     "default": "merge",
                     "title": "Performance profiles merge policy",
                     "type": "string",
