@@ -470,6 +470,53 @@ class VSCodeScenario(DemoScenario):
         except Exception:
             return "N/A"
 
+    def _start_hot_event_collection(self):
+        """Start hot-event collection to run concurrently with an active build."""
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return None, set()
+        try:
+            existing = {str(p.resolve()) for p in self.config.repo_path.glob("hot_event_source_*.json")}
+            print_info(f"Collecting hot event sources during compile (~{self.hot_event_duration}s)...")
+            proc = subprocess.Popen(
+                [
+                    "sudo",
+                    "mdatp",
+                    "diagnostic",
+                    "hot-event-sources",
+                    f"--time={self.hot_event_duration}",
+                ],
+                cwd=self.config.repo_path,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return proc, existing
+        except Exception:
+            return None, set()
+
+    def _finalize_hot_event_collection(self, proc, existing_paths, out_file: Path):
+        """Finalize hot-event capture and persist the newest produced artifact."""
+        if proc is None:
+            return False
+        try:
+            proc.wait(timeout=self.hot_event_duration + 20)
+        except Exception:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+
+        candidates = sorted(self.config.repo_path.glob("hot_event_source_*.json"), key=lambda p: p.stat().st_mtime)
+        if not candidates:
+            return False
+
+        new_candidates = [p for p in candidates if str(p.resolve()) not in existing_paths]
+        picked = new_candidates[-1] if new_candidates else candidates[-1]
+        try:
+            shutil.copy2(picked, out_file)
+            return True
+        except Exception:
+            return False
+
     def _collect_hot_event_sources(self, out_file: Path):
         """Collect hot event sources during a build and persist latest report."""
         if os.environ.get("PYTEST_CURRENT_TEST"):
@@ -723,7 +770,9 @@ class VSCodeScenario(DemoScenario):
             print_info("Admin-only mode: skipping local profile removal")
 
         cpu_log = self.orchestrator.results_dir / "phase1_cpu.log"
+        hot_before = self.orchestrator.results_dir / "phase2_hot_events.json"
         stop_event, monitor_thread = self._start_cpu_monitor(cpu_log)
+        hes_proc, hes_existing = self._start_hot_event_collection()
         start = time.time()
 
         # Run build
@@ -736,6 +785,7 @@ class VSCodeScenario(DemoScenario):
                 )
                 if install_result.returncode != 0:
                     print_error("Baseline dependency install failed")
+                    self._finalize_hot_event_collection(hes_proc, hes_existing, hot_before)
                     return False
 
             result = subprocess.run(
@@ -747,6 +797,7 @@ class VSCodeScenario(DemoScenario):
                 print_error("Baseline build failed")
                 stop_event.set()
                 monitor_thread.join(timeout=3)
+                self._finalize_hot_event_collection(hes_proc, hes_existing, hot_before)
                 return False
 
             stop_event.set()
@@ -759,12 +810,21 @@ class VSCodeScenario(DemoScenario):
             self._collect_rtp_stats(rtp_file)
             self.baseline["scans"] = self._count_rtp_scans(rtp_file)
 
+            if self._finalize_hot_event_collection(hes_proc, hes_existing, hot_before):
+                print_success(f"Hot event sources saved: {hot_before}")
+                self._select_profiles_for_phase4(hot_before)
+            else:
+                print_info("Hot event sources were not captured during baseline compile")
+                self.recommended_profiles = self._get_available_profiles()
+                self.recommendation_source = "default"
+
             print_info(f"Baseline time: {elapsed:.1f}s, MDE avg CPU: {self.baseline['cpu']}%")
             print_success("Baseline build completed")
             return True
         except subprocess.TimeoutExpired:
             stop_event.set()
             monitor_thread.join(timeout=3)
+            self._finalize_hot_event_collection(hes_proc, hes_existing, hot_before)
             print_error("Build timed out")
             return False
 
@@ -827,7 +887,9 @@ class VSCodeScenario(DemoScenario):
             pass
 
         cpu_log = self.orchestrator.results_dir / "phase5_cpu.log"
+        hot_after = self.orchestrator.results_dir / "phase5_hot_events.json"
         stop_event, monitor_thread = self._start_cpu_monitor(cpu_log)
+        hes_proc, hes_existing = self._start_hot_event_collection()
         start = time.time()
         
         try:
@@ -839,6 +901,7 @@ class VSCodeScenario(DemoScenario):
                 )
                 if install_result.returncode != 0:
                     print_error("Optimized dependency install failed")
+                    self._finalize_hot_event_collection(hes_proc, hes_existing, hot_after)
                     return False
 
             result = subprocess.run(
@@ -850,6 +913,7 @@ class VSCodeScenario(DemoScenario):
                 print_error("Optimized build failed")
                 stop_event.set()
                 monitor_thread.join(timeout=3)
+                self._finalize_hot_event_collection(hes_proc, hes_existing, hot_after)
                 return False
 
             stop_event.set()
@@ -861,9 +925,10 @@ class VSCodeScenario(DemoScenario):
             rtp_file = self.orchestrator.results_dir / "phase5_rtp_stats.json"
             self._collect_rtp_stats(rtp_file)
             self.optimized["scans"] = self._count_rtp_scans(rtp_file)
-
-            hot_after = self.orchestrator.results_dir / "phase5_hot_events.json"
-            self._collect_hot_event_sources(hot_after)
+            if self._finalize_hot_event_collection(hes_proc, hes_existing, hot_after):
+                print_success(f"Hot event sources saved: {hot_after}")
+            else:
+                print_info("Hot event sources were not captured during optimized compile")
 
             print_info(f"Optimized time: {elapsed:.1f}s, MDE avg CPU: {self.optimized['cpu']}%")
             print_success("Optimized build completed")
@@ -871,6 +936,7 @@ class VSCodeScenario(DemoScenario):
         except subprocess.TimeoutExpired:
             stop_event.set()
             monitor_thread.join(timeout=3)
+            self._finalize_hot_event_collection(hes_proc, hes_existing, hot_after)
             print_error("Build timed out")
             return False
 
@@ -931,18 +997,17 @@ class VSCodeScenario(DemoScenario):
         """Collect diagnostic data during baseline."""
         print_section("Diagnostics")
         print_info("Collecting MDE performance data...")
-        print_info("Step 1/3: Hot event sources capture (this may take 1-5 minutes)")
-
-        hot_before = self.orchestrator.results_dir / "phase2_hot_events.json"
-        if self._collect_hot_event_sources(hot_before):
-            print_success(f"Hot event sources saved: {hot_before}")
-            self._select_profiles_for_phase4(hot_before)
+        if self.recommended_profiles:
+            print_info(
+                f"Using baseline-compile recommendations ({self.recommendation_source}): "
+                f"{', '.join(self.recommended_profiles)}"
+            )
         else:
-            print_info("Hot event sources were not captured")
+            print_info("No baseline recommendations found; using default available profile set")
             self.recommended_profiles = self._get_available_profiles()
             self.recommendation_source = "default"
 
-        print_info("Step 2/3: Client Analyzer performance capture (optional)")
+        print_info("Step 1/2: Client Analyzer performance capture (optional)")
         analyzer_zip = self._run_client_analyzer()
         if analyzer_zip:
             self.baseline["client_analyzer"] = analyzer_zip
@@ -950,7 +1015,7 @@ class VSCodeScenario(DemoScenario):
         else:
             print_info("Client Analyzer not available (skipping)")
 
-        print_info("Step 3/3: MDE diagnostic bundle export")
+        print_info("Step 2/2: MDE diagnostic bundle export")
         
         try:
             result = subprocess.run(
