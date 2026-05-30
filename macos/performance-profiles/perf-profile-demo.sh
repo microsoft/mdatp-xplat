@@ -16,10 +16,12 @@ set -euo pipefail
 #
 # Prerequisites:
 #   - macOS with MDE installed (real-time protection enabled)
-#   - node (v18+), yarn (v1), git, jq, python3
+#   - Homebrew (https://brew.sh)
 #   - sudo access (for hot-event-sources collection)
 #
 # Note: The VS Code repo will be cloned automatically if not present.
+# Note: node, yarn, git, jq, and python3 will be offered for install via
+#       Homebrew if not already present.
 #
 # Learn more: https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles
 #=============================================================================
@@ -66,6 +68,32 @@ if [ "$PROFILE_COUNT" = "0" ]; then
 fi
 echo "   ✅ Profiles available: $PROFILE_COUNT"
 
+if ! command -v brew &>/dev/null; then
+    echo "❌ Homebrew not found. Install it: https://brew.sh"
+    exit 1
+fi
+
+MISSING_TOOLS=()
+for cmd in node git jq python3 yarn; do
+    if ! command -v "$cmd" &>/dev/null; then
+        MISSING_TOOLS+=("$cmd")
+    fi
+done
+
+if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
+    echo "   ⚠️  Missing tools: ${MISSING_TOOLS[*]}"
+    read -rp "   Install via Homebrew? [Y/n] " answer
+    if [[ "$answer" =~ ^[Nn] ]]; then
+        echo "   Please install the missing tools and re-run the script."
+        exit 1
+    fi
+    for cmd in "${MISSING_TOOLS[@]}"; do
+        echo "   ⬇️  Installing $cmd..."
+        brew install "$cmd"
+    done
+fi
+echo "   ✅ Build tools: node, yarn, git, jq, python3"
+
 if [ ! -d "$REPO_DIR" ]; then
     echo "   ⬇️  VS Code repo not found — cloning now..."
     mkdir -p "$(dirname "$REPO_DIR")"
@@ -74,14 +102,6 @@ if [ ! -d "$REPO_DIR" ]; then
     cd "$REPO_DIR" && yarn install --frozen-lockfile 2>&1 | tail -3
 fi
 echo "   ✅ Repo: $REPO_DIR"
-
-for cmd in node yarn git jq python3; do
-    if ! command -v "$cmd" &>/dev/null; then
-        echo "❌ $cmd not found. Install with: brew install $cmd"
-        exit 1
-    fi
-done
-echo "   ✅ Build tools: node, yarn, git, jq, python3"
 echo ""
 
 # Remove any active profiles for clean baseline
