@@ -63,13 +63,16 @@ class Preflight:
         """Get count of available MDE profiles."""
         try:
             result = subprocess.run(
-                ["mdatp", "performance-profiles", "list"],
+                ["mdatp", "performance-profiles", "list-available"],
                 capture_output=True,
                 text=True,
                 timeout=5
             )
             if result.returncode == 0:
-                return len([line for line in result.stdout.split("\n") if line.strip()])
+                lines = [line.strip() for line in result.stdout.split("\n") if line.strip()]
+                # Output shape is profile names separated by --- lines.
+                profiles = [line for line in lines if line != "---" and line != "====================================="]
+                return len(profiles)
             return 0
         except:
             return 0

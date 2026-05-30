@@ -64,3 +64,41 @@ class TestPreflight:
                 mock_run.return_value = MagicMock(returncode=0)
                 result = Preflight.install_missing_tools(["git"])
                 assert result is True
+
+    def test_check_mdatp_profiles_parses_list_available_output(self):
+        """Test profile count parser for actual list-available output format."""
+        output = """=====================================
+adobe
+---
+android-studio
+---
+git
+---
+"""
+        with patch("demo_framework.preflight.subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = output
+            mock_run.return_value = mock_result
+
+            count = Preflight.check_mdatp_profiles()
+
+            assert count == 3
+            mock_run.assert_called_once_with(
+                ["mdatp", "performance-profiles", "list-available"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+    def test_check_mdatp_profiles_returns_zero_on_command_error(self):
+        """Test profile check returns zero when command fails."""
+        with patch("demo_framework.preflight.subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stdout = ""
+            mock_run.return_value = mock_result
+
+            count = Preflight.check_mdatp_profiles()
+
+            assert count == 0
