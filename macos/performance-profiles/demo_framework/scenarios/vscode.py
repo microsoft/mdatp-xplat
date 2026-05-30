@@ -775,18 +775,21 @@ class VSCodeScenario(DemoScenario):
                     )
                 except Exception:
                     pass
-
-            # Hard guard: baseline must run with no demo profiles applied.
-            _, applied_after_remove = self._get_profile_state()
-            residual = sorted(set(self.config.profiles) & set(applied_after_remove))
-            if residual:
-                print_error("Baseline is not clean: some demo profiles are still applied")
-                print_info("Remove these profiles and re-run baseline:")
-                for profile in residual:
-                    print(f"   - {profile}")
-                return False
         else:
             print_info("Admin-only mode: skipping local profile removal")
+
+        # Hard guard: baseline must run with no demo profiles applied.
+        _, applied_before_build = self._get_profile_state()
+        residual = sorted(set(self.config.profiles) & set(applied_before_build))
+        if residual:
+            print_error("Baseline is not clean: some demo profiles are still applied")
+            print_info("Remove these profiles and re-run baseline:")
+            for profile in residual:
+                print(f"   - {profile}")
+            return False
+
+        self.baseline["profiles_at_start"] = "(none)"
+        print_info("Baseline profile state: no demo profiles applied")
 
         cpu_log = self.orchestrator.results_dir / "phase1_cpu.log"
         hot_before = self.orchestrator.results_dir / "phase2_hot_events.json"
@@ -987,6 +990,7 @@ class VSCodeScenario(DemoScenario):
         selected_profiles = self.recommended_profiles or list(self.config.profiles)
         print(f"   📌 Recommendation source: {self.recommendation_source}")
         print(f"   📌 Selected profiles:     {', '.join(selected_profiles)}")
+        print(f"   📌 Baseline start state:  {self.baseline.get('profiles_at_start', '(unknown)')}")
         _, active_applied = self._get_profile_state()
         if active_applied:
             active_sorted = sorted([p for p in active_applied if p in self.config.profiles])
