@@ -775,6 +775,16 @@ class VSCodeScenario(DemoScenario):
                     )
                 except Exception:
                     pass
+
+            # Hard guard: baseline must run with no demo profiles applied.
+            _, applied_after_remove = self._get_profile_state()
+            residual = sorted(set(self.config.profiles) & set(applied_after_remove))
+            if residual:
+                print_error("Baseline is not clean: some demo profiles are still applied")
+                print_info("Remove these profiles and re-run baseline:")
+                for profile in residual:
+                    print(f"   - {profile}")
+                return False
         else:
             print_info("Admin-only mode: skipping local profile removal")
 

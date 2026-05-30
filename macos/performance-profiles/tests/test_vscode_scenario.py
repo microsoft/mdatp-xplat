@@ -99,6 +99,37 @@ class TestVSCodeScenarioBuildModes:
         assert ["npm", "install"] not in calls
         assert ["npm", "run", "compile"] in calls
 
+    def test_baseline_fails_when_profiles_still_applied_after_remove(self, tmp_path: Path):
+        repo = tmp_path / "vscode"
+        repo.mkdir()
+
+        scenario = VSCodeScenario(repo_path=repo, include_install_in_build=False)
+
+        with patch.object(
+            scenario,
+            "_get_profile_state",
+            return_value=(False, {"node"}),
+        ):
+            with patch.object(
+                scenario,
+                "_start_cpu_monitor",
+                return_value=(MagicMock(set=lambda: None), MagicMock(join=lambda timeout=None: None)),
+            ):
+                with patch.object(scenario, "_start_hot_event_collection", return_value=(None, set())):
+                    with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+                        mock_run.side_effect = [
+                            MagicMock(returncode=0),
+                            MagicMock(returncode=0),
+                            MagicMock(returncode=0),
+                            MagicMock(returncode=0),
+                            MagicMock(returncode=0),
+                        ]
+                        ok = scenario.build_baseline()
+
+        assert ok is False
+        calls = [c.args[0] for c in mock_run.call_args_list]
+        assert ["npm", "run", "compile"] not in calls
+
     def test_apply_profiles_returns_false_in_admin_only_when_profiles_missing(self, tmp_path: Path):
         repo = tmp_path / "vscode"
         repo.mkdir()
