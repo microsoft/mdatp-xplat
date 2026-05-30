@@ -198,9 +198,11 @@ python3 demo.py vscode --hot-events-analysis python
 python3 demo.py vscode --hot-events-analysis ghcp
 python3 demo.py vscode --hot-events-analysis both
 
-# During phase 3, recommendations are generated from hot events.
-# If GHCP is available, you will be prompted to choose Python/GHCP/Union/Default
-# and phase 4 applies the selected profile set.
+# During phase 3, recommendations are generated from hot events and available
+# profiles discovered from mdatp CLI.
+# Default behavior is GHCP-first recommendation; if GHCP is unavailable or
+# returns no profile matches, it falls back to Python heuristics.
+# Phase 4 then applies the selected recommendation set.
 
 # Run Xcode demo directly
 python3 demo.py xcode

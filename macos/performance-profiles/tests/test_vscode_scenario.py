@@ -165,12 +165,13 @@ class TestVSCodeScenarioBuildModes:
         hot.write_text('{"eventSource": []}')
 
         with patch.object(scenario, "_has_ghcp_cli", return_value=False):
-            scenario._select_profiles_for_phase4(hot)
+            with patch.object(scenario, "_get_available_profiles", return_value=scenario.config.profiles):
+                scenario._select_profiles_for_phase4(hot)
 
         assert scenario.recommended_profiles == scenario.config.profiles
         assert scenario.recommendation_source == "default"
 
-    def test_select_profiles_for_phase4_prefers_ghcp_when_chosen(self, tmp_path: Path):
+    def test_select_profiles_for_phase4_prefers_ghcp_by_default(self, tmp_path: Path):
         repo = tmp_path / "vscode"
         repo.mkdir()
         scenario = VSCodeScenario(repo_path=repo)
@@ -183,11 +184,29 @@ class TestVSCodeScenarioBuildModes:
         )
 
         with patch.object(scenario, "_ghcp_profile_recommendations", return_value=["git", "node"]):
-            with patch("builtins.input", return_value="2"):
-                scenario._select_profiles_for_phase4(hot)
+            scenario._select_profiles_for_phase4(hot)
 
         assert scenario.recommended_profiles == ["git", "node"]
         assert scenario.recommendation_source == "ghcp"
+
+    def test_select_profiles_for_phase4_falls_back_to_python_when_ghcp_empty(self, tmp_path: Path):
+        repo = tmp_path / "vscode"
+        repo.mkdir()
+        scenario = VSCodeScenario(repo_path=repo)
+
+        hot = tmp_path / "hot.json"
+        hot.write_text(
+            '{"eventSource": ['
+            '{"path":"/usr/local/bin/node","authCount":10,"notifyCount":5}'
+            ']}'
+        )
+
+        with patch.object(scenario, "_ghcp_profile_recommendations", return_value=[]):
+            with patch.object(scenario, "_python_profile_recommendations", return_value=["node"]):
+                scenario._select_profiles_for_phase4(hot)
+
+        assert scenario.recommended_profiles == ["node"]
+        assert scenario.recommendation_source == "python"
 
     def test_setup_fails_for_admin_only_when_profiles_already_applied(self, tmp_path: Path):
         repo = tmp_path / "vscode"
@@ -294,3 +313,21 @@ class TestVSCodeScenarioBuildModes:
             with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0)
                 assert scenario._has_ghcp_cli() is True
+
+    def test_get_available_profiles_parses_cli_output(self, tmp_path: Path):
+        repo = tmp_path / "vscode"
+        repo.mkdir()
+        scenario = VSCodeScenario(repo_path=repo)
+
+        stdout = """Available profiles:
+node
+git
+vscode
+vscode-tree
+"""
+
+        with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=stdout)
+            profiles = scenario._get_available_profiles()
+
+        assert profiles == ["node", "git", "vscode", "vscode-tree"]

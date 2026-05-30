@@ -183,11 +183,44 @@ class VSCodeScenario(DemoScenario):
         except Exception as e:
             print_info(f"GHCP analysis failed: {e}")
 
-    def _python_profile_recommendations(self, hot_events: Path) -> List[str]:
+    def _get_available_profiles(self) -> List[str]:
+        """Read available performance profiles from mdatp CLI with fallback."""
+        try:
+            result = subprocess.run(
+                ["sudo", "mdatp", "performance-profiles", "list-available"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+            parsed = []
+            for line in lines:
+                lower = line.lower()
+                if lower.startswith("merge policy:"):
+                    continue
+                if lower.startswith("no available performance profiles"):
+                    continue
+                if lower.startswith("available profiles"):
+                    continue
+                if line in ("---", "====================================="):
+                    continue
+
+                first = line.split()[0].strip("-*\t")
+                if first in self.config.profiles and first not in parsed:
+                    parsed.append(first)
+
+            return parsed or list(self.config.profiles)
+        except Exception:
+            return list(self.config.profiles)
+
+    def _python_profile_recommendations(self, hot_events: Path, available_profiles: Optional[List[str]] = None) -> List[str]:
         """Derive profile recommendations from hot-event path heuristics."""
         entries = self._load_hot_event_entries(hot_events)
         if not entries:
             return []
+
+        allowed = list(available_profiles or self.config.profiles)
 
         keyword_map = {
             "node": ["node", "npm", "pnpm", "yarn", "electron"],
@@ -196,7 +229,7 @@ class VSCodeScenario(DemoScenario):
             "vscode-tree": ["fsevent", "chokidar", "watcher", "tree", "explorer", "filewatch"],
         }
 
-        scores = {profile: 0 for profile in self.config.profiles}
+        scores = {profile: 0 for profile in allowed}
         for e in entries:
             path_text = str(e.get("path", "")).lower()
             total = self._to_int(e.get("total", 0))
@@ -209,7 +242,9 @@ class VSCodeScenario(DemoScenario):
         ]
         return ranked
 
-    def _ghcp_profile_recommendations(self, hot_events: Path) -> List[str]:
+    def _ghcp_profile_recommendations(
+        self, hot_events: Path, available_profiles: Optional[List[str]] = None
+    ) -> List[str]:
         """Ask GH Copilot CLI to pick profile names from known profile list."""
         if not self._has_ghcp_cli():
             return []
@@ -222,12 +257,13 @@ class VSCodeScenario(DemoScenario):
         top_text = "\n".join(
             [f"- total={e['total']} auth={e['auth']} notify={e['notify']} path={e['path']}" for e in top]
         )
-        allowed = ", ".join(self.config.profiles)
+        allowed_profiles = list(available_profiles or self.config.profiles)
+        allowed = ", ".join(allowed_profiles)
         prompt = (
-            "You are selecting MDE performance profiles for a VS Code demo.\n"
-            f"Allowed profiles: {allowed}.\n"
-            "Given these hot event sources, output only a comma-separated list of the best matching profile names "
-            "from the allowed list, ordered by impact. No explanation.\n\n"
+            "Analyze this MDE hot-event telemetry from a VS Code build and recommend which available "
+            "performance profiles should be applied.\n"
+            f"Available profiles: {allowed}.\n"
+            "Please explain your recommendation briefly and keep the profile names explicit.\n\n"
             f"Hot event sources:\n{top_text}\n"
         )
 
@@ -244,7 +280,7 @@ class VSCodeScenario(DemoScenario):
 
             text = (res.stdout or "").lower()
             picks = []
-            for profile in self.config.profiles:
+            for profile in allowed_profiles:
                 if profile.lower() in text and profile not in picks:
                     picks.append(profile)
             return picks
@@ -253,40 +289,32 @@ class VSCodeScenario(DemoScenario):
 
     def _select_profiles_for_phase4(self, hot_events: Path):
         """Choose profile set to apply based on phase 3 diagnostics artifacts."""
-        python_recs = self._python_profile_recommendations(hot_events)
-        ghcp_recs = self._ghcp_profile_recommendations(hot_events)
+        available_profiles = self._get_available_profiles()
+        print_info(f"Available profiles from CLI: {', '.join(available_profiles)}")
+
+        python_recs = self._python_profile_recommendations(hot_events, available_profiles)
+        ghcp_recs = self._ghcp_profile_recommendations(hot_events, available_profiles)
 
         if python_recs:
             print_info(f"Python recommendations: {', '.join(python_recs)}")
         else:
-            print_info("Python recommendations unavailable; using default profile set")
+            print_info("Python recommendations unavailable")
 
         if ghcp_recs:
             print_info(f"GHCP recommendations:   {', '.join(ghcp_recs)}")
 
+        # Default strategy: try GHCP first, then fall back to Python, then default set.
         if ghcp_recs:
-            print("   Choose recommendation source for phase 4 apply:")
-            print("   1) Python recommendations")
-            print("   2) GHCP recommendations")
-            print("   3) Union of both")
-            print("   4) Default profile set")
-            choice = input("   Select [1/2/3/4] (default: 2): ").strip() or "2"
-            if choice == "1" and python_recs:
-                selected = python_recs
-                source = "python"
-            elif choice == "3":
-                seen = set()
-                selected = [p for p in python_recs + ghcp_recs if not (p in seen or seen.add(p))]
-                source = "both"
-            elif choice == "4":
-                selected = list(self.config.profiles)
-                source = "default"
-            else:
-                selected = ghcp_recs
-                source = "ghcp"
+            selected = ghcp_recs
+            source = "ghcp"
+        elif python_recs:
+            selected = python_recs
+            source = "python"
+            print_info("GHCP recommendations unavailable; falling back to Python recommendations")
         else:
-            selected = python_recs or list(self.config.profiles)
-            source = "python" if python_recs else "default"
+            selected = list(available_profiles)
+            source = "default"
+            print_info("No recommendations available; using default profile set")
 
         self.recommended_profiles = selected
         self.recommendation_source = source
@@ -855,7 +883,7 @@ class VSCodeScenario(DemoScenario):
             self._select_profiles_for_phase4(hot_before)
         else:
             print_info("Hot event sources were not captured")
-            self.recommended_profiles = list(self.config.profiles)
+            self.recommended_profiles = self._get_available_profiles()
             self.recommendation_source = "default"
 
         print_info("Step 2/3: Client Analyzer performance capture (optional)")
