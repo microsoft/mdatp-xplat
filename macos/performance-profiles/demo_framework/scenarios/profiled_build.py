@@ -802,6 +802,7 @@ class ProfiledBuildScenario(DemoScenario):
         for profile in ghcp + python:
             if profile not in union:
                 union.append(profile)
+        union = normalize(union)
 
         self._log_line(
             "phase3.recommendations "
@@ -829,7 +830,8 @@ class ProfiledBuildScenario(DemoScenario):
 
         consolidated = []
         for src, profiles in candidates:
-            key = tuple(profiles)
+            canonical_profiles = normalize(profiles)
+            key = tuple(canonical_profiles)
             existing = next((opt for opt in consolidated if opt["key"] == key), None)
             if existing:
                 existing["sources"].append(src)
@@ -837,7 +839,7 @@ class ProfiledBuildScenario(DemoScenario):
                 consolidated.append(
                     {
                         "key": key,
-                        "profiles": profiles,
+                        "profiles": canonical_profiles,
                         "sources": [src],
                     }
                 )

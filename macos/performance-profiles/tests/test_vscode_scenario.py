@@ -167,8 +167,8 @@ class TestVSCodeScenarioConfig:
         with patch.object(scenario, "_get_available_profiles", return_value=["node", "git", "vscode"]):
             with patch.object(scenario, "_ghcp_profile_recommendations", return_value=["node", "vscode"]):
                 with patch.object(scenario, "_python_profile_recommendations", return_value=["vscode"]):
-                    with patch("builtins.input", return_value="3"):
+                    with patch("builtins.input", return_value="2"):
                         scenario._select_profiles_for_phase4(hot)
 
         assert scenario.recommended_profiles == ["vscode"]
-        assert scenario.recommendation_source == "intersection"
+        assert scenario.recommendation_source == "python+intersection"

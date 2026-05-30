@@ -1,0 +1,51 @@
+name: HelloDefender
+options:
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: com.microsoft.mdatp.xplat.hellodefender
+    SWIFT_VERSION: 5.0
+targets:
+  HelloDefender:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - Resources
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 1.0
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_NAME: HelloDefender
+        DEVELOPMENT_TEAM: ""
+    scheme:
+      testTargets:
+        - HelloDefenderTests
+        - HelloDefenderUITests
+
+  HelloDefenderTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+    dependencies:
+      - target: HelloDefender
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.microsoft.mdatp.xplat.hellodefender.tests
+
+  HelloDefenderUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UITests
+    dependencies:
+      - target: HelloDefender
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.microsoft.mdatp.xplat.hellodefender.uitests

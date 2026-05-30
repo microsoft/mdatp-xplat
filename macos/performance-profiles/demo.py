@@ -14,7 +14,7 @@ import argparse
 from pathlib import Path
 
 from demo_framework.preflight import Preflight
-from demo_framework.scenarios import VSCodeScenario, XcodeScenario
+from demo_framework.scenarios import VSCodeScenario, XcodeScenario, XcodeSimulatorScenario
 from demo_framework.ui import print_error, print_info
 
 
@@ -35,7 +35,7 @@ Examples:
         "scenario",
         nargs="?",
         default=None,
-        choices=["vscode", "xcode"],
+        choices=["vscode", "xcode", "xcode-simulator"],
         help="Demo scenario to run (if omitted, you'll be prompted)"
     )
 
@@ -89,8 +89,14 @@ Examples:
         print_info("Select a demo scenario:")
         print("   1) vscode  - Microsoft VS Code build demo")
         print("   2) xcode   - FluentUI Apple Xcode build demo")
-        choice = input("   Enter choice [1/2] (default: 1): ").strip()
-        args.scenario = "xcode" if choice == "2" else "vscode"
+        print("   3) xcode-simulator - HelloDefender iOS simulator demo")
+        choice = input("   Enter choice [1/2/3] (default: 1): ").strip()
+        if choice == "2":
+            args.scenario = "xcode"
+        elif choice == "3":
+            args.scenario = "xcode-simulator"
+        else:
+            args.scenario = "vscode"
 
     # Run preflight checks with scenario-aware requirements
     print_info("Checking prerequisites...")
@@ -118,6 +124,15 @@ Examples:
         if args.hot_events_analysis != "prompt":
             print_info("--hot-events-analysis is ignored for xcode scenario")
         scenario = XcodeScenario(
+            repo_path=args.repo,
+            profile_change_policy=args.profile_change_policy,
+        )
+    elif args.scenario == "xcode-simulator":
+        if args.include_install:
+            print_info("--include-install is ignored for xcode-simulator scenario")
+        if args.hot_events_analysis != "prompt":
+            print_info("--hot-events-analysis is ignored for xcode-simulator scenario")
+        scenario = XcodeSimulatorScenario(
             repo_path=args.repo,
             profile_change_policy=args.profile_change_policy,
         )

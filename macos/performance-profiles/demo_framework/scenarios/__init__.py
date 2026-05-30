@@ -4,6 +4,7 @@ from .base import DemoScenario, ScenarioConfig
 from .profiled_build import ProfiledBuildScenario
 from .vscode import VSCodeScenario
 from .xcode import XcodeScenario
+from .xcode_simulator import XcodeSimulatorScenario
 
 __all__ = [
     "DemoScenario",
@@ -11,4 +12,5 @@ __all__ = [
     "ScenarioConfig",
     "VSCodeScenario",
     "XcodeScenario",
+    "XcodeSimulatorScenario",
 ]

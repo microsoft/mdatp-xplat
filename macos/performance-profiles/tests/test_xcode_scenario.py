@@ -32,7 +32,7 @@ class TestXcodeScenarioConfig:
                     with patch("builtins.input", return_value="3"):
                         scenario._select_profiles_for_phase4(hot)
 
-        assert scenario.recommended_profiles == ["git", "xcode"]
+        assert scenario.recommended_profiles == ["xcode", "git"]
         assert scenario.recommendation_source == "union"
 
     def test_select_profiles_choice_intersection(self, tmp_path: Path):
@@ -43,8 +43,8 @@ class TestXcodeScenarioConfig:
         with patch.object(scenario, "_get_available_profiles", return_value=["xcode", "git", "xcode-ide-tree"]):
             with patch.object(scenario, "_ghcp_profile_recommendations", return_value=["git", "xcode"]):
                 with patch.object(scenario, "_python_profile_recommendations", return_value=["xcode"]):
-                    with patch("builtins.input", return_value="3"):
+                    with patch("builtins.input", return_value="2"):
                         scenario._select_profiles_for_phase4(hot)
 
         assert scenario.recommended_profiles == ["xcode"]
-        assert scenario.recommendation_source == "intersection"
+        assert scenario.recommendation_source == "python+intersection"

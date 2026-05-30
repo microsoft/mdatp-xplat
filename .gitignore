@@ -1,20 +1,23 @@
 # Editor backup files
-**/*~
-
-# Python precompiled files
-**/*.pyc
-
-# microsoft.asc
-**/*.asc
+*~
 
 # macOS system files
 .DS_Store
 
 # Python virtual environments and caches
 venv/
-**/venv/
 .pytest_cache/
-**/.pytest_cache/
 __pycache__/
-**/__pycache__/
+*.pyc
+
+# Downloaded signing key used in setup workflows
+microsoft.asc
+
+# Xcode local user state
+xcuserdata/
+*.xcuserstate
+
+# Demo-generated local build artifacts
+macos/performance-profiles/apps/hello-defender-ios/.mde-derived*/
+macos/performance-profiles/apps/hello-defender-ios/hot_event_source_*.json
 

@@ -41,6 +41,9 @@ The demo tells a complete story: diagnose → identify → fix → verify — th
 | [`perf-profile-demo.sh`](perf-profile-demo.sh) | [microsoft/vscode](https://github.com/microsoft/vscode) | Node.js / TypeScript | `node`, `git`, `xcode`, `vscode`, `vscode-tree` | ~20 min |
 | [`perf-profile-demo-xcode.sh`](perf-profile-demo-xcode.sh) | [microsoft/fluentui-apple](https://github.com/microsoft/fluentui-apple) | Xcode / Swift | `xcode`, `xcode-ide-tree`, `git` | ~10 min |
 
+For the Python entrypoint (`demo.py`), an additional scenario is available:
+- `xcode-simulator` (HelloDefender simulator workflow): runs `xcodebuild test` by default, then builds the in-repo `apps/hello-defender-ios` app, boots simulator, installs and launches app using `simctl`; profile set: `xcode`, `ios-simulator-tree`, `iphone-simulator-tree`, `git`
+
 ## Prerequisites
 
 - **macOS** with [Microsoft Defender for Endpoint](https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-endpoint-mac) installed
@@ -101,6 +104,12 @@ python3 demo.py vscode --profile-change-policy never    # never apply/remove
 # Quick Xcode demo
 chmod +x perf-profile-demo-xcode.sh
 ./perf-profile-demo-xcode.sh
+
+# Simulator-profile demo via Python entrypoint
+python3 demo.py xcode-simulator
+
+# Optional: run xcode-simulator with your own local iOS app project
+# python3 demo.py xcode-simulator --repo ~/demo/my-ios-app
 
 # When recommendations are available, you'll be prompted with consolidated choices.
 # Duplicate profile sets are merged and labeled with all contributing sources

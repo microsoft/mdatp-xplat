@@ -12,6 +12,7 @@ set -euo pipefail
 #   ./perf-profile-demo.sh                   # prompt for scenario
 #   ./perf-profile-demo.sh vscode            # run VS Code scenario
 #   ./perf-profile-demo.sh xcode             # run Xcode scenario
+#   ./perf-profile-demo.sh xcode-simulator   # run simulator-profile scenario
 #   ./perf-profile-demo.sh vscode --repo ~/demo/vscode
 #=============================================================================
 
@@ -54,10 +55,14 @@ if [ $# -eq 0 ]; then
     echo "Select a demo scenario:"
     echo "  1) vscode  - Microsoft VS Code build demo"
     echo "  2) xcode   - FluentUI Apple Xcode build demo"
-    read -r -p "Enter choice [1/2] (default: 1): " choice
+    echo "  3) xcode-simulator - HelloDefender iOS simulator demo"
+    read -r -p "Enter choice [1/2/3] (default: 1): " choice
     case "${choice:-1}" in
         2)
             set -- xcode
+            ;;
+        3)
+            set -- xcode-simulator
             ;;
         *)
             set -- vscode

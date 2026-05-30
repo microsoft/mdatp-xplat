@@ -135,7 +135,8 @@ def test_build_optimized_runs_build_command(tmp_path: Path, scenario_factory, ex
 )
 def test_analyze_baseline_telemetry_returns_true(tmp_path: Path, scenario_factory):
     scenario = scenario_factory(tmp_path)
-    assert scenario.analyze_baseline_telemetry() is True
+    with patch.object(scenario, "_select_profiles_for_phase4"):
+        assert scenario.analyze_baseline_telemetry() is True
 
 
 @pytest.mark.parametrize(
@@ -153,7 +154,7 @@ def test_analyze_baseline_telemetry_returns_true(tmp_path: Path, scenario_factor
             ["xcode", "git", "xcode-ide-tree"],
             ["git"],
             ["xcode"],
-            ["git", "xcode"],
+            ["xcode", "git"],
         ),
     ],
 )
@@ -213,11 +214,11 @@ def test_select_profiles_choice_intersection_in_common_runner(
     with patch.object(scenario, "_get_available_profiles", return_value=available_profiles):
         with patch.object(scenario, "_ghcp_profile_recommendations", return_value=ghcp_recs):
             with patch.object(scenario, "_python_profile_recommendations", return_value=python_recs):
-                with patch("builtins.input", return_value="3"):
+                with patch("builtins.input", return_value="2"):
                     scenario._select_profiles_for_phase4(hot)
 
     assert scenario.recommended_profiles == expected_profiles
-    assert scenario.recommendation_source == "intersection"
+    assert scenario.recommendation_source == "python+intersection"
 
 
 @pytest.mark.parametrize(
@@ -235,7 +236,7 @@ def test_select_profiles_choice_intersection_in_common_runner(
             ["xcode", "git", "xcode-ide-tree"],
             ["git"],
             ["xcode"],
-            ["xcode", "xcode-ide-tree", "git"],
+            ["xcode", "git", "xcode-ide-tree"],
         ),
     ],
 )
@@ -266,12 +267,12 @@ def test_select_profiles_choice_scenario_default_in_common_runner(
     [
         (
             lambda p: VSCodeScenario(repo_path=p / "vscode"),
-            ["node", "git", "vscode"],
+            ["node", "vscode"],
             ["node", "vscode"],
         ),
         (
             lambda p: XcodeScenario(repo_path=p / "fluentui-apple"),
-            ["xcode", "git", "xcode-ide-tree"],
+            ["xcode", "git"],
             ["xcode", "git"],
         ),
     ],
@@ -293,5 +294,5 @@ def test_select_profiles_consolidates_duplicate_sets_without_prompt(
                     scenario._select_profiles_for_phase4(hot)
 
     assert scenario.recommended_profiles == same_recs
-    assert scenario.recommendation_source == "ghcp+python+intersection+union"
+    assert scenario.recommendation_source == "ghcp+python+intersection+union+scenario-default"
     mock_input.assert_not_called()
