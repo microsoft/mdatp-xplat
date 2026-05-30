@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, List
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -263,7 +264,9 @@ class VSCodeScenario(DemoScenario):
             "Analyze this MDE hot-event telemetry from a VS Code build and recommend which available "
             "performance profiles should be applied.\n"
             f"Available profiles: {allowed}.\n"
-            "Please explain your recommendation briefly and keep the profile names explicit.\n\n"
+            "Return your final recommendation in this exact machine-readable line:\n"
+            "RECOMMENDED_PROFILES: <comma-separated profile names from the available list>\n"
+            "You may include brief reasoning before that final line.\n\n"
             f"Hot event sources:\n{top_text}\n"
         )
 
@@ -278,14 +281,54 @@ class VSCodeScenario(DemoScenario):
             if res.returncode != 0:
                 return []
 
-            text = (res.stdout or "").lower()
-            picks = []
-            for profile in allowed_profiles:
-                if profile.lower() in text and profile not in picks:
-                    picks.append(profile)
-            return picks
+            return self._parse_ghcp_recommended_profiles(res.stdout or "", allowed_profiles)
         except Exception:
             return []
+
+    def _parse_ghcp_recommended_profiles(self, output_text: str, allowed_profiles: List[str]) -> List[str]:
+        """Parse GHCP response into an ordered, allowed profile list for phase 4."""
+        if not output_text:
+            return []
+
+        allowed_lower = {p.lower(): p for p in allowed_profiles}
+
+        # Preferred machine-readable format.
+        for line in output_text.splitlines():
+            if line.strip().upper().startswith("RECOMMENDED_PROFILES:"):
+                rhs = line.split(":", 1)[1]
+                tokens = [t.strip().lower() for t in rhs.split(",") if t.strip()]
+                picks = []
+                for token in tokens:
+                    profile = allowed_lower.get(token)
+                    if profile and profile not in picks:
+                        picks.append(profile)
+                if picks:
+                    return picks
+
+        # JSON fallback: {"recommended_profiles": ["node", ...]}
+        try:
+            obj = json.loads(output_text)
+            arr = obj.get("recommended_profiles") if isinstance(obj, dict) else None
+            if isinstance(arr, list):
+                picks = []
+                for item in arr:
+                    if not isinstance(item, str):
+                        continue
+                    profile = allowed_lower.get(item.strip().lower())
+                    if profile and profile not in picks:
+                        picks.append(profile)
+                if picks:
+                    return picks
+        except Exception:
+            pass
+
+        # Best-effort fallback from free text.
+        text = output_text.lower()
+        picks = []
+        for profile in allowed_profiles:
+            if re.search(r"\b" + re.escape(profile.lower()) + r"\b", text) and profile not in picks:
+                picks.append(profile)
+        return picks
 
     def _select_profiles_for_phase4(self, hot_events: Path):
         """Choose profile set to apply based on phase 3 diagnostics artifacts."""

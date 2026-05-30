@@ -202,6 +202,9 @@ python3 demo.py vscode --hot-events-analysis both
 # profiles discovered from mdatp CLI.
 # Default behavior is GHCP-first recommendation; if GHCP is unavailable or
 # returns no profile matches, it falls back to Python heuristics.
+# GHCP is asked to emit a machine-readable line:
+# RECOMMENDED_PROFILES: profile1, profile2
+# so phase 4 can directly apply the parsed profile list.
 # Phase 4 then applies the selected recommendation set.
 
 # Run Xcode demo directly
