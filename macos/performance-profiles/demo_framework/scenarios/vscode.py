@@ -29,7 +29,59 @@ class VSCodeScenario(DemoScenario):
         super().__init__(config)
         self.include_install_in_build = include_install_in_build
         self.admin_only = False
+        self.state_file = self.orchestrator.results_dir / ".vscode-demo-state.json"
         self._register_phases()
+
+    def _load_state(self):
+        """Load saved scenario state from disk."""
+        if not self.state_file.exists():
+            return None
+        try:
+            return json.loads(self.state_file.read_text())
+        except Exception:
+            return None
+
+    def _save_state(self, data):
+        """Persist scenario state to disk."""
+        try:
+            self.state_file.write_text(json.dumps(data, indent=2))
+        except Exception:
+            pass
+
+    def _clear_state(self):
+        """Remove saved scenario state after successful completion."""
+        try:
+            if self.state_file.exists():
+                self.state_file.unlink()
+        except Exception:
+            pass
+
+    def run(self, resume_from: Optional[int] = None) -> bool:
+        """Execute scenario with checkpoint-aware resume behavior."""
+        selected_resume = resume_from
+        if selected_resume is None:
+            state = self._load_state()
+            if state and state.get("baseline_complete"):
+                baseline_time = state.get("baseline_duration_seconds", 0)
+                print("")
+                print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                print("  📋 Previous run detected — baseline already complete.")
+                print(f"     Baseline build time: {baseline_time:.1f} seconds")
+                print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                print("")
+                choice = input("  Continue to comparison build, or restart from scratch? [C/r] ").strip().lower()
+                if choice.startswith("r"):
+                    print("  🔄 Restarting from scratch...")
+                    self._clear_state()
+                else:
+                    selected_resume = 3
+                    print("  ▶️  Resuming — skipping setup, baseline, and diagnostics...")
+                print("")
+
+        success = super().run(resume_from=selected_resume)
+        if success:
+            self._clear_state()
+        return success
 
     def _get_profile_state(self):
         """Return (admin_only, applied_profiles) from mdatp list-applied output."""
@@ -95,6 +147,15 @@ class VSCodeScenario(DemoScenario):
         self.admin_only, _ = self._get_profile_state()
         if self.admin_only:
             print_info("Merge policy is admin-only. Profiles must be deployed via MDM.")
+            _, applied = self._get_profile_state()
+            applied_required = sorted(set(self.config.profiles) & set(applied))
+            if applied_required:
+                print_error("Admin-only mode has required profiles already applied")
+                print_info("This run needs a clean baseline with no demo profiles.")
+                print_info("Ask your IT admin to remove these before baseline:")
+                for profile in applied_required:
+                    print(f"   - {profile}")
+                return False
 
         if self.include_install_in_build:
             print_info("Dependency install is included in timed build phases")
@@ -247,8 +308,30 @@ class VSCodeScenario(DemoScenario):
                 text=True,
                 capture_output=True
             )
+            baseline_duration = 0.0
+            for phase_result in self.orchestrator.results:
+                if phase_result.name == "Baseline Build (No Profiles)":
+                    baseline_duration = phase_result.duration_seconds
+                    break
+            self._save_state(
+                {
+                    "baseline_complete": True,
+                    "baseline_duration_seconds": baseline_duration,
+                }
+            )
             print_success("Diagnostics collected")
             return True
         except:
+            baseline_duration = 0.0
+            for phase_result in self.orchestrator.results:
+                if phase_result.name == "Baseline Build (No Profiles)":
+                    baseline_duration = phase_result.duration_seconds
+                    break
+            self._save_state(
+                {
+                    "baseline_complete": True,
+                    "baseline_duration_seconds": baseline_duration,
+                }
+            )
             print_info("Could not collect full diagnostics (this is optional)")
             return True
