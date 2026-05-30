@@ -187,6 +187,9 @@ python3 demo.py
 # Run VS Code demo directly
 python3 demo.py vscode
 
+# Run VS Code demo with full developer build timing (install + compile)
+python3 demo.py vscode --include-install
+
 # Run Xcode demo directly
 python3 demo.py xcode
 

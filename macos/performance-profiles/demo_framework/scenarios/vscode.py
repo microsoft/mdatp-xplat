@@ -16,7 +16,7 @@ from ..ui import print_section, print_success, print_error, print_info
 class VSCodeScenario(DemoScenario):
     """Demo scenario for building Microsoft VS Code."""
 
-    def __init__(self, repo_path: Optional[Path] = None):
+    def __init__(self, repo_path: Optional[Path] = None, include_install_in_build: bool = False):
         config = ScenarioConfig(
             name="Microsoft VS Code Build Demo",
             description="End-to-end demo showing MDE impact on VS Code compilation",
@@ -27,6 +27,7 @@ class VSCodeScenario(DemoScenario):
             estimated_duration_minutes=60
         )
         super().__init__(config)
+        self.include_install_in_build = include_install_in_build
         self._register_phases()
 
     def _register_phases(self) -> None:
@@ -57,19 +58,21 @@ class VSCodeScenario(DemoScenario):
                 print_error(f"Failed to clone: {e}")
                 return False
 
-        # Install dependencies
-        print_info("Running npm install...")
-        try:
-            subprocess.run(
-                ["npm", "install"],
-                cwd=self.config.repo_path,
-                timeout=600,
-                check=True
-            )
-            print_success("Dependencies installed")
-        except subprocess.CalledProcessError as e:
-            print_error(f"npm install failed: {e}")
-            return False
+        if self.include_install_in_build:
+            print_info("Dependency install is included in timed build phases")
+        else:
+            print_info("Running npm install (setup phase)...")
+            try:
+                subprocess.run(
+                    ["npm", "install"],
+                    cwd=self.config.repo_path,
+                    timeout=600,
+                    check=True
+                )
+                print_success("Dependencies installed")
+            except subprocess.CalledProcessError as e:
+                print_error(f"npm install failed: {e}")
+                return False
 
         return True
 
@@ -90,6 +93,16 @@ class VSCodeScenario(DemoScenario):
 
         # Run build
         try:
+            if self.include_install_in_build:
+                install_result = subprocess.run(
+                    ["npm", "install"],
+                    cwd=self.config.repo_path,
+                    timeout=900
+                )
+                if install_result.returncode != 0:
+                    print_error("Baseline dependency install failed")
+                    return False
+
             result = subprocess.run(
                 ["npm", "run", "compile"],
                 cwd=self.config.repo_path,
@@ -132,6 +145,16 @@ class VSCodeScenario(DemoScenario):
         print_info("Building VS Code with performance profiles...")
         
         try:
+            if self.include_install_in_build:
+                install_result = subprocess.run(
+                    ["npm", "install"],
+                    cwd=self.config.repo_path,
+                    timeout=900
+                )
+                if install_result.returncode != 0:
+                    print_error("Optimized dependency install failed")
+                    return False
+
             result = subprocess.run(
                 ["npm", "run", "compile"],
                 cwd=self.config.repo_path,

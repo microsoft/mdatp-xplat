@@ -25,6 +25,7 @@ def main():
         epilog="""
 Examples:
   %(prog)s vscode                          # Run VS Code build demo
+    %(prog)s vscode --include-install        # Time npm install + compile in build phases
   %(prog)s vscode --repo ~/my-vscode       # Use custom repo path
   %(prog)s --help                          # Show all options
         """
@@ -50,6 +51,12 @@ Examples:
         help="Resume from phase N (0-indexed)"
     )
 
+    parser.add_argument(
+        "--include-install",
+        action="store_true",
+        help="For vscode scenario, include npm install in timed baseline/optimized build phases"
+    )
+
     args = parser.parse_args()
 
     if args.scenario is None:
@@ -69,8 +76,13 @@ Examples:
 
     # Run selected scenario
     if args.scenario == "vscode":
-        scenario = VSCodeScenario(repo_path=args.repo)
+        scenario = VSCodeScenario(
+            repo_path=args.repo,
+            include_install_in_build=args.include_install,
+        )
     elif args.scenario == "xcode":
+        if args.include_install:
+            print_info("--include-install is ignored for xcode scenario")
         scenario = XcodeScenario(repo_path=args.repo)
     else:
         print_error(f"Unknown scenario: {args.scenario}")
