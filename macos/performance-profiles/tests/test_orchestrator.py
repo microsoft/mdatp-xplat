@@ -53,6 +53,20 @@ class TestDemoOrchestrator:
         assert len(orch.results) == 1
         assert orch.results[0].status == PhaseStatus.FAILED
 
+    def test_run_phase_returning_false_is_failure(self):
+        """Test explicit False return is treated as phase failure."""
+        orch = DemoOrchestrator("test")
+
+        def phase():
+            return False
+
+        orch.add_phase("False Phase", phase)
+        success = orch.run()
+
+        assert not success
+        assert len(orch.results) == 1
+        assert orch.results[0].status == PhaseStatus.FAILED
+
     def test_summary(self):
         """Test getting execution summary."""
         orch = DemoOrchestrator("test")

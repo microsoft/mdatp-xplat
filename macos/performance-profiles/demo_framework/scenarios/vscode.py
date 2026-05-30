@@ -28,7 +28,41 @@ class VSCodeScenario(DemoScenario):
         )
         super().__init__(config)
         self.include_install_in_build = include_install_in_build
+        self.admin_only = False
         self._register_phases()
+
+    def _get_profile_state(self):
+        """Return (admin_only, applied_profiles) from mdatp list-applied output."""
+        try:
+            result = subprocess.run(
+                ["sudo", "mdatp", "performance-profiles", "list-applied"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            output = result.stdout or ""
+            lines = [line.strip() for line in output.splitlines() if line.strip()]
+
+            admin_only = any(
+                line.lower().startswith("merge policy:") and "admin" in line.lower()
+                for line in lines
+            )
+
+            applied = set()
+            for line in lines:
+                lower = line.lower()
+                if lower.startswith("merge policy:"):
+                    continue
+                if line in ("---", "====================================="):
+                    continue
+                if lower.startswith("no applied performance profiles"):
+                    continue
+                applied.add(line.split()[0])
+
+            return admin_only, applied
+        except Exception:
+            return False, set()
 
     def _register_phases(self) -> None:
         """Register demo phases with orchestrator."""
@@ -58,6 +92,10 @@ class VSCodeScenario(DemoScenario):
                 print_error(f"Failed to clone: {e}")
                 return False
 
+        self.admin_only, _ = self._get_profile_state()
+        if self.admin_only:
+            print_info("Merge policy is admin-only. Profiles must be deployed via MDM.")
+
         if self.include_install_in_build:
             print_info("Dependency install is included in timed build phases")
         else:
@@ -81,15 +119,20 @@ class VSCodeScenario(DemoScenario):
         print_section("Baseline Build (No Profiles)")
         print_info("Building VS Code without performance profiles...")
         
-        # Remove any active profiles
-        try:
-            subprocess.run(
-                ["sudo", "mdatp", "performance-profiles", "remove", "--name", "node"],
-                capture_output=True,
-                timeout=10
-            )
-        except:
-            pass
+        # Remove active demo profiles for clean baseline when allowed.
+        if not self.admin_only:
+            for profile in self.config.profiles:
+                try:
+                    subprocess.run(
+                        ["sudo", "mdatp", "performance-profiles", "remove", "--name", profile],
+                        capture_output=True,
+                        timeout=10,
+                        check=False,
+                    )
+                except Exception:
+                    pass
+        else:
+            print_info("Admin-only mode: skipping local profile removal")
 
         # Run build
         try:
@@ -120,12 +163,27 @@ class VSCodeScenario(DemoScenario):
     def apply_profiles(self) -> bool:
         """Apply performance profiles."""
         print_section("Applying Profiles")
+
+        admin_only, applied = self._get_profile_state()
+        required = set(self.config.profiles)
+
+        if admin_only:
+            missing = sorted(required - applied)
+            if missing:
+                print_error("Admin-only policy detected: profiles cannot be applied locally")
+                print_info("Ask your IT admin to deploy these profiles via MDM, then re-run:")
+                for profile in missing:
+                    print(f"   - {profile}")
+                return False
+
+            print_success("Admin-only mode: required profiles are already deployed via MDM")
+            return True
         
         for profile in self.config.profiles:
             print_info(f"Applying profile: {profile}...")
             try:
                 result = subprocess.run(
-                    ["sudo", "mdatp", "performance-profiles", "add", "--name", profile],
+                    ["sudo", "mdatp", "performance-profiles", "apply", "--name", profile],
                     capture_output=True,
                     timeout=10,
                     text=True

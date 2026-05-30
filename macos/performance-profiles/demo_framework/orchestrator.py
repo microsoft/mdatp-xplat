@@ -89,6 +89,8 @@ class DemoOrchestrator:
 
             try:
                 output = handler()
+                if output is False:
+                    raise RuntimeError(f"{phase_name} reported failure")
                 duration = time.time() - phase_start
                 result = PhaseResult(
                     name=phase_name,
