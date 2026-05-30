@@ -179,6 +179,16 @@ if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
 fi
 echo "   ✅ Build tools: node, npm, git, jq, python3"
 
+# ── Node.js version check ──
+NODE_VERSION=$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)
+if [ "$NODE_VERSION" -lt 24 ]; then
+    echo "❌ Node.js v24+ required, but found $(node -v)"
+    echo "   Install with: nvm install 24 && nvm use 24"
+    echo "   Or download from: https://nodejs.org"
+    exit 1
+fi
+echo "   ✅ Node.js: $(node -v)"
+
 # Pin to a stable release tag — VS Code main may require unreleased Node versions
 VSCODE_TAG="1.122.1"
 

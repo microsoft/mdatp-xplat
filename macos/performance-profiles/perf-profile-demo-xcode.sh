@@ -140,8 +140,6 @@ if ! command -v xcodebuild &>/dev/null; then
 fi
 echo "   ✅ Xcode: $(xcodebuild -version 2>/dev/null | head -1 || echo '?')"
 echo ""
-
-# Remove active profiles for clean baseline (skip on resume or admin-only)
 if [ "$RESUME" = false ]; then
     if [ "$ADMIN_ONLY" = false ]; then
         for p in $PROFILES; do mdatp performance-profiles remove --name "$p" &>/dev/null || true; done
