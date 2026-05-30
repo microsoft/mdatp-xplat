@@ -44,16 +44,24 @@ class TestVSCodeScenarioBuildModes:
         scenario = VSCodeScenario(repo_path=repo, include_install_in_build=True)
 
         with patch.object(scenario, "_get_profile_state", return_value=(False, set())):
-            with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
-                mock_run.side_effect = [
-                    MagicMock(returncode=0),  # remove profile node
-                    MagicMock(returncode=0),  # remove profile git
-                    MagicMock(returncode=0),  # remove profile vscode
-                    MagicMock(returncode=0),  # remove profile vscode-tree
-                    MagicMock(returncode=0),  # npm install
-                    MagicMock(returncode=0),  # npm run compile
-                ]
-                ok = scenario.build_baseline()
+            with patch.object(
+                scenario,
+                "_start_cpu_monitor",
+                return_value=(MagicMock(set=lambda: None), MagicMock(join=lambda timeout=None: None)),
+            ):
+                with patch.object(scenario, "_collect_rtp_stats", return_value=None):
+                    with patch.object(scenario, "_count_rtp_scans", return_value="N/A"):
+                        with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+                            mock_run.side_effect = [
+                                MagicMock(returncode=0),  # enable rtp stats
+                                MagicMock(returncode=0),  # remove profile node
+                                MagicMock(returncode=0),  # remove profile git
+                                MagicMock(returncode=0),  # remove profile vscode
+                                MagicMock(returncode=0),  # remove profile vscode-tree
+                                MagicMock(returncode=0),  # npm install
+                                MagicMock(returncode=0),  # npm run compile
+                            ]
+                            ok = scenario.build_baseline()
 
         assert ok is True
         calls = [c.args[0] for c in mock_run.call_args_list]
@@ -68,15 +76,23 @@ class TestVSCodeScenarioBuildModes:
         scenario = VSCodeScenario(repo_path=repo, include_install_in_build=False)
 
         with patch.object(scenario, "_get_profile_state", return_value=(False, set())):
-            with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
-                mock_run.side_effect = [
-                    MagicMock(returncode=0),  # remove profile node
-                    MagicMock(returncode=0),  # remove profile git
-                    MagicMock(returncode=0),  # remove profile vscode
-                    MagicMock(returncode=0),  # remove profile vscode-tree
-                    MagicMock(returncode=0),  # npm run compile
-                ]
-                ok = scenario.build_baseline()
+            with patch.object(
+                scenario,
+                "_start_cpu_monitor",
+                return_value=(MagicMock(set=lambda: None), MagicMock(join=lambda timeout=None: None)),
+            ):
+                with patch.object(scenario, "_collect_rtp_stats", return_value=None):
+                    with patch.object(scenario, "_count_rtp_scans", return_value="N/A"):
+                        with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+                            mock_run.side_effect = [
+                                MagicMock(returncode=0),  # enable rtp stats
+                                MagicMock(returncode=0),  # remove profile node
+                                MagicMock(returncode=0),  # remove profile git
+                                MagicMock(returncode=0),  # remove profile vscode
+                                MagicMock(returncode=0),  # remove profile vscode-tree
+                                MagicMock(returncode=0),  # npm run compile
+                            ]
+                            ok = scenario.build_baseline()
 
         assert ok is True
         calls = [c.args[0] for c in mock_run.call_args_list]
@@ -179,9 +195,10 @@ class TestVSCodeScenarioBuildModes:
         scenario.orchestrator.results[0].name = "Setup and Preflight"
         scenario.orchestrator.results[1].name = "Baseline Build (No Profiles)"
 
-        with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            ok = scenario._collect_diagnostics()
+        with patch.object(scenario, "_collect_hot_event_sources", return_value=False):
+            with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0)
+                ok = scenario._collect_diagnostics()
 
         assert ok is True
         assert scenario.state_file.exists()

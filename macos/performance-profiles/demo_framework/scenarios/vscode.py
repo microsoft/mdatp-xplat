@@ -7,7 +7,11 @@ Shows the impact of MDE performance profiles on the Microsoft VS Code build proc
 from pathlib import Path
 from typing import Optional
 import json
+import os
+import shutil
 import subprocess
+import threading
+import time
 
 from .base import DemoScenario, ScenarioConfig
 from ..ui import print_section, print_success, print_error, print_info
@@ -29,8 +33,143 @@ class VSCodeScenario(DemoScenario):
         super().__init__(config)
         self.include_install_in_build = include_install_in_build
         self.admin_only = False
+        self.hot_event_duration = 60
         self.state_file = self.orchestrator.results_dir / ".vscode-demo-state.json"
+        self.baseline = {"time": 0.0, "cpu": "N/A", "scans": "N/A"}
+        self.optimized = {"time": 0.0, "cpu": "N/A", "scans": "N/A"}
         self._register_phases()
+
+    def _clean_build(self):
+        """Clean build artifacts to keep before/after runs comparable."""
+        cache_dir = self.config.repo_path / "node_modules" / ".cache"
+        out_dir = self.config.repo_path / "out"
+        build_dir = self.config.repo_path / ".build"
+        for d in (cache_dir, out_dir, build_dir):
+            if d.exists():
+                shutil.rmtree(d, ignore_errors=True)
+
+        for tsinfo in self.config.repo_path.rglob("*.tsbuildinfo"):
+            try:
+                tsinfo.unlink()
+            except Exception:
+                pass
+
+    def _start_cpu_monitor(self, log_file: Path):
+        """Start background CPU sampling for wdavdaemon_unprivileged."""
+        stop_event = threading.Event()
+
+        def _run():
+            with log_file.open("w") as handle:
+                while not stop_event.is_set():
+                    try:
+                        result = subprocess.run(
+                            ["ps", "-eo", "pid,%cpu,comm"],
+                            capture_output=True,
+                            text=True,
+                            timeout=3,
+                            check=False,
+                        )
+                        for line in result.stdout.splitlines():
+                            if "wdavdaemon_unprivileged" in line:
+                                parts = line.split()
+                                if len(parts) >= 2:
+                                    handle.write(f"{int(time.time())} {parts[1]}\n")
+                                    handle.flush()
+                                break
+                    except Exception:
+                        pass
+                    stop_event.wait(2)
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+        return stop_event, thread
+
+    def _calc_avg_cpu(self, log_file: Path):
+        """Compute average sampled CPU from monitor log."""
+        if not log_file.exists() or log_file.stat().st_size == 0:
+            return "N/A"
+        vals = []
+        for line in log_file.read_text().splitlines():
+            try:
+                vals.append(float(line.split()[1]))
+            except Exception:
+                continue
+        if not vals:
+            return "N/A"
+        return f"{sum(vals)/len(vals):.1f}"
+
+    def _collect_rtp_stats(self, out_file: Path):
+        """Capture RTP statistics JSON snapshot."""
+        try:
+            with out_file.open("w") as handle:
+                subprocess.run(
+                    [
+                        "sudo",
+                        "mdatp",
+                        "diagnostic",
+                        "real-time-protection-statistics",
+                        "--output",
+                        "json",
+                    ],
+                    stdout=handle,
+                    stderr=subprocess.DEVNULL,
+                    timeout=30,
+                    check=False,
+                )
+        except Exception:
+            pass
+
+    def _count_rtp_scans(self, json_file: Path):
+        """Return total scanned files from RTP stats JSON."""
+        if not json_file.exists() or json_file.stat().st_size == 0:
+            return "N/A"
+        try:
+            data = json.loads(json_file.read_text())
+            total = 0
+            for item in data:
+                if isinstance(item, dict):
+                    total += int(item.get("totalFilesScanned", 0) or 0)
+            return str(total)
+        except Exception:
+            return "N/A"
+
+    def _collect_hot_event_sources(self, out_file: Path):
+        """Collect hot event sources during a build and persist latest report."""
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return False
+        try:
+            self._clean_build()
+
+            hes_proc = subprocess.Popen(
+                [
+                    "sudo",
+                    "mdatp",
+                    "diagnostic",
+                    "hot-event-sources",
+                    f"--time={self.hot_event_duration}",
+                ],
+                cwd=self.config.repo_path,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            build_proc = subprocess.Popen(
+                ["npm", "run", "compile"],
+                cwd=self.config.repo_path,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            build_proc.wait(timeout=3600)
+            hes_proc.wait(timeout=self.hot_event_duration + 20)
+
+            candidates = sorted(self.config.repo_path.glob("hot_event_source_*.json"), key=lambda p: p.stat().st_mtime)
+            if candidates:
+                shutil.copy2(candidates[-1], out_file)
+                return True
+        except Exception:
+            pass
+        return False
 
     def _load_state(self):
         """Load saved scenario state from disk."""
@@ -63,6 +202,9 @@ class VSCodeScenario(DemoScenario):
             state = self._load_state()
             if state and state.get("baseline_complete"):
                 baseline_time = state.get("baseline_duration_seconds", 0)
+                self.baseline["time"] = float(baseline_time or 0)
+                self.baseline["cpu"] = state.get("baseline_cpu_avg", "N/A")
+                self.baseline["scans"] = state.get("baseline_scans", "N/A")
                 print("")
                 print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 print("  📋 Previous run detected — baseline already complete.")
@@ -179,6 +321,19 @@ class VSCodeScenario(DemoScenario):
         """Build without performance profiles."""
         print_section("Baseline Build (No Profiles)")
         print_info("Building VS Code without performance profiles...")
+
+        self._clean_build()
+
+        try:
+            subprocess.run(
+                ["sudo", "mdatp", "config", "real-time-protection-statistics", "--value", "enabled"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+                check=False,
+            )
+        except Exception:
+            pass
         
         # Remove active demo profiles for clean baseline when allowed.
         if not self.admin_only:
@@ -194,6 +349,10 @@ class VSCodeScenario(DemoScenario):
                     pass
         else:
             print_info("Admin-only mode: skipping local profile removal")
+
+        cpu_log = self.orchestrator.results_dir / "phase1_cpu.log"
+        stop_event, monitor_thread = self._start_cpu_monitor(cpu_log)
+        start = time.time()
 
         # Run build
         try:
@@ -214,10 +373,26 @@ class VSCodeScenario(DemoScenario):
             )
             if result.returncode != 0:
                 print_error("Baseline build failed")
+                stop_event.set()
+                monitor_thread.join(timeout=3)
                 return False
+
+            stop_event.set()
+            monitor_thread.join(timeout=3)
+
+            elapsed = time.time() - start
+            self.baseline["time"] = elapsed
+            self.baseline["cpu"] = self._calc_avg_cpu(cpu_log)
+            rtp_file = self.orchestrator.results_dir / "phase1_rtp_stats.json"
+            self._collect_rtp_stats(rtp_file)
+            self.baseline["scans"] = self._count_rtp_scans(rtp_file)
+
+            print_info(f"Baseline time: {elapsed:.1f}s, MDE avg CPU: {self.baseline['cpu']}%")
             print_success("Baseline build completed")
             return True
         except subprocess.TimeoutExpired:
+            stop_event.set()
+            monitor_thread.join(timeout=3)
             print_error("Build timed out")
             return False
 
@@ -262,6 +437,23 @@ class VSCodeScenario(DemoScenario):
         """Build with performance profiles."""
         print_section("Optimized Build (With Profiles)")
         print_info("Building VS Code with performance profiles...")
+
+        self._clean_build()
+
+        try:
+            subprocess.run(
+                ["sudo", "mdatp", "config", "real-time-protection-statistics", "--value", "enabled"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+                check=False,
+            )
+        except Exception:
+            pass
+
+        cpu_log = self.orchestrator.results_dir / "phase5_cpu.log"
+        stop_event, monitor_thread = self._start_cpu_monitor(cpu_log)
+        start = time.time()
         
         try:
             if self.include_install_in_build:
@@ -281,18 +473,54 @@ class VSCodeScenario(DemoScenario):
             )
             if result.returncode != 0:
                 print_error("Optimized build failed")
+                stop_event.set()
+                monitor_thread.join(timeout=3)
                 return False
+
+            stop_event.set()
+            monitor_thread.join(timeout=3)
+
+            elapsed = time.time() - start
+            self.optimized["time"] = elapsed
+            self.optimized["cpu"] = self._calc_avg_cpu(cpu_log)
+            rtp_file = self.orchestrator.results_dir / "phase5_rtp_stats.json"
+            self._collect_rtp_stats(rtp_file)
+            self.optimized["scans"] = self._count_rtp_scans(rtp_file)
+
+            hot_after = self.orchestrator.results_dir / "phase5_hot_events.json"
+            self._collect_hot_event_sources(hot_after)
+
+            print_info(f"Optimized time: {elapsed:.1f}s, MDE avg CPU: {self.optimized['cpu']}%")
             print_success("Optimized build completed")
             return True
         except subprocess.TimeoutExpired:
+            stop_event.set()
+            monitor_thread.join(timeout=3)
             print_error("Build timed out")
             return False
 
     def analyze_results(self) -> bool:
         """Analyze impact of profiles."""
         print_section("Analysis")
-        print_info("Comparing baseline vs. optimized build times...")
-        print_info("Impact data would be displayed here (CPU usage, build time, I/O patterns)")
+
+        baseline_time = float(self.baseline.get("time") or 0)
+        optimized_time = float(self.optimized.get("time") or 0)
+        speedup = "?"
+        saved = 0.0
+        if baseline_time > 0 and optimized_time > 0:
+            saved = baseline_time - optimized_time
+            speedup = f"{((saved / baseline_time) * 100):.0f}"
+
+        print_info("Comparison summary:")
+        print(f"   ⏱️  Baseline build time:   {baseline_time:.1f}s")
+        print(f"   ⏱️  Optimized build time:  {optimized_time:.1f}s")
+        print(f"   🖥️  Baseline MDE avg CPU:  {self.baseline.get('cpu', 'N/A')}%")
+        print(f"   🖥️  Optimized MDE avg CPU: {self.optimized.get('cpu', 'N/A')}%")
+        print(f"   📁 Baseline scans:        {self.baseline.get('scans', 'N/A')}")
+        print(f"   📁 Optimized scans:       {self.optimized.get('scans', 'N/A')}")
+        print(f"   ⚡ Speedup:               {speedup}% ({saved:.1f}s saved)")
+        print(f"   📦 Artifacts:             {self.orchestrator.results_dir}")
+
         print_success("Analysis complete")
         return True
 
@@ -300,6 +528,12 @@ class VSCodeScenario(DemoScenario):
         """Collect diagnostic data during baseline."""
         print_section("Diagnostics")
         print_info("Collecting MDE performance data...")
+
+        hot_before = self.orchestrator.results_dir / "phase2_hot_events.json"
+        if self._collect_hot_event_sources(hot_before):
+            print_success(f"Hot event sources saved: {hot_before}")
+        else:
+            print_info("Hot event sources were not captured")
         
         try:
             result = subprocess.run(
@@ -308,29 +542,23 @@ class VSCodeScenario(DemoScenario):
                 text=True,
                 capture_output=True
             )
-            baseline_duration = 0.0
-            for phase_result in self.orchestrator.results:
-                if phase_result.name == "Baseline Build (No Profiles)":
-                    baseline_duration = phase_result.duration_seconds
-                    break
             self._save_state(
                 {
                     "baseline_complete": True,
-                    "baseline_duration_seconds": baseline_duration,
+                    "baseline_duration_seconds": self.baseline.get("time", 0),
+                    "baseline_cpu_avg": self.baseline.get("cpu", "N/A"),
+                    "baseline_scans": self.baseline.get("scans", "N/A"),
                 }
             )
             print_success("Diagnostics collected")
             return True
         except:
-            baseline_duration = 0.0
-            for phase_result in self.orchestrator.results:
-                if phase_result.name == "Baseline Build (No Profiles)":
-                    baseline_duration = phase_result.duration_seconds
-                    break
             self._save_state(
                 {
                     "baseline_complete": True,
-                    "baseline_duration_seconds": baseline_duration,
+                    "baseline_duration_seconds": self.baseline.get("time", 0),
+                    "baseline_cpu_avg": self.baseline.get("cpu", "N/A"),
+                    "baseline_scans": self.baseline.get("scans", "N/A"),
                 }
             )
             print_info("Could not collect full diagnostics (this is optional)")
