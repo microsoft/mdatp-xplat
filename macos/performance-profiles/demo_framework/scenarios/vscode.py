@@ -112,6 +112,15 @@ class VSCodeScenario(DemoScenario):
                 delta = (a_auth + a_notify) - (b_auth + b_notify)
                 print(f"   Delta (after-before): {delta:+d} events")
 
+    def _hot_event_aggregate(self, path: Path):
+        """Return aggregate auth/notify/total counts from a hot-event artifact."""
+        entries = self._load_hot_event_entries(path)
+        if not entries:
+            return None
+        auth = sum(e["auth"] for e in entries)
+        notify = sum(e["notify"] for e in entries)
+        return {"auth": auth, "notify": notify, "total": auth + notify}
+
     def _has_ghcp_cli(self):
         """Return True when GitHub CLI Copilot command appears available."""
         try:
@@ -964,29 +973,45 @@ class VSCodeScenario(DemoScenario):
         if self.baseline.get("client_analyzer"):
             print(f"   📊 Client Analyzer:       {self.baseline.get('client_analyzer')}")
 
+        print_info("Profiles applied:")
+        selected_profiles = self.recommended_profiles or list(self.config.profiles)
+        print(f"   📌 Recommendation source: {self.recommendation_source}")
+        print(f"   📌 Selected profiles:     {', '.join(selected_profiles)}")
+        _, active_applied = self._get_profile_state()
+        if active_applied:
+            active_sorted = sorted([p for p in active_applied if p in self.config.profiles])
+            print(f"   ✅ Active on endpoint:    {', '.join(active_sorted)}")
+        else:
+            print("   ✅ Active on endpoint:    (none detected)")
+
         before_hot = self.orchestrator.results_dir / "phase2_hot_events.json"
         after_hot = self.orchestrator.results_dir / "phase5_hot_events.json"
 
-        mode = self.hot_events_analysis_mode
-        if mode == "prompt":
-            has_ghcp = self._has_ghcp_cli()
-            print_info("Hot event analysis mode:")
-            print("   1) Python (local parsing)")
-            if has_ghcp:
-                print("   2) GHCP CLI")
-                print("   3) Both")
-                choice = input("   Select [1/2/3] (default: 1): ").strip()
-                if choice == "2":
-                    mode = "ghcp"
-                elif choice == "3":
-                    mode = "both"
-                else:
-                    mode = "python"
-            else:
-                mode = "python"
+        before_agg = self._hot_event_aggregate(before_hot)
+        after_agg = self._hot_event_aggregate(after_hot)
 
-        if mode in ("python", "both"):
-            self._hot_event_python_summary(before_hot, after_hot)
+        print_info("Hot event sources (aggregate):")
+        if before_agg:
+            print(
+                "   Aggregate before: "
+                f"auth={before_agg['auth']} notify={before_agg['notify']} total={before_agg['total']}"
+            )
+        else:
+            print("   Aggregate before: unavailable")
+
+        if after_agg:
+            print(
+                "   Aggregate after:  "
+                f"auth={after_agg['auth']} notify={after_agg['notify']} total={after_agg['total']}"
+            )
+        else:
+            print("   Aggregate after:  unavailable")
+
+        if before_agg and after_agg:
+            delta_events = after_agg["total"] - before_agg["total"]
+            print(f"   Delta (after-before): {delta_events:+d} events")
+
+        mode = self.hot_events_analysis_mode
         if mode in ("ghcp", "both"):
             self._hot_event_ghcp_analysis(before_hot, after_hot)
 

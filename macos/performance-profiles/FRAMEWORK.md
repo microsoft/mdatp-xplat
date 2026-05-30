@@ -198,6 +198,10 @@ python3 demo.py vscode --hot-events-analysis python
 python3 demo.py vscode --hot-events-analysis ghcp
 python3 demo.py vscode --hot-events-analysis both
 
+# Phase 6 is non-interactive and always prints a clean summary report,
+# including hot-event aggregates (before/after/delta) and profiles applied.
+# Use ghcp or both only if you also want optional GHCP narrative output.
+
 # During phase 3, recommendations are generated from hot events and available
 # profiles discovered from mdatp CLI.
 # Default behavior is GHCP-first recommendation; if GHCP is unavailable or

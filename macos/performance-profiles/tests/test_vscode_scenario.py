@@ -363,3 +363,24 @@ vscode-tree
             profiles = scenario._get_available_profiles()
 
         assert profiles == ["node", "git", "vscode", "vscode-tree"]
+
+    def test_analyze_results_does_not_prompt_in_prompt_mode(self, tmp_path: Path):
+        repo = tmp_path / "vscode"
+        repo.mkdir()
+        scenario = VSCodeScenario(repo_path=repo, hot_events_analysis_mode="prompt")
+
+        scenario.baseline = {"time": 120.0, "cpu": "70.0", "scans": "100", "client_analyzer": None}
+        scenario.optimized = {"time": 90.0, "cpu": "40.0", "scans": "50"}
+        scenario.recommended_profiles = ["node", "git"]
+        scenario.recommendation_source = "ghcp"
+
+        before = scenario.orchestrator.results_dir / "phase2_hot_events.json"
+        after = scenario.orchestrator.results_dir / "phase5_hot_events.json"
+        before.write_text('{"eventSource":[{"path":"/bin/node","authCount":10,"notifyCount":5}]}')
+        after.write_text('{"eventSource":[{"path":"/bin/node","authCount":7,"notifyCount":3}]}')
+
+        with patch.object(scenario, "_get_profile_state", return_value=(False, {"node", "git"})):
+            with patch("builtins.input", side_effect=AssertionError("input() should not be called")):
+                ok = scenario.analyze_results()
+
+        assert ok is True
