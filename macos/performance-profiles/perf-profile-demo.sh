@@ -14,22 +14,23 @@ set -euo pipefail
 # Usage:  ./perf-profile-demo.sh [path-to-vscode-repo]
 #         Default repo path: ~/demo/vscode
 #
-# Prerequisites:
+# Prerequisites (from VS Code's official contribution guide):
 #   - macOS with MDE installed (real-time protection enabled)
 #   - Homebrew (https://brew.sh)
 #   - sudo access (for hot-event-sources collection)
+#   - Node.js >= 22.x, Python 3.x, Git, Xcode Command Line Tools
 #
 # Note: The VS Code repo will be cloned automatically if not present.
-# Note: node, git, jq, and python3 will be offered for install via
-#       Homebrew if not already present.
+# Note: node, git, jq, python3, and Xcode CLT will be checked on startup.
 #
+# Build steps follow: https://github.com/microsoft/vscode/wiki/How-to-Contribute
 # Learn more: https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles
 #=============================================================================
 
 REPO_DIR="${1:-$HOME/demo/vscode}"
 RESULTS_DIR="$HOME/demo/results"
 ANALYZER_DIR="$HOME/demo/analyzer/XMDEClientAnalyzerBinary"
-PROFILES="node git vscode vscode-tree"
+PROFILES="node git xcode vscode vscode-tree"
 HOT_EVENT_DURATION=60  # seconds to collect hot event sources
 
 mkdir -p "$RESULTS_DIR"
@@ -158,6 +159,17 @@ if ! command -v brew &>/dev/null; then
     exit 1
 fi
 
+# Check for Xcode Command Line Tools (required for node-gyp native modules)
+# See: https://github.com/microsoft/vscode/wiki/How-to-Contribute#prerequisites
+if ! xcode-select -p &>/dev/null; then
+    echo "   ⚠️  Xcode Command Line Tools not found."
+    echo "   Installing (this may take a few minutes)..."
+    xcode-select --install 2>/dev/null || true
+    echo "   After installation completes, re-run this script."
+    exit 1
+fi
+echo "   ✅ Xcode Command Line Tools: $(xcode-select -p)"
+
 MISSING_TOOLS=()
 for cmd in node git jq python3; do
     if ! command -v "$cmd" &>/dev/null; then
@@ -189,15 +201,16 @@ if [ "$NODE_VERSION" -lt 24 ]; then
 fi
 echo "   ✅ Node.js: $(node -v)"
 
-# Pin to a stable release tag — VS Code main may require unreleased Node versions
+# Pin to a stable release tag — VS Code main may require unreleased Node versions.
+# Build steps: https://github.com/microsoft/vscode/wiki/How-to-Contribute#build
 VSCODE_TAG="1.122.1"
 
 if [ ! -d "$REPO_DIR" ]; then
     echo "   ⬇️  VS Code repo not found — cloning $VSCODE_TAG now..."
     mkdir -p "$(dirname "$REPO_DIR")"
     git clone --depth 1 --branch "$VSCODE_TAG" https://github.com/microsoft/vscode.git "$REPO_DIR"
-    echo "   📦 Running initial npm ci (this may take a few minutes)..."
-    cd "$REPO_DIR" && npm ci 2>&1 | tail -3
+    echo "   📦 Running initial npm install (this may take a few minutes)..."
+    cd "$REPO_DIR" && npm install 2>&1 | tail -3
 fi
 echo "   ✅ Repo: $REPO_DIR"
 echo ""
@@ -314,7 +327,7 @@ echo "   ⏱️  Building VS Code (npm run compile)..."
 cd "$REPO_DIR"
 BUILD_START=$(date +%s)
 
-run_with_spinner "📦 npm ci" npm ci
+run_with_spinner "📦 npm install" npm install
 run_with_spinner "🔨 npm run compile" npm run compile
 
 BUILD_END=$(date +%s)
@@ -499,7 +512,7 @@ echo "   📋 Active profiles:"
 sudo mdatp performance-profiles list-active 2>/dev/null || echo "   (check manually)"
 echo ""
 
-echo '   💬 "That'\''s it. Four commands. No manual path hunting,'
+echo '   💬 "That'\''s it. Five profiles, one command. No manual path hunting,'
 echo '       no JSON config files, no MDM policy updates."'
 echo ""
 
@@ -526,7 +539,7 @@ echo "   ⏱️  Building VS Code (npm run compile) WITH profiles..."
 cd "$REPO_DIR"
 BUILD_START=$(date +%s)
 
-run_with_spinner "📦 npm ci" npm ci
+run_with_spinner "📦 npm install" npm install
 run_with_spinner "🔨 npm run compile" npm run compile
 
 BUILD_END=$(date +%s)
@@ -601,7 +614,9 @@ echo "   1. We diagnosed the problem using built-in MDE diagnostic tools"
 echo "   2. Hot event sources showed node/tsc/git flooding the sensor"
 echo "   3. Performance profiles fixed it with one command"
 echo "   4. Build is ${SPEEDUP}% faster, MDE CPU dropped, same security protection"
-echo "   5. 60+ profiles ship with MDE — Xcode, .NET, Docker, Rust, Go, JetBrains..."
+echo "   5. We used 5 profiles: node (npm/node-gyp), git, xcode (native module compilation),"
+echo "      vscode, and vscode-tree — matching the full VS Code build stack."
+echo "   6. 60+ profiles ship with MDE — Xcode, .NET, Docker, Rust, Go, JetBrains..."
 echo ""
 echo "📖 Learn more: https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles"
 echo ""
