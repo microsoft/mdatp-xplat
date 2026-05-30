@@ -66,7 +66,9 @@ Scenarios are extensible demo templates. Each scenario:
 #### Available Scenarios
 
 - **`VSCodeScenario`** — Build microsoft/vscode, showing profile impact
-- **`XcodeScenario`** — Build microsoft/fluentui-apple with Xcode/Swift
+- **`XcodeScenario`** — Build microsoft/fluentui-apple with Swift toolchain
+    - Uses `swift build -c release` (compatible with current repo layout)
+    - Includes a fresh `git clone` in baseline and optimized phases so `git` profile impact is measurable
 
 ### Example: Create New Scenario
 
