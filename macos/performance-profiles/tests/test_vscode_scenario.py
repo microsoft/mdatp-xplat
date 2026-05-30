@@ -279,7 +279,7 @@ class TestVSCodeScenarioBuildModes:
         )
 
         with patch.object(scenario, "_has_ghcp_cli", return_value=True):
-            with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+            with patch("demo_framework.scenarios.profiled_build.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(
                     returncode=0,
                     stdout="RECOMMENDED_PROFILES: vscode, node\n",
@@ -389,8 +389,8 @@ class TestVSCodeScenarioBuildModes:
         repo.mkdir()
         scenario = VSCodeScenario(repo_path=repo)
 
-        with patch("demo_framework.scenarios.vscode.shutil.which", return_value="/usr/bin/gh"):
-            with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+        with patch("demo_framework.scenarios.profiled_build.shutil.which", return_value="/usr/bin/gh"):
+            with patch("demo_framework.scenarios.profiled_build.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0)
                 assert scenario._has_ghcp_cli() is True
 
@@ -406,7 +406,7 @@ vscode
 vscode-tree
 """
 
-        with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+        with patch("demo_framework.scenarios.profiled_build.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout=stdout)
             profiles = scenario._get_available_profiles()
 
