@@ -133,6 +133,62 @@ class TestVSCodeScenarioBuildModes:
         calls = [c.args[0] for c in mock_run.call_args_list]
         assert ["sudo", "mdatp", "performance-profiles", "apply", "--name", "node"] in calls
 
+    def test_apply_profiles_uses_recommended_profile_subset(self, tmp_path: Path):
+        repo = tmp_path / "vscode"
+        repo.mkdir()
+
+        scenario = VSCodeScenario(repo_path=repo)
+        scenario.recommended_profiles = ["node", "git"]
+        scenario.recommendation_source = "python"
+
+        with patch.object(
+            scenario,
+            "_get_profile_state",
+            return_value=(False, set()),
+        ):
+            with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0)
+                ok = scenario.apply_profiles()
+
+        assert ok is True
+        calls = [c.args[0] for c in mock_run.call_args_list]
+        assert ["sudo", "mdatp", "performance-profiles", "apply", "--name", "node"] in calls
+        assert ["sudo", "mdatp", "performance-profiles", "apply", "--name", "git"] in calls
+        assert ["sudo", "mdatp", "performance-profiles", "apply", "--name", "vscode"] not in calls
+
+    def test_select_profiles_for_phase4_uses_default_when_no_recommendations(self, tmp_path: Path):
+        repo = tmp_path / "vscode"
+        repo.mkdir()
+        scenario = VSCodeScenario(repo_path=repo)
+
+        hot = tmp_path / "hot.json"
+        hot.write_text('{"eventSource": []}')
+
+        with patch.object(scenario, "_has_ghcp_cli", return_value=False):
+            scenario._select_profiles_for_phase4(hot)
+
+        assert scenario.recommended_profiles == scenario.config.profiles
+        assert scenario.recommendation_source == "default"
+
+    def test_select_profiles_for_phase4_prefers_ghcp_when_chosen(self, tmp_path: Path):
+        repo = tmp_path / "vscode"
+        repo.mkdir()
+        scenario = VSCodeScenario(repo_path=repo)
+
+        hot = tmp_path / "hot.json"
+        hot.write_text(
+            '{"eventSource": ['
+            '{"path":"/usr/local/bin/node","authCount":10,"notifyCount":5}'
+            ']}'
+        )
+
+        with patch.object(scenario, "_ghcp_profile_recommendations", return_value=["git", "node"]):
+            with patch("builtins.input", return_value="2"):
+                scenario._select_profiles_for_phase4(hot)
+
+        assert scenario.recommended_profiles == ["git", "node"]
+        assert scenario.recommendation_source == "ghcp"
+
     def test_setup_fails_for_admin_only_when_profiles_already_applied(self, tmp_path: Path):
         repo = tmp_path / "vscode"
         repo.mkdir()

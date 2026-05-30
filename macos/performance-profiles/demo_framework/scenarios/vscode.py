@@ -5,7 +5,7 @@ Shows the impact of MDE performance profiles on the Microsoft VS Code build proc
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import json
 import os
 import shutil
@@ -44,6 +44,8 @@ class VSCodeScenario(DemoScenario):
         self.state_file = self.orchestrator.results_dir / ".vscode-demo-state.json"
         self.baseline = {"time": 0.0, "cpu": "N/A", "scans": "N/A", "client_analyzer": None}
         self.optimized = {"time": 0.0, "cpu": "N/A", "scans": "N/A"}
+        self.recommended_profiles: Optional[List[str]] = None
+        self.recommendation_source = "default"
         self._register_phases()
 
     def _to_int(self, value):
@@ -180,6 +182,115 @@ class VSCodeScenario(DemoScenario):
                 print_info("GHCP analysis command did not return usable output")
         except Exception as e:
             print_info(f"GHCP analysis failed: {e}")
+
+    def _python_profile_recommendations(self, hot_events: Path) -> List[str]:
+        """Derive profile recommendations from hot-event path heuristics."""
+        entries = self._load_hot_event_entries(hot_events)
+        if not entries:
+            return []
+
+        keyword_map = {
+            "node": ["node", "npm", "pnpm", "yarn", "electron"],
+            "git": ["/git", "git-core", "git "],
+            "vscode": ["code", "vscode", "typescript", "tsserver", "webpack", "esbuild", "ripgrep", "/rg"],
+            "vscode-tree": ["fsevent", "chokidar", "watcher", "tree", "explorer", "filewatch"],
+        }
+
+        scores = {profile: 0 for profile in self.config.profiles}
+        for e in entries:
+            path_text = str(e.get("path", "")).lower()
+            total = self._to_int(e.get("total", 0))
+            for profile, words in keyword_map.items():
+                if profile in scores and any(word in path_text for word in words):
+                    scores[profile] += total
+
+        ranked = [
+            profile for profile, score in sorted(scores.items(), key=lambda item: item[1], reverse=True) if score > 0
+        ]
+        return ranked
+
+    def _ghcp_profile_recommendations(self, hot_events: Path) -> List[str]:
+        """Ask GH Copilot CLI to pick profile names from known profile list."""
+        if not self._has_ghcp_cli():
+            return []
+
+        entries = self._load_hot_event_entries(hot_events)
+        if not entries:
+            return []
+
+        top = entries[:10]
+        top_text = "\n".join(
+            [f"- total={e['total']} auth={e['auth']} notify={e['notify']} path={e['path']}" for e in top]
+        )
+        allowed = ", ".join(self.config.profiles)
+        prompt = (
+            "You are selecting MDE performance profiles for a VS Code demo.\n"
+            f"Allowed profiles: {allowed}.\n"
+            "Given these hot event sources, output only a comma-separated list of the best matching profile names "
+            "from the allowed list, ordered by impact. No explanation.\n\n"
+            f"Hot event sources:\n{top_text}\n"
+        )
+
+        try:
+            res = subprocess.run(
+                ["gh", "copilot", "suggest", "-t", "shell", prompt],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+            if res.returncode != 0:
+                return []
+
+            text = (res.stdout or "").lower()
+            picks = []
+            for profile in self.config.profiles:
+                if profile.lower() in text and profile not in picks:
+                    picks.append(profile)
+            return picks
+        except Exception:
+            return []
+
+    def _select_profiles_for_phase4(self, hot_events: Path):
+        """Choose profile set to apply based on phase 3 diagnostics artifacts."""
+        python_recs = self._python_profile_recommendations(hot_events)
+        ghcp_recs = self._ghcp_profile_recommendations(hot_events)
+
+        if python_recs:
+            print_info(f"Python recommendations: {', '.join(python_recs)}")
+        else:
+            print_info("Python recommendations unavailable; using default profile set")
+
+        if ghcp_recs:
+            print_info(f"GHCP recommendations:   {', '.join(ghcp_recs)}")
+
+        if ghcp_recs:
+            print("   Choose recommendation source for phase 4 apply:")
+            print("   1) Python recommendations")
+            print("   2) GHCP recommendations")
+            print("   3) Union of both")
+            print("   4) Default profile set")
+            choice = input("   Select [1/2/3/4] (default: 2): ").strip() or "2"
+            if choice == "1" and python_recs:
+                selected = python_recs
+                source = "python"
+            elif choice == "3":
+                seen = set()
+                selected = [p for p in python_recs + ghcp_recs if not (p in seen or seen.add(p))]
+                source = "both"
+            elif choice == "4":
+                selected = list(self.config.profiles)
+                source = "default"
+            else:
+                selected = ghcp_recs
+                source = "ghcp"
+        else:
+            selected = python_recs or list(self.config.profiles)
+            source = "python" if python_recs else "default"
+
+        self.recommended_profiles = selected
+        self.recommendation_source = source
+        print_info(f"Phase 4 will apply ({source}): {', '.join(self.recommended_profiles)}")
 
     def _clean_build(self):
         """Clean build artifacts to keep before/after runs comparable."""
@@ -373,10 +484,19 @@ class VSCodeScenario(DemoScenario):
                 self.baseline["cpu"] = state.get("baseline_cpu_avg", "N/A")
                 self.baseline["scans"] = state.get("baseline_scans", "N/A")
                 self.baseline["client_analyzer"] = state.get("baseline_client_analyzer")
+                recs = state.get("recommended_profiles")
+                if isinstance(recs, list) and recs:
+                    self.recommended_profiles = [p for p in recs if p in self.config.profiles]
+                    self.recommendation_source = state.get("recommendation_source", "saved")
                 print("")
                 print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 print("  📋 Previous run detected — baseline already complete.")
                 print(f"     Baseline build time: {baseline_time:.1f} seconds")
+                if self.recommended_profiles:
+                    print(
+                        f"     Saved phase-4 recommendations ({self.recommendation_source}): "
+                        f"{', '.join(self.recommended_profiles)}"
+                    )
                 print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 print("")
                 choice = input("  Continue to comparison build, or restart from scratch? [C/r] ").strip().lower()
@@ -568,8 +688,11 @@ class VSCodeScenario(DemoScenario):
         """Apply performance profiles."""
         print_section("Applying Profiles")
 
+        selected_profiles = self.recommended_profiles or list(self.config.profiles)
+        print_info(f"Selected profile set ({self.recommendation_source}): {', '.join(selected_profiles)}")
+
         admin_only, applied = self._get_profile_state()
-        required = set(self.config.profiles)
+        required = set(selected_profiles)
 
         if admin_only:
             missing = sorted(required - applied)
@@ -583,7 +706,7 @@ class VSCodeScenario(DemoScenario):
             print_success("Admin-only mode: required profiles are already deployed via MDM")
             return True
         
-        for profile in self.config.profiles:
+        for profile in selected_profiles:
             print_info(f"Applying profile: {profile}...")
             try:
                 result = subprocess.run(
@@ -729,8 +852,11 @@ class VSCodeScenario(DemoScenario):
         hot_before = self.orchestrator.results_dir / "phase2_hot_events.json"
         if self._collect_hot_event_sources(hot_before):
             print_success(f"Hot event sources saved: {hot_before}")
+            self._select_profiles_for_phase4(hot_before)
         else:
             print_info("Hot event sources were not captured")
+            self.recommended_profiles = list(self.config.profiles)
+            self.recommendation_source = "default"
 
         print_info("Step 2/3: Client Analyzer performance capture (optional)")
         analyzer_zip = self._run_client_analyzer()
@@ -756,6 +882,8 @@ class VSCodeScenario(DemoScenario):
                     "baseline_cpu_avg": self.baseline.get("cpu", "N/A"),
                     "baseline_scans": self.baseline.get("scans", "N/A"),
                     "baseline_client_analyzer": self.baseline.get("client_analyzer"),
+                    "recommended_profiles": self.recommended_profiles,
+                    "recommendation_source": self.recommendation_source,
                 }
             )
             print_success("Diagnostics collected")
@@ -768,6 +896,8 @@ class VSCodeScenario(DemoScenario):
                     "baseline_cpu_avg": self.baseline.get("cpu", "N/A"),
                     "baseline_scans": self.baseline.get("scans", "N/A"),
                     "baseline_client_analyzer": self.baseline.get("client_analyzer"),
+                    "recommended_profiles": self.recommended_profiles,
+                    "recommendation_source": self.recommendation_source,
                 }
             )
             print_info("Could not collect full diagnostics (this is optional)")
