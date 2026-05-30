@@ -2,7 +2,7 @@
 set -euo pipefail
 
 #=============================================================================
-# MDE Performance Profiles — End-to-End Field Demo
+# MDE Performance Profiles — End-to-End Demo
 #
 # Demonstrates the impact of performance profiles by building microsoft/vscode
 # with and without profiles, using MDE diagnostic tools to show the difference.
@@ -36,7 +36,7 @@ mkdir -p "$RESULTS_DIR"
 STATE_FILE="$RESULTS_DIR/.demo-state"
 
 echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║   MDE Performance Profiles — End-to-End Field Demo          ║"
+echo "║   MDE Performance Profiles — End-to-End Demo                ║"
 echo "║   Repo: microsoft/vscode                                    ║"
 echo "║   Flow: Build → Diagnose → Apply Profiles → Verify          ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
@@ -199,8 +199,7 @@ echo ""
 
 clean_build() {
     cd "$REPO_DIR"
-    echo "   🧹 Cleaning build artifacts..."
-    rm -rf node_modules/.cache out .build
+    run_with_spinner "🧹 Cleaning build artifacts" rm -rf node_modules/.cache out .build
     find . -name '*.tsbuildinfo' -delete 2>/dev/null || true
 }
 
@@ -232,10 +231,10 @@ calc_avg_cpu() {
 run_with_spinner() {
     local label="$1"; shift
     local pid elapsed
-    "$@" &
+    "$@" >/dev/null 2>&1 &
     pid=$!
     elapsed=0
-    printf "\r   %s %ds..." "$label" "$elapsed"
+    printf "   %s %ds..." "$label" "$elapsed"
     while kill -0 "$pid" 2>/dev/null; do
         sleep 5
         elapsed=$((elapsed + 5))
@@ -272,7 +271,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  PHASE 1: Baseline Build (no performance profiles)"
 echo ""
 echo '  💬 "Let'\''s see what happens when we build VS Code with MDE'
-echo '      real-time protection on and no exclusions."'
+echo '      real-time protection on and no performance profiles."'
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
