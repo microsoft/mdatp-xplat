@@ -38,7 +38,7 @@ The demo tells a complete story: diagnose → identify → fix → verify — th
 
 | Script | Target Repo | Build System | Profiles Used | Duration |
 |---|---|---|---|---|
-| [`perf-profile-demo.sh`](perf-profile-demo.sh) | [microsoft/vscode](https://github.com/microsoft/vscode) | Node.js / TypeScript | `node`, `git`, `vscode`, `vscode-tree` | ~20 min |
+| [`perf-profile-demo.sh`](perf-profile-demo.sh) | [microsoft/vscode](https://github.com/microsoft/vscode) | Node.js / TypeScript | `node`, `git`, `xcode`, `vscode`, `vscode-tree` | ~20 min |
 | [`perf-profile-demo-xcode.sh`](perf-profile-demo-xcode.sh) | [microsoft/fluentui-apple](https://github.com/microsoft/fluentui-apple) | Xcode / Swift | `xcode`, `xcode-ide-tree`, `git` | ~10 min |
 
 ## Prerequisites
@@ -48,21 +48,24 @@ The demo tells a complete story: diagnose → identify → fix → verify — th
 - **Real-time protection enabled** (`mdatp health --field real_time_protection_enabled` should return `true`)
 - `sudo` access — most `mdatp` commands require elevated privileges (profile management, diagnostics, configuration). The script will prompt for your password on first use
 - Build tools for your chosen demo:
-  - **VS Code demo:** `node` (v22+), `git`, `jq`, `python3`
+  - **VS Code demo:** `node` (v22+), `git`, `jq`, `python3`, Xcode Command Line Tools — see the [official VS Code build prerequisites](https://github.com/microsoft/vscode/wiki/How-to-Contribute#prerequisites)
   - **Xcode demo:** Xcode (with command line tools), `git`, `jq`
 
 ### One-Time Setup
 
+The VS Code demo follows the official [How to Contribute](https://github.com/microsoft/vscode/wiki/How-to-Contribute) build instructions.
+
 ```bash
 # ── For the VS Code demo ──
 
-# Install build tools
+# Install build tools (Python + Xcode CLT also required for node-gyp)
 brew install node@22 git jq
+xcode-select --install   # if not already installed
 
-# Clone VS Code
+# Clone VS Code (pinned to a stable tag)
 git clone --depth 1 --branch 1.122.1 https://github.com/microsoft/vscode.git ~/demo/vscode
 cd ~/demo/vscode
-npm ci   # slow first time — don't count in demo
+npm install   # follows official VS Code build steps
 
 # ── For the Xcode demo ──
 
