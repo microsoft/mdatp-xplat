@@ -48,7 +48,7 @@ The demo tells a complete story: diagnose → identify → fix → verify — th
 - **Real-time protection enabled** (`mdatp health --field real_time_protection_enabled` should return `true`)
 - `sudo` access — most `mdatp` commands require elevated privileges (profile management, diagnostics, configuration). The script will prompt for your password on first use
 - Build tools for your chosen demo:
-  - **VS Code demo:** `node` (v18+), `yarn` (v1), `git`, `jq`, `python3`
+  - **VS Code demo:** `node` (v22+), `git`, `jq`, `python3`
   - **Xcode demo:** Xcode (with command line tools), `git`, `jq`
 
 ### One-Time Setup
@@ -57,12 +57,12 @@ The demo tells a complete story: diagnose → identify → fix → verify — th
 # ── For the VS Code demo ──
 
 # Install build tools
-brew install node yarn git jq
+brew install node@22 git jq
 
 # Clone VS Code
-git clone https://github.com/microsoft/vscode.git ~/demo/vscode
+git clone --depth 1 --branch 1.122.1 https://github.com/microsoft/vscode.git ~/demo/vscode
 cd ~/demo/vscode
-yarn install --frozen-lockfile   # slow first time — don't count in demo
+npm ci   # slow first time — don't count in demo
 
 # ── For the Xcode demo ──
 
@@ -224,7 +224,7 @@ The scripts use profiles relevant to the build being demonstrated. Here are some
 | `xcode` | Xcode.app, DerivedData, build intermediates, simulator runtimes |
 | `xcode-ide-tree` | Xcode IDE workspace caches and index files |
 | `dotnet-build` | `bin/`, `obj/`, NuGet caches, MSBuild temp files |
-| `node` | `node_modules/`, npm/yarn caches, V8 compilation cache |
+| `node` | `node_modules/`, npm caches, V8 compilation cache |
 | `git` | `.git/` objects, pack files, index operations |
 | `make-tree` | Make build output trees |
 | `rust` | `target/`, cargo registry, incremental compilation cache |
@@ -253,7 +253,7 @@ Results vary by hardware (Apple Silicon vs Intel), disk speed, and MDE version. 
 1. "A customer calls: 'MDE is slowing down our developer builds on macOS.'"
 2. "We use **hot event sources** — a built-in sensor diagnostic — to see which processes are flooding MDE with file system events."
 3. "Then **RTP statistics** tells us exactly how many files each process triggered scans on."
-4. "The diagnosis is clear: `node`, `tsc`, `yarn`, and `git` are the top offenders — all build tools."
+4. "The diagnosis is clear: `node`, `tsc`, `npm`, and `git` are the top offenders — all build tools."
 5. "The old way: manually craft exclusions, figure out file paths, deploy via MDM, test, iterate."
 6. "The new way: `mdatp performance-profiles apply node git vscode`. Done."
 7. "We ship **60+ profiles** — Xcode, .NET, Docker, Rust, Go, JetBrains, and more."

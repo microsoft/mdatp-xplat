@@ -20,7 +20,7 @@ set -euo pipefail
 #   - sudo access (for hot-event-sources collection)
 #
 # Note: The VS Code repo will be cloned automatically if not present.
-# Note: node, yarn, git, jq, and python3 will be offered for install via
+# Note: node, git, jq, and python3 will be offered for install via
 #       Homebrew if not already present.
 #
 # Learn more: https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles
@@ -159,7 +159,7 @@ if ! command -v brew &>/dev/null; then
 fi
 
 MISSING_TOOLS=()
-for cmd in node git jq python3 yarn; do
+for cmd in node git jq python3; do
     if ! command -v "$cmd" &>/dev/null; then
         MISSING_TOOLS+=("$cmd")
     fi
@@ -177,14 +177,17 @@ if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
         brew install "$cmd"
     done
 fi
-echo "   ✅ Build tools: node, yarn, git, jq, python3"
+echo "   ✅ Build tools: node, npm, git, jq, python3"
+
+# Pin to a stable release tag — VS Code main may require unreleased Node versions
+VSCODE_TAG="1.122.1"
 
 if [ ! -d "$REPO_DIR" ]; then
-    echo "   ⬇️  VS Code repo not found — cloning now..."
+    echo "   ⬇️  VS Code repo not found — cloning $VSCODE_TAG now..."
     mkdir -p "$(dirname "$REPO_DIR")"
-    git clone --depth 1 https://github.com/microsoft/vscode.git "$REPO_DIR"
-    echo "   📦 Running initial yarn install (this may take a few minutes)..."
-    cd "$REPO_DIR" && yarn install --frozen-lockfile 2>&1 | tail -3
+    git clone --depth 1 --branch "$VSCODE_TAG" https://github.com/microsoft/vscode.git "$REPO_DIR"
+    echo "   📦 Running initial npm ci (this may take a few minutes)..."
+    cd "$REPO_DIR" && npm ci 2>&1 | tail -3
 fi
 echo "   ✅ Repo: $REPO_DIR"
 echo ""
@@ -297,12 +300,12 @@ sudo mdatp config real-time-protection-statistics --value enabled >/dev/null 2>&
 # Start CPU monitoring
 CPU_PID=$(start_cpu_monitor "$RESULTS_DIR/phase1_cpu.log")
 
-echo "   ⏱️  Building VS Code (yarn compile)..."
+echo "   ⏱️  Building VS Code (npm run compile)..."
 cd "$REPO_DIR"
 BUILD_START=$(date +%s)
 
-run_with_spinner "📦 yarn install" yarn install --frozen-lockfile
-run_with_spinner "🔨 yarn compile" yarn compile
+run_with_spinner "📦 npm ci" npm ci
+run_with_spinner "🔨 npm run compile" npm run compile
 
 BUILD_END=$(date +%s)
 PHASE1_TIME=$((BUILD_END - BUILD_START))
@@ -350,7 +353,7 @@ sudo mdatp diagnostic hot-event-sources --time="$HOT_EVENT_DURATION" \
 HES_PID=$!
 
 # Run the build simultaneously so there's real activity to capture
-yarn compile 2>&1 | tail -3 &
+npm run compile 2>&1 | tail -3 &
 BUILD_PID=$!
 
 # Wait for both to finish
@@ -420,7 +423,7 @@ except Exception as e:
     print(f'   Error parsing: {e}')
 " 2>/dev/null || echo "   ⚠️  Could not parse RTP stats"
     echo ""
-    echo '   💬 "node, tsc, yarn, git — exactly what we expected.'
+    echo '   💬 "node, tsc, npm, git — exactly what we expected.'
     echo '       Now we know which processes need exclusions."'
 else
     echo "   ⚠️  No RTP stats captured. Enable with:"
@@ -509,12 +512,12 @@ sudo mdatp config real-time-protection-statistics --value enabled >/dev/null 2>&
 # Start CPU monitoring
 CPU_PID=$(start_cpu_monitor "$RESULTS_DIR/phase5_cpu.log")
 
-echo "   ⏱️  Building VS Code (yarn compile) WITH profiles..."
+echo "   ⏱️  Building VS Code (npm run compile) WITH profiles..."
 cd "$REPO_DIR"
 BUILD_START=$(date +%s)
 
-run_with_spinner "📦 yarn install" yarn install --frozen-lockfile
-run_with_spinner "🔨 yarn compile" yarn compile
+run_with_spinner "📦 npm ci" npm ci
+run_with_spinner "🔨 npm run compile" npm run compile
 
 BUILD_END=$(date +%s)
 PHASE5_TIME=$((BUILD_END - BUILD_START))
@@ -535,7 +538,7 @@ clean_build
 sudo mdatp diagnostic hot-event-sources --time="$HOT_EVENT_DURATION" \
     > /dev/null 2>&1 &
 HES_PID=$!
-yarn compile 2>&1 | tail -3 &
+npm run compile 2>&1 | tail -3 &
 BUILD_PID=$!
 wait "$HES_PID" 2>/dev/null || true
 wait "$BUILD_PID" 2>/dev/null || true
