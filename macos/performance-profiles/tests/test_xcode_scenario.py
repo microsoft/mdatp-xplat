@@ -5,6 +5,18 @@ from demo_framework.scenarios.xcode import XcodeScenario
 
 
 class TestXcodeScenario:
+    def test_xcode_scenario_uses_six_phase_template(self, tmp_path: Path):
+        scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
+        phase_names = [name for name, _ in scenario.orchestrator.phases]
+        assert phase_names == [
+            "Setup and Preflight",
+            "Baseline Build (No Profiles)",
+            "Analyze Baseline Telemetry",
+            "Apply Performance Profiles",
+            "Optimized Build (With Profiles)",
+            "Analyze Impact",
+        ]
+
     def test_setup_validates_tools_only(self, tmp_path: Path):
         scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
 
@@ -81,3 +93,7 @@ class TestXcodeScenario:
         assert ok is True
         mock_clone.assert_called_once_with(scenario.optimized_repo_path)
         mock_run.assert_called_once()
+
+    def test_analyze_baseline_telemetry_default_phase_returns_true(self, tmp_path: Path):
+        scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
+        assert scenario.analyze_baseline_telemetry() is True

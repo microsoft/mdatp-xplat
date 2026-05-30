@@ -14,6 +14,18 @@ class TestVSCodeScenarioBuildModes:
         scenario = VSCodeScenario(repo_path=tmp_path / "vscode")
         assert isinstance(scenario, ProfiledBuildScenario)
 
+    def test_vscode_scenario_uses_six_phase_template(self, tmp_path: Path):
+        scenario = VSCodeScenario(repo_path=tmp_path / "vscode")
+        phase_names = [name for name, _ in scenario.orchestrator.phases]
+        assert phase_names == [
+            "Setup and Preflight",
+            "Baseline Build (No Profiles)",
+            "Analyze Baseline Telemetry",
+            "Apply Performance Profiles",
+            "Optimized Build (With Profiles)",
+            "Analyze Impact",
+        ]
+
     def test_setup_installs_dependencies_by_default(self, tmp_path: Path):
         repo = tmp_path / "vscode"
         repo.mkdir()

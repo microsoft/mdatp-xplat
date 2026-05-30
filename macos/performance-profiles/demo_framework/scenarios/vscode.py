@@ -659,15 +659,6 @@ class VSCodeScenario(ProfiledBuildScenario):
             self._clear_state()
         return success
 
-    def _register_phases(self) -> None:
-        """Register demo phases with orchestrator."""
-        self.orchestrator.add_phase("Setup and Preflight", self.setup)
-        self.orchestrator.add_phase("Baseline Build (No Profiles)", self.build_baseline)
-        self.orchestrator.add_phase("Diagnostics Collection", self._collect_diagnostics)
-        self.orchestrator.add_phase("Apply Performance Profiles", self.apply_profiles)
-        self.orchestrator.add_phase("Optimized Build (With Profiles)", self.build_optimized)
-        self.orchestrator.add_phase("Analyze Impact", self.analyze_results)
-
     def setup(self) -> bool:
         """Prepare demo environment."""
         print_section("Setup")
@@ -807,11 +798,8 @@ class VSCodeScenario(ProfiledBuildScenario):
 
             if self._finalize_hot_event_collection(hes_proc, hes_existing, hot_before):
                 print_success(f"Hot event sources saved: {hot_before}")
-                self._select_profiles_for_phase4(hot_before)
             else:
                 print_info("Hot event sources were not captured during baseline compile")
-                self.recommended_profiles = self._get_available_profiles()
-                self.recommendation_source = "default"
 
             print_info(f"Baseline time: {elapsed:.1f}s, MDE avg CPU: {self.baseline['cpu']}%")
             print_success("Baseline build completed")
@@ -1005,21 +993,22 @@ class VSCodeScenario(ProfiledBuildScenario):
         print_success("Analysis complete")
         return True
 
-    def _collect_diagnostics(self) -> bool:
-        """Collect diagnostic data during baseline."""
-        print_section("Diagnostics")
+    def analyze_baseline_telemetry(self) -> bool:
+        """Common phase 3 implementation: analyze baseline telemetry and persist diagnostics."""
+        print_section("Analyze Baseline Telemetry")
         print_info("Collecting MDE performance data...")
-        if self.recommended_profiles:
-            print_info(
-                f"Using baseline-compile recommendations ({self.recommendation_source}): "
-                f"{', '.join(self.recommended_profiles)}"
-            )
+
+        hot_before = self.orchestrator.results_dir / "phase2_hot_events.json"
+        print_info("Step 1/3: Analyze baseline hot-event telemetry")
+        if hot_before.exists() and hot_before.stat().st_size > 0:
+            self._select_profiles_for_phase4(hot_before)
         else:
-            print_info("No baseline recommendations found; using default available profile set")
+            print_info("No baseline hot-event telemetry found; using default available profile set")
             self.recommended_profiles = self._get_available_profiles()
             self.recommendation_source = "default"
+            print_info(f"Phase 4 will apply ({self.recommendation_source}): {', '.join(self.recommended_profiles)}")
 
-        print_info("Step 1/2: Client Analyzer performance capture (optional)")
+        print_info("Step 2/3: Client Analyzer performance capture (optional)")
         analyzer_zip = self._run_client_analyzer()
         if analyzer_zip:
             self.baseline["client_analyzer"] = analyzer_zip
@@ -1027,7 +1016,7 @@ class VSCodeScenario(ProfiledBuildScenario):
         else:
             print_info("Client Analyzer not available (skipping)")
 
-        print_info("Step 2/2: MDE diagnostic bundle export")
+        print_info("Step 3/3: MDE diagnostic bundle export")
         
         try:
             result = subprocess.run(
@@ -1063,3 +1052,7 @@ class VSCodeScenario(ProfiledBuildScenario):
             )
             print_info("Could not collect full diagnostics (this is optional)")
             return True
+
+    def _collect_diagnostics(self) -> bool:
+        """Backward-compatible alias for tests still calling old method name."""
+        return self.analyze_baseline_telemetry()

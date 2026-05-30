@@ -49,9 +49,18 @@ pytest
 - **`ProfiledBuildScenario`** — Shared, data-driven scenario foundation for:
     - setup/tool checks
     - baseline profile removal and cleanliness guard
+    - baseline telemetry analysis phase (standardized phase 3)
     - profile apply flow (including admin-only handling)
     - optimized build execution
     - standardized analysis summary/reporting
+
+Standard phase template (used as the model for scenarios):
+1. Setup and Preflight
+2. Baseline Build (No Profiles)
+3. Analyze Baseline Telemetry
+4. Apply Performance Profiles
+5. Optimized Build (With Profiles)
+6. Analyze Impact
 
 #### `demo_framework/preflight.py`
 - **`Preflight`** — Check prerequisites (MDE, Node.js, Xcode CLT, build tools)
@@ -74,7 +83,7 @@ Scenarios are extensible demo templates. Each scenario:
 #### Available Scenarios
 
 - **`VSCodeScenario`** — Build microsoft/vscode, showing profile impact
-    - Migrated to the shared `ProfiledBuildScenario` foundation while keeping VS Code-specific diagnostics/recommendation phases
+    - Migrated to the shared `ProfiledBuildScenario` foundation while keeping VS Code-specific telemetry/recommendation logic in framework hooks
 - **`XcodeScenario`** — Build microsoft/fluentui-apple with Swift toolchain
     - Uses `swift build -c release` (compatible with current repo layout)
     - Includes a fresh `git clone` in baseline and optimized phases so `git` profile impact is measurable

@@ -44,9 +44,24 @@ class ProfiledBuildScenario(DemoScenario):
     def _register_phases(self) -> None:
         self.orchestrator.add_phase("Setup and Preflight", self.setup)
         self.orchestrator.add_phase("Baseline Build (No Profiles)", self.build_baseline)
+        self.orchestrator.add_phase("Analyze Baseline Telemetry", self.analyze_baseline_telemetry)
         self.orchestrator.add_phase("Apply Performance Profiles", self.apply_profiles)
         self.orchestrator.add_phase("Optimized Build (With Profiles)", self.build_optimized)
         self.orchestrator.add_phase("Analyze Impact", self.analyze_results)
+
+    def analyze_baseline_telemetry(self) -> bool:
+        """Common phase 3: analyze baseline telemetry and prepare profile recommendation."""
+        print_section("Analyze Baseline Telemetry")
+        if not self.recommended_profiles:
+            self.recommended_profiles = list(self.config.profiles or [])
+            self.recommendation_source = "default"
+        print_info(f"Phase 4 will apply ({self.recommendation_source}): {', '.join(self.recommended_profiles)}")
+        return True
+
+    def _collect_diagnostics(self) -> bool:
+        """Backward-compatible alias for old tests/callers."""
+        return self.analyze_baseline_telemetry()
+        return True
 
     def _fresh_clone(self, target: Path) -> bool:
         """Clone a fresh copy of repository for a timed phase."""
