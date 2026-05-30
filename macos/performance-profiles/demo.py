@@ -63,6 +63,13 @@ Examples:
         help="Require XMDE Client Analyzer as a preflight prerequisite (prompt to install if missing)"
     )
 
+    parser.add_argument(
+        "--hot-events-analysis",
+        choices=["prompt", "python", "ghcp", "both"],
+        default="prompt",
+        help="Hot-event analysis mode for vscode scenario (default: prompt)"
+    )
+
     args = parser.parse_args()
 
     if args.scenario is None:
@@ -88,10 +95,13 @@ Examples:
         scenario = VSCodeScenario(
             repo_path=args.repo,
             include_install_in_build=args.include_install,
+            hot_events_analysis_mode=args.hot_events_analysis,
         )
     elif args.scenario == "xcode":
         if args.include_install:
             print_info("--include-install is ignored for xcode scenario")
+        if args.hot_events_analysis != "prompt":
+            print_info("--hot-events-analysis is ignored for xcode scenario")
         scenario = XcodeScenario(repo_path=args.repo)
     else:
         print_error(f"Unknown scenario: {args.scenario}")

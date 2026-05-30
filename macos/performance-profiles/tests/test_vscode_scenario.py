@@ -210,3 +210,31 @@ class TestVSCodeScenarioBuildModes:
         state = scenario.state_file.read_text()
         assert "baseline_complete" in state
         assert "baseline_client_analyzer" in state
+
+    def test_load_hot_event_entries_normalizes_counts(self, tmp_path: Path):
+        repo = tmp_path / "vscode"
+        repo.mkdir()
+        scenario = VSCodeScenario(repo_path=repo)
+
+        hot = tmp_path / "hot.json"
+        hot.write_text(
+            '{"eventSource": ['
+            '{"path":"/bin/node","authCount":"10","notifyCount":"5"},'
+            '{"path":"/bin/git","authCount":2,"notifyCount":3}'
+            ']}'
+        )
+
+        entries = scenario._load_hot_event_entries(hot)
+        assert len(entries) == 2
+        assert entries[0]["total"] >= entries[1]["total"]
+        assert entries[0]["auth"] + entries[0]["notify"] == entries[0]["total"]
+
+    def test_has_ghcp_cli_true_when_gh_copilot_help_works(self, tmp_path: Path):
+        repo = tmp_path / "vscode"
+        repo.mkdir()
+        scenario = VSCodeScenario(repo_path=repo)
+
+        with patch("demo_framework.scenarios.vscode.shutil.which", return_value="/usr/bin/gh"):
+            with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0)
+                assert scenario._has_ghcp_cli() is True

@@ -20,7 +20,12 @@ from ..ui import print_section, print_success, print_error, print_info
 class VSCodeScenario(DemoScenario):
     """Demo scenario for building Microsoft VS Code."""
 
-    def __init__(self, repo_path: Optional[Path] = None, include_install_in_build: bool = False):
+    def __init__(
+        self,
+        repo_path: Optional[Path] = None,
+        include_install_in_build: bool = False,
+        hot_events_analysis_mode: str = "prompt",
+    ):
         config = ScenarioConfig(
             name="Microsoft VS Code Build Demo",
             description="End-to-end demo showing MDE impact on VS Code compilation",
@@ -32,6 +37,7 @@ class VSCodeScenario(DemoScenario):
         )
         super().__init__(config)
         self.include_install_in_build = include_install_in_build
+        self.hot_events_analysis_mode = hot_events_analysis_mode
         self.admin_only = False
         self.hot_event_duration = 60
         self.analyzer_dir = Path.home() / "demo" / "analyzer" / "XMDEClientAnalyzerBinary"
@@ -39,6 +45,141 @@ class VSCodeScenario(DemoScenario):
         self.baseline = {"time": 0.0, "cpu": "N/A", "scans": "N/A", "client_analyzer": None}
         self.optimized = {"time": 0.0, "cpu": "N/A", "scans": "N/A"}
         self._register_phases()
+
+    def _to_int(self, value):
+        """Best-effort int conversion for mixed numeric JSON fields."""
+        try:
+            return int(value)
+        except Exception:
+            try:
+                return int(float(value))
+            except Exception:
+                return 0
+
+    def _load_hot_event_entries(self, path: Path):
+        """Load and normalize hot-event-source entries from JSON artifact."""
+        if not path.exists() or path.stat().st_size == 0:
+            return []
+        try:
+            data = json.loads(path.read_text())
+            entries = data.get("eventSource", [])
+            normalized = []
+            for e in entries:
+                if not isinstance(e, dict):
+                    continue
+                auth = self._to_int(e.get("authCount", 0))
+                notify = self._to_int(e.get("notifyCount", 0))
+                normalized.append(
+                    {
+                        "path": e.get("path", "?"),
+                        "auth": auth,
+                        "notify": notify,
+                        "total": auth + notify,
+                    }
+                )
+            normalized.sort(key=lambda x: x["total"], reverse=True)
+            return normalized
+        except Exception:
+            return []
+
+    def _hot_event_python_summary(self, before: Path, after: Optional[Path] = None):
+        """Generate local Python summary for hot event sources."""
+        before_entries = self._load_hot_event_entries(before)
+        if not before_entries:
+            print_info("Hot event source analysis unavailable (before file missing/empty)")
+            return
+
+        print_info("Hot event source analysis (Python):")
+        print("   Top 10 sources (before profiles):")
+        for e in before_entries[:10]:
+            print(
+                f"   {e['total']:>7} total | auth={e['auth']:>6} notify={e['notify']:>6} | {e['path']}"
+            )
+
+        b_auth = sum(e["auth"] for e in before_entries)
+        b_notify = sum(e["notify"] for e in before_entries)
+        print(f"   Aggregate before: auth={b_auth} notify={b_notify} total={b_auth + b_notify}")
+
+        if after and after.exists():
+            after_entries = self._load_hot_event_entries(after)
+            if after_entries:
+                a_auth = sum(e["auth"] for e in after_entries)
+                a_notify = sum(e["notify"] for e in after_entries)
+                print(f"   Aggregate after:  auth={a_auth} notify={a_notify} total={a_auth + a_notify}")
+                delta = (a_auth + a_notify) - (b_auth + b_notify)
+                print(f"   Delta (after-before): {delta:+d} events")
+
+    def _has_ghcp_cli(self):
+        """Return True when GitHub CLI Copilot command appears available."""
+        try:
+            if shutil.which("gh") is None:
+                return False
+            res = subprocess.run(
+                ["gh", "copilot", "--help"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            return res.returncode == 0
+        except Exception:
+            return False
+
+    def _hot_event_ghcp_analysis(self, before: Path, after: Optional[Path] = None):
+        """Ask GitHub Copilot CLI for a textual interpretation of hot-event data."""
+        if not self._has_ghcp_cli():
+            print_info("GH Copilot CLI not detected; skipping GHCP analysis")
+            return
+
+        before_entries = self._load_hot_event_entries(before)
+        if not before_entries:
+            print_info("GHCP analysis skipped (before hot-event file missing/empty)")
+            return
+
+        before_top = before_entries[:8]
+        before_text = "\n".join(
+            [
+                f"- total={e['total']} auth={e['auth']} notify={e['notify']} path={e['path']}"
+                for e in before_top
+            ]
+        )
+
+        after_text = "(not available)"
+        if after and after.exists():
+            after_entries = self._load_hot_event_entries(after)
+            after_top = after_entries[:8]
+            if after_top:
+                after_text = "\n".join(
+                    [
+                        f"- total={e['total']} auth={e['auth']} notify={e['notify']} path={e['path']}"
+                        for e in after_top
+                    ]
+                )
+
+        prompt = (
+            "Analyze these MDE hot event source summaries from a VS Code build. "
+            "Explain likely hotspots and which performance profiles matter most.\n\n"
+            f"Before profiles:\n{before_text}\n\nAfter profiles:\n{after_text}\n"
+        )
+
+        print_info("Requesting GH Copilot CLI analysis of hot events...")
+        try:
+            cmd = ["gh", "copilot", "suggest", "-t", "shell", prompt]
+            res = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                print("   GHCP analysis:")
+                for line in res.stdout.strip().splitlines()[:40]:
+                    print(f"   {line}")
+            else:
+                print_info("GHCP analysis command did not return usable output")
+        except Exception as e:
+            print_info(f"GHCP analysis failed: {e}")
 
     def _clean_build(self):
         """Clean build artifacts to keep before/after runs comparable."""
@@ -139,6 +280,9 @@ class VSCodeScenario(DemoScenario):
         if os.environ.get("PYTEST_CURRENT_TEST"):
             return False
         try:
+            print_info(
+                f"Collecting hot event sources (~{self.hot_event_duration}s) while running an additional compile..."
+            )
             self._clean_build()
 
             hes_proc = subprocess.Popen(
@@ -547,6 +691,32 @@ class VSCodeScenario(DemoScenario):
         if self.baseline.get("client_analyzer"):
             print(f"   📊 Client Analyzer:       {self.baseline.get('client_analyzer')}")
 
+        before_hot = self.orchestrator.results_dir / "phase2_hot_events.json"
+        after_hot = self.orchestrator.results_dir / "phase5_hot_events.json"
+
+        mode = self.hot_events_analysis_mode
+        if mode == "prompt":
+            has_ghcp = self._has_ghcp_cli()
+            print_info("Hot event analysis mode:")
+            print("   1) Python (local parsing)")
+            if has_ghcp:
+                print("   2) GHCP CLI")
+                print("   3) Both")
+                choice = input("   Select [1/2/3] (default: 1): ").strip()
+                if choice == "2":
+                    mode = "ghcp"
+                elif choice == "3":
+                    mode = "both"
+                else:
+                    mode = "python"
+            else:
+                mode = "python"
+
+        if mode in ("python", "both"):
+            self._hot_event_python_summary(before_hot, after_hot)
+        if mode in ("ghcp", "both"):
+            self._hot_event_ghcp_analysis(before_hot, after_hot)
+
         print_success("Analysis complete")
         return True
 
@@ -554,6 +724,7 @@ class VSCodeScenario(DemoScenario):
         """Collect diagnostic data during baseline."""
         print_section("Diagnostics")
         print_info("Collecting MDE performance data...")
+        print_info("Step 1/3: Hot event sources capture (this may take 1-5 minutes)")
 
         hot_before = self.orchestrator.results_dir / "phase2_hot_events.json"
         if self._collect_hot_event_sources(hot_before):
@@ -561,12 +732,15 @@ class VSCodeScenario(DemoScenario):
         else:
             print_info("Hot event sources were not captured")
 
+        print_info("Step 2/3: Client Analyzer performance capture (optional)")
         analyzer_zip = self._run_client_analyzer()
         if analyzer_zip:
             self.baseline["client_analyzer"] = analyzer_zip
             print_success(f"Client Analyzer report: {analyzer_zip}")
         else:
             print_info("Client Analyzer not available (skipping)")
+
+        print_info("Step 3/3: MDE diagnostic bundle export")
         
         try:
             result = subprocess.run(

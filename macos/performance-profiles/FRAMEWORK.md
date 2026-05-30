@@ -193,6 +193,11 @@ python3 demo.py vscode --include-install
 # Require Client Analyzer in preflight (auto-prompt install if missing)
 python3 demo.py vscode --require-client-analyzer
 
+# Choose hot-event analysis mode directly
+python3 demo.py vscode --hot-events-analysis python
+python3 demo.py vscode --hot-events-analysis ghcp
+python3 demo.py vscode --hot-events-analysis both
+
 # Run Xcode demo directly
 python3 demo.py xcode
 
