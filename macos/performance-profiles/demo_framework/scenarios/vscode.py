@@ -14,11 +14,12 @@ import subprocess
 import threading
 import time
 
-from .base import DemoScenario, ScenarioConfig
+from .base import ScenarioConfig
+from .profiled_build import ProfiledBuildScenario
 from ..ui import print_section, print_success, print_error, print_info
 
 
-class VSCodeScenario(DemoScenario):
+class VSCodeScenario(ProfiledBuildScenario):
     """Demo scenario for building Microsoft VS Code."""
 
     def __init__(
@@ -36,7 +37,13 @@ class VSCodeScenario(DemoScenario):
             profiles=["node", "git", "vscode", "vscode-tree"],
             estimated_duration_minutes=60
         )
-        super().__init__(config)
+        super().__init__(
+            config=config,
+            build_command=["npm", "run", "compile"],
+            tool_checks=[],
+            repo_validation_file=None,
+            clone_in_timed_phases=False,
+        )
         self.include_install_in_build = include_install_in_build
         self.hot_events_analysis_mode = hot_events_analysis_mode
         self.admin_only = False
@@ -45,9 +52,8 @@ class VSCodeScenario(DemoScenario):
         self.state_file = self.orchestrator.results_dir / ".vscode-demo-state.json"
         self.baseline = {"time": 0.0, "cpu": "N/A", "scans": "N/A", "client_analyzer": None}
         self.optimized = {"time": 0.0, "cpu": "N/A", "scans": "N/A"}
-        self.recommended_profiles: Optional[List[str]] = None
+        self.recommended_profiles = None
         self.recommendation_source = "default"
-        self._register_phases()
 
     def _to_int(self, value):
         """Best-effort int conversion for mixed numeric JSON fields."""
@@ -652,39 +658,6 @@ class VSCodeScenario(DemoScenario):
         if success:
             self._clear_state()
         return success
-
-    def _get_profile_state(self):
-        """Return (admin_only, applied_profiles) from mdatp list-applied output."""
-        try:
-            result = subprocess.run(
-                ["sudo", "mdatp", "performance-profiles", "list-applied"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-            output = result.stdout or ""
-            lines = [line.strip() for line in output.splitlines() if line.strip()]
-
-            admin_only = any(
-                line.lower().startswith("merge policy:") and "admin" in line.lower()
-                for line in lines
-            )
-
-            applied = set()
-            for line in lines:
-                lower = line.lower()
-                if lower.startswith("merge policy:"):
-                    continue
-                if line in ("---", "====================================="):
-                    continue
-                if lower.startswith("no applied performance profiles"):
-                    continue
-                applied.add(line.split()[0])
-
-            return admin_only, applied
-        except Exception:
-            return False, set()
 
     def _register_phases(self) -> None:
         """Register demo phases with orchestrator."""

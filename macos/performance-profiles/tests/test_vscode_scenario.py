@@ -3,11 +3,16 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from demo_framework.scenarios.profiled_build import ProfiledBuildScenario
 from demo_framework.scenarios.vscode import VSCodeScenario
 
 
 class TestVSCodeScenarioBuildModes:
     """Validate compile-only vs install+compile behavior."""
+
+    def test_vscode_scenario_uses_profiled_build_base(self, tmp_path: Path):
+        scenario = VSCodeScenario(repo_path=tmp_path / "vscode")
+        assert isinstance(scenario, ProfiledBuildScenario)
 
     def test_setup_installs_dependencies_by_default(self, tmp_path: Path):
         repo = tmp_path / "vscode"

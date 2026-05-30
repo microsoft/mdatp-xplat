@@ -45,6 +45,14 @@ pytest
 - **`CommandRunner`** — Execute shell commands with output capture
 - **`PhaseStatus`/`PhaseResult`** — Track phase execution state
 
+#### `demo_framework/scenarios/profiled_build.py`
+- **`ProfiledBuildScenario`** — Shared, data-driven scenario foundation for:
+    - setup/tool checks
+    - baseline profile removal and cleanliness guard
+    - profile apply flow (including admin-only handling)
+    - optimized build execution
+    - standardized analysis summary/reporting
+
 #### `demo_framework/preflight.py`
 - **`Preflight`** — Check prerequisites (MDE, Node.js, Xcode CLT, build tools)
 - Interactive installation prompts (matching UX of bash version)
@@ -66,6 +74,7 @@ Scenarios are extensible demo templates. Each scenario:
 #### Available Scenarios
 
 - **`VSCodeScenario`** — Build microsoft/vscode, showing profile impact
+    - Migrated to the shared `ProfiledBuildScenario` foundation while keeping VS Code-specific diagnostics/recommendation phases
 - **`XcodeScenario`** — Build microsoft/fluentui-apple with Swift toolchain
     - Uses `swift build -c release` (compatible with current repo layout)
     - Includes a fresh `git clone` in baseline and optimized phases so `git` profile impact is measurable
