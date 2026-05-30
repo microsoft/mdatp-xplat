@@ -46,7 +46,7 @@ The demo tells a complete story: diagnose → identify → fix → verify — th
 - **macOS** with [Microsoft Defender for Endpoint](https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-endpoint-mac) installed
 - MDE version that supports performance profiles (check `mdatp performance-profiles list-available`)
 - **Real-time protection enabled** (`mdatp health --field real_time_protection_enabled` should return `true`)
-- `sudo` access (required for `hot-event-sources` diagnostic collection)
+- `sudo` access — most `mdatp` commands require elevated privileges (profile management, diagnostics, configuration). The script will prompt for your password on first use
 - Build tools for your chosen demo:
   - **VS Code demo:** `node` (v18+), `yarn` (v1), `git`, `jq`, `python3`
   - **Xcode demo:** Xcode (with command line tools), `git`, `jq`

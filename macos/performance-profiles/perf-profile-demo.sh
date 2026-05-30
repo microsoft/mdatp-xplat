@@ -45,6 +45,13 @@ echo ""
 # ── Preflight checks ──────────────────────────────────────────────
 echo "🔍 Preflight checks..."
 
+# Validate sudo access upfront so we don't get password prompts mid-demo
+if ! sudo -v 2>/dev/null; then
+    echo "❌ This script requires sudo access for mdatp commands."
+    echo "   Please run with a user that has sudo privileges."
+    exit 1
+fi
+
 if ! command -v mdatp &>/dev/null; then
     echo "❌ mdatp not found. Install MDE: https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-endpoint-mac"
     exit 1
@@ -61,7 +68,7 @@ echo "   ✅ Real-time protection: ON"
 VERSION=$(mdatp health --field app_version 2>/dev/null || echo "unknown")
 echo "   ✅ MDE version: $VERSION"
 
-PROFILE_COUNT=$(mdatp performance-profiles list-available 2>/dev/null | grep -v '^=' | grep -v '^-' | grep -v '^$' | wc -l | tr -d ' ')
+PROFILE_COUNT=$(sudo mdatp performance-profiles list-available 2>/dev/null | grep -v '^=' | grep -v '^-' | grep -v '^$' | wc -l | tr -d ' ')
 if [ "$PROFILE_COUNT" = "0" ]; then
     echo "❌ Performance profiles not available in this MDE version."
     echo "   Update to the latest MDE version."
@@ -95,11 +102,11 @@ if [ -f "$STATE_FILE" ]; then
     fi
 fi
 
-MERGE_POLICY=$(mdatp performance-profiles list-applied 2>/dev/null | grep -i 'Merge policy' | head -1 || echo "")
+MERGE_POLICY=$(sudo mdatp performance-profiles list-applied 2>/dev/null | grep -i 'Merge policy' | head -1 || echo "")
 ADMIN_ONLY=false
 if echo "$MERGE_POLICY" | grep -qi 'admin'; then
     ADMIN_ONLY=true
-    APPLIED_OUTPUT=$(mdatp performance-profiles list-applied 2>/dev/null)
+    APPLIED_OUTPUT=$(sudo mdatp performance-profiles list-applied 2>/dev/null)
 
     if [ "$RESUME" = true ]; then
         # Resuming — all profiles should now be deployed by the admin
@@ -186,7 +193,7 @@ echo ""
 if [ "$RESUME" = false ]; then
     if [ "$ADMIN_ONLY" = false ]; then
         for profile in $PROFILES; do
-            mdatp performance-profiles remove --name "$profile" &>/dev/null || true
+            sudo mdatp performance-profiles remove --name "$profile" &>/dev/null || true
         done
         echo "   🧹 All test profiles removed (clean baseline)"
     else
@@ -230,19 +237,26 @@ calc_avg_cpu() {
 # Spinner for long-running commands — shows elapsed time so demo doesn't look hung
 run_with_spinner() {
     local label="$1"; shift
-    local pid elapsed
-    "$@" >/dev/null 2>&1 &
+    local log_file="${RESULTS_DIR:-/tmp}/.spinner_$$.log"
+    local pid elapsed ret
+    "$@" >"$log_file" 2>&1 &
     pid=$!
     elapsed=0
-    printf "   %s %ds..." "$label" "$elapsed"
+    printf "   %s 0s..." "$label"
     while kill -0 "$pid" 2>/dev/null; do
         sleep 5
         elapsed=$((elapsed + 5))
         printf "\r   %s %ds..." "$label" "$elapsed"
     done
-    wait "$pid"
-    local ret=$?
-    printf "\r   %s done (%ds)\n" "$label" "$elapsed"
+    wait "$pid" || true
+    ret=$?
+    if [ "$ret" -eq 0 ]; then
+        printf "\r   %s done (%ds)     \n" "$label" "$elapsed"
+    else
+        printf "\r   %s FAILED (exit %d, %ds)\n" "$label" "$ret" "$elapsed"
+        tail -5 "$log_file" 2>/dev/null | sed 's/^/   ⚠️  /'
+    fi
+    rm -f "$log_file"
     return $ret
 }
 
@@ -278,7 +292,7 @@ echo ""
 clean_build
 
 # Enable RTP statistics collection
-mdatp config real-time-protection-statistics --value enabled >/dev/null 2>&1 || true
+sudo mdatp config real-time-protection-statistics --value enabled >/dev/null 2>&1 || true
 
 # Start CPU monitoring
 CPU_PID=$(start_cpu_monitor "$RESULTS_DIR/phase1_cpu.log")
@@ -298,7 +312,7 @@ kill "$CPU_PID" 2>/dev/null; wait "$CPU_PID" 2>/dev/null || true
 PHASE1_CPU=$(calc_avg_cpu "$RESULTS_DIR/phase1_cpu.log")
 
 # Capture RTP statistics snapshot
-mdatp diagnostic real-time-protection-statistics --output json \
+sudo mdatp diagnostic real-time-protection-statistics --output json \
     > "$RESULTS_DIR/phase1_rtp_stats.json" 2>/dev/null || true
 
 echo ""
@@ -459,7 +473,7 @@ if [ "$ADMIN_ONLY" = true ]; then
     fi
 else
     for profile in $PROFILES; do
-        if mdatp performance-profiles apply --name "$profile" 2>/dev/null; then
+        if sudo mdatp performance-profiles apply --name "$profile" 2>/dev/null; then
             echo "      ✅ $profile"
         else
             echo "      ⚠️  $profile (may not be available in this MDE version)"
@@ -469,7 +483,7 @@ fi
 echo ""
 
 echo "   📋 Active profiles:"
-mdatp performance-profiles list-active 2>/dev/null || echo "   (check manually)"
+sudo mdatp performance-profiles list-active 2>/dev/null || echo "   (check manually)"
 echo ""
 
 echo '   💬 "That'\''s it. Four commands. No manual path hunting,'
@@ -490,7 +504,7 @@ echo ""
 clean_build
 
 # Reset RTP stats for clean comparison
-mdatp config real-time-protection-statistics --value enabled >/dev/null 2>&1 || true
+sudo mdatp config real-time-protection-statistics --value enabled >/dev/null 2>&1 || true
 
 # Start CPU monitoring
 CPU_PID=$(start_cpu_monitor "$RESULTS_DIR/phase5_cpu.log")
@@ -510,7 +524,7 @@ kill "$CPU_PID" 2>/dev/null; wait "$CPU_PID" 2>/dev/null || true
 PHASE5_CPU=$(calc_avg_cpu "$RESULTS_DIR/phase5_cpu.log")
 
 # Capture new RTP statistics
-mdatp diagnostic real-time-protection-statistics --output json \
+sudo mdatp diagnostic real-time-protection-statistics --output json \
     > "$RESULTS_DIR/phase5_rtp_stats.json" 2>/dev/null || true
 
 # ── Re-collect hot event sources for comparison ──
