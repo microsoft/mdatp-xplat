@@ -51,6 +51,20 @@ fi
 echo "   ✅ Real-time protection: ON"
 echo "   ✅ MDE version: $(mdatp health --field app_version 2>/dev/null || echo '?')"
 
+PROFILE_MODE=$(mdatp performance-profiles list-available 2>/dev/null | grep -i 'mode' | head -1 || echo "")
+if echo "$PROFILE_MODE" | grep -qi 'admin'; then
+    echo "❌ Performance profiles are in admin-only mode."
+    echo "   Your administrator must apply profiles via MDM or mdatp CLI with elevated privileges."
+    echo ""
+    echo "   Ask your admin to run:"
+    for p in $PROFILES; do
+        echo "     sudo mdatp performance-profiles apply --name $p"
+    done
+    echo ""
+    echo "   Once the profiles are applied, re-run this script to verify the improvement."
+    exit 1
+fi
+
 if [ ! -d "$REPO_DIR" ]; then
     echo "   ⬇️  Repo not found — cloning now..."
     mkdir -p "$(dirname "$REPO_DIR")"
@@ -66,7 +80,7 @@ echo "   ✅ Xcode: $(xcodebuild -version 2>/dev/null | head -1 || echo '?')"
 echo ""
 
 # Remove active profiles for clean baseline
-for p in $PROFILES; do mdatp performance-profiles remove "$p" 2>/dev/null || true; done
+for p in $PROFILES; do mdatp performance-profiles remove --name "$p" 2>/dev/null || true; done
 echo "   🧹 Test profiles removed (clean baseline)"
 echo ""
 
@@ -119,7 +133,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 for p in $PROFILES; do
-    if mdatp performance-profiles apply "$p" 2>/dev/null; then
+    if mdatp performance-profiles apply --name "$p" 2>/dev/null; then
         echo "   ✅ $p"
     else
         echo "   ⚠️  $p (not available)"

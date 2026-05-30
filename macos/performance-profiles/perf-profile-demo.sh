@@ -68,6 +68,21 @@ if [ "$PROFILE_COUNT" = "0" ]; then
 fi
 echo "   ✅ Profiles available: $PROFILE_COUNT"
 
+PROFILE_MODE=$(mdatp performance-profiles list-available 2>/dev/null | grep -i 'mode' | head -1 || echo "")
+if echo "$PROFILE_MODE" | grep -qi 'admin'; then
+    echo "❌ Performance profiles are in admin-only mode."
+    echo "   Your administrator must apply profiles via MDM or mdatp CLI with elevated privileges."
+    echo ""
+    echo "   Ask your admin to run:"
+    for profile in $PROFILES; do
+        echo "     sudo mdatp performance-profiles apply --name $profile"
+    done
+    echo ""
+    echo "   Once the profiles are applied, re-run this script to verify the improvement."
+    exit 1
+fi
+echo "   ✅ Profile mode: local (user can apply/remove)"
+
 if ! command -v brew &>/dev/null; then
     echo "❌ Homebrew not found. Install it: https://brew.sh"
     exit 1
@@ -106,7 +121,7 @@ echo ""
 
 # Remove any active profiles for clean baseline
 for profile in $PROFILES; do
-    mdatp performance-profiles remove "$profile" 2>/dev/null || true
+    mdatp performance-profiles remove --name "$profile" 2>/dev/null || true
 done
 echo "   🧹 All test profiles removed (clean baseline)"
 echo ""
@@ -321,7 +336,7 @@ echo ""
 
 echo "   ✅ Applying profiles for our build stack:"
 for profile in $PROFILES; do
-    if mdatp performance-profiles apply "$profile" 2>/dev/null; then
+    if mdatp performance-profiles apply --name "$profile" 2>/dev/null; then
         echo "      ✅ $profile"
     else
         echo "      ⚠️  $profile (may not be available in this MDE version)"
