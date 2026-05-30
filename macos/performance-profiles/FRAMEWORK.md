@@ -4,6 +4,18 @@ The new Python-based demo framework replaces the bash script with a more extensi
 
 ## Quick Start
 
+### Recommended: Bootstrap Script
+
+```bash
+./perf-profile-demo.sh
+```
+
+The bootstrap script will:
+- create and activate `venv` if needed
+- install/update dependencies from `requirements.txt`
+- prompt for scenario selection (`vscode` or `xcode`)
+- launch the Python framework
+
 ### Install Dependencies
 
 ```bash
@@ -115,6 +127,7 @@ def test_orchestrator_adds_phases():
 ```
 macos/performance-profiles/
 ├── demo.py                          # Main entry point
+├── perf-profile-demo.sh             # Shell bootstrap launcher (recommended)
 ├── requirements.txt                 # Python dependencies
 ├── pytest.ini                       # Pytest configuration
 ├── README.md                        # Documentation
@@ -137,7 +150,6 @@ macos/performance-profiles/
 │   ├── test_preflight.py
 │   └── test_scenarios.py           # (Optional extension)
 │
-├── perf-profile-demo.sh            # (Legacy) Bash version
 └── README.md                       # (Legacy) Original docs
 ```
 
