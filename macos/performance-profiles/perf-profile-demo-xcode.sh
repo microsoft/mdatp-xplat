@@ -28,6 +28,7 @@ RESULTS_DIR="$HOME/demo/results"
 PROFILES="xcode xcode-ide-tree git"
 
 mkdir -p "$RESULTS_DIR"
+STATE_FILE="$RESULTS_DIR/.xcode-demo-state"
 
 echo "╔═══════════════════════════════════════════════════════════════╗"
 echo "║   MDE Performance Profiles — Quick Xcode Demo               ║"
@@ -51,31 +52,77 @@ fi
 echo "   ✅ Real-time protection: ON"
 echo "   ✅ MDE version: $(mdatp health --field app_version 2>/dev/null || echo '?')"
 
+# ── Resume detection ──────────────────────────────────────────────
+RESUME=false
+if [ -f "$STATE_FILE" ]; then
+    source "$STATE_FILE"
+    if [ "${BASELINE_COMPLETE:-}" = "true" ]; then
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "  📋 Previous run detected — baseline already complete."
+        printf "     Baseline build time: %d seconds\n" "${SAVED_PHASE1_TIME:-0}"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        read -rp "  Continue to comparison build, or restart from scratch? [C/r] " resume_answer
+        if [[ "$resume_answer" =~ ^[Rr] ]]; then
+            echo "  🔄 Restarting from scratch..."
+            rm -f "$STATE_FILE"
+        else
+            RESUME=true
+            PHASE1_TIME="${SAVED_PHASE1_TIME:-0}"
+            echo "  ▶️  Resuming — skipping to comparison build..."
+        fi
+        echo ""
+    fi
+fi
+
 MERGE_POLICY=$(mdatp performance-profiles list-applied 2>/dev/null | grep -i 'Merge policy' | head -1 || echo "")
 ADMIN_ONLY=false
 if echo "$MERGE_POLICY" | grep -qi 'admin'; then
     ADMIN_ONLY=true
     APPLIED_OUTPUT=$(mdatp performance-profiles list-applied 2>/dev/null)
-    MISSING_PROFILES=()
-    for p in $PROFILES; do
-        if ! echo "$APPLIED_OUTPUT" | grep -q "^${p} "; then
-            MISSING_PROFILES+=("$p")
-        fi
-    done
-    if [ ${#MISSING_PROFILES[@]} -gt 0 ]; then
-        echo "❌ Performance profiles are in admin-only mode."
-        echo "   The following profiles are not yet deployed: ${MISSING_PROFILES[*]}"
-        echo ""
-        echo "   Ask your IT admin to deploy these profiles via MDM (Intune, JAMF, etc.)."
-        echo "   Missing profiles:"
-        for p in "${MISSING_PROFILES[@]}"; do
-            echo "     - $p"
+
+    if [ "$RESUME" = true ]; then
+        # Resuming — all profiles should now be deployed by the admin
+        MISSING_PROFILES=()
+        for p in $PROFILES; do
+            if ! echo "$APPLIED_OUTPUT" | grep -q "^${p} "; then
+                MISSING_PROFILES+=("$p")
+            fi
         done
-        echo ""
-        echo "   Once all profiles are deployed, re-run this script."
-        exit 1
+        if [ ${#MISSING_PROFILES[@]} -gt 0 ]; then
+            echo "⚠️  Admin-only mode — some profiles are still not deployed:"
+            for p in "${MISSING_PROFILES[@]}"; do
+                echo "     - $p"
+            done
+            echo ""
+            echo "   Ask your IT admin to deploy these via MDM, then re-run."
+            exit 1
+        fi
+        echo "   ✅ Profile mode: admin-only (all profiles deployed — ready for comparison)"
+    else
+        # First run — check that NO profiles are applied (clean baseline)
+        APPLIED_PROFILES=()
+        for p in $PROFILES; do
+            if echo "$APPLIED_OUTPUT" | grep -q "^${p} "; then
+                APPLIED_PROFILES+=("$p")
+            fi
+        done
+        if [ ${#APPLIED_PROFILES[@]} -gt 0 ]; then
+            echo "⚠️  Performance profiles are in admin-only mode."
+            echo "   The following profiles are currently applied: ${APPLIED_PROFILES[*]}"
+            echo ""
+            echo "   This demo needs a clean baseline (no profiles) for the first build."
+            echo "   Ask your IT admin to remove these profiles via MDM (Intune, JAMF, etc.):"
+            for p in "${APPLIED_PROFILES[@]}"; do
+                echo "     - $p"
+            done
+            echo ""
+            echo "   Once removed, re-run this script."
+            exit 1
+        fi
+        echo "   ✅ Profile mode: admin-only (no profiles applied — ready for baseline)"
     fi
-    echo "   ✅ Profile mode: admin-only (all required profiles are deployed)"
 else
     echo "   ✅ Profile mode: merge (user can apply/remove locally)"
 fi
@@ -94,18 +141,22 @@ fi
 echo "   ✅ Xcode: $(xcodebuild -version 2>/dev/null | head -1 || echo '?')"
 echo ""
 
-# Remove active profiles for clean baseline (skip in admin-only mode)
-if [ "$ADMIN_ONLY" = false ]; then
-    for p in $PROFILES; do mdatp performance-profiles remove --name "$p" &>/dev/null || true; done
-    echo "   🧹 Test profiles removed (clean baseline)"
-else
-    echo "   ℹ️  Admin-only mode — skipping profile removal (managed via MDM)"
+# Remove active profiles for clean baseline (skip on resume or admin-only)
+if [ "$RESUME" = false ]; then
+    if [ "$ADMIN_ONLY" = false ]; then
+        for p in $PROFILES; do mdatp performance-profiles remove --name "$p" &>/dev/null || true; done
+        echo "   🧹 Test profiles removed (clean baseline)"
+    else
+        echo "   ℹ️  Admin-only mode — skipping profile removal (managed via MDM)"
+    fi
 fi
 echo ""
 
 # ══════════════════════════════════════════════════════════════════
-#  PHASE 1: Build WITHOUT profiles
+#  PHASE 1: Build WITHOUT profiles (skipped on resume)
 # ══════════════════════════════════════════════════════════════════
+if [ "$RESUME" = false ]; then
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  🔴 Building WITHOUT performance profiles..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -143,6 +194,15 @@ if [ -n "${HES_FILE:-}" ]; then
 fi
 echo ""
 
+# ── Save checkpoint for resume ────────────────────────────────────
+cat > "$STATE_FILE" <<CHECKPOINT
+BASELINE_COMPLETE=true
+SAVED_PHASE1_TIME=$PHASE1_TIME
+SAVED_ADMIN_ONLY=$ADMIN_ONLY
+CHECKPOINT
+
+fi  # end RESUME=false (phase 1)
+
 # ══════════════════════════════════════════════════════════════════
 #  PHASE 2: Apply profiles and rebuild
 # ══════════════════════════════════════════════════════════════════
@@ -151,15 +211,35 @@ echo "  ✅ Applying profiles: $PROFILES"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-for p in $PROFILES; do
-    if [ "$ADMIN_ONLY" = true ]; then
-        echo "   ✅ $p [managed]"
-    elif mdatp performance-profiles apply --name "$p" 2>/dev/null; then
-        echo "   ✅ $p"
+if [ "$ADMIN_ONLY" = true ]; then
+    if [ "$RESUME" = true ]; then
+        echo "      ℹ️  Admin-only mode — profiles deployed via MDM:"
+        for p in $PROFILES; do
+            echo "      ✅ $p [managed]"
+        done
     else
-        echo "   ⚠️  $p (not available)"
+        echo ""
+        echo "   ⚠️  Admin-only mode — profiles cannot be applied locally."
+        echo "   Ask your IT admin to deploy these profiles via MDM (Intune, JAMF, etc.):"
+        for p in $PROFILES; do
+            echo "     - $p"
+        done
+        echo ""
+        echo "   Once deployed, re-run this script to see the comparison."
+        echo "   (Your baseline results have been saved — you'll be prompted to continue.)"
+        echo ""
+        echo "   Baseline results saved to: $RESULTS_DIR/"
+        exit 0
     fi
-done
+else
+    for p in $PROFILES; do
+        if mdatp performance-profiles apply --name "$p" 2>/dev/null; then
+            echo "   ✅ $p"
+        else
+            echo "   ⚠️  $p (not available)"
+        fi
+    done
+fi
 echo ""
 
 mdatp config real-time-protection-statistics --value enabled 2>/dev/null || true
@@ -210,3 +290,6 @@ echo "╚═══════════════════════�
 echo ""
 echo "📖 Learn more: https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles"
 echo ""
+
+# Clean up state file — demo completed successfully
+rm -f "$STATE_FILE"
