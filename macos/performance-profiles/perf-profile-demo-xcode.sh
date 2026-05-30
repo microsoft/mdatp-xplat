@@ -52,17 +52,32 @@ echo "   ✅ Real-time protection: ON"
 echo "   ✅ MDE version: $(mdatp health --field app_version 2>/dev/null || echo '?')"
 
 MERGE_POLICY=$(mdatp performance-profiles list-applied 2>/dev/null | grep -i 'Merge policy' | head -1 || echo "")
+ADMIN_ONLY=false
 if echo "$MERGE_POLICY" | grep -qi 'admin'; then
-    echo "❌ Performance profiles are in admin-only mode."
-    echo "   Your administrator must apply profiles via MDM or mdatp CLI with elevated privileges."
-    echo ""
-    echo "   Ask your admin to run:"
+    ADMIN_ONLY=true
+    APPLIED_OUTPUT=$(mdatp performance-profiles list-applied 2>/dev/null)
+    MISSING_PROFILES=()
     for p in $PROFILES; do
-        echo "     sudo mdatp performance-profiles apply --name $p"
+        if ! echo "$APPLIED_OUTPUT" | grep -q "^${p} "; then
+            MISSING_PROFILES+=("$p")
+        fi
     done
-    echo ""
-    echo "   Once the profiles are applied, re-run this script to verify the improvement."
-    exit 1
+    if [ ${#MISSING_PROFILES[@]} -gt 0 ]; then
+        echo "❌ Performance profiles are in admin-only mode."
+        echo "   The following profiles are not yet deployed: ${MISSING_PROFILES[*]}"
+        echo ""
+        echo "   Ask your IT admin to deploy these profiles via MDM (Intune, JAMF, etc.)."
+        echo "   Missing profiles:"
+        for p in "${MISSING_PROFILES[@]}"; do
+            echo "     - $p"
+        done
+        echo ""
+        echo "   Once all profiles are deployed, re-run this script."
+        exit 1
+    fi
+    echo "   ✅ Profile mode: admin-only (all required profiles are deployed)"
+else
+    echo "   ✅ Profile mode: merge (user can apply/remove locally)"
 fi
 
 if [ ! -d "$REPO_DIR" ]; then
@@ -79,9 +94,13 @@ fi
 echo "   ✅ Xcode: $(xcodebuild -version 2>/dev/null | head -1 || echo '?')"
 echo ""
 
-# Remove active profiles for clean baseline
-for p in $PROFILES; do mdatp performance-profiles remove --name "$p" &>/dev/null || true; done
-echo "   🧹 Test profiles removed (clean baseline)"
+# Remove active profiles for clean baseline (skip in admin-only mode)
+if [ "$ADMIN_ONLY" = false ]; then
+    for p in $PROFILES; do mdatp performance-profiles remove --name "$p" &>/dev/null || true; done
+    echo "   🧹 Test profiles removed (clean baseline)"
+else
+    echo "   ℹ️  Admin-only mode — skipping profile removal (managed via MDM)"
+fi
 echo ""
 
 # ══════════════════════════════════════════════════════════════════
@@ -133,7 +152,9 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 for p in $PROFILES; do
-    if mdatp performance-profiles apply --name "$p" 2>/dev/null; then
+    if [ "$ADMIN_ONLY" = true ]; then
+        echo "   ✅ $p [managed]"
+    elif mdatp performance-profiles apply --name "$p" 2>/dev/null; then
         echo "   ✅ $p"
     else
         echo "   ⚠️  $p (not available)"

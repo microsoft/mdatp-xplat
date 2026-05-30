@@ -69,19 +69,33 @@ fi
 echo "   ✅ Profiles available: $PROFILE_COUNT"
 
 MERGE_POLICY=$(mdatp performance-profiles list-applied 2>/dev/null | grep -i 'Merge policy' | head -1 || echo "")
+ADMIN_ONLY=false
 if echo "$MERGE_POLICY" | grep -qi 'admin'; then
-    echo "❌ Performance profiles are in admin-only mode."
-    echo "   Your administrator must apply profiles via MDM or mdatp CLI with elevated privileges."
-    echo ""
-    echo "   Ask your admin to run:"
+    ADMIN_ONLY=true
+    APPLIED_OUTPUT=$(mdatp performance-profiles list-applied 2>/dev/null)
+    MISSING_PROFILES=()
     for profile in $PROFILES; do
-        echo "     sudo mdatp performance-profiles apply --name $profile"
+        if ! echo "$APPLIED_OUTPUT" | grep -q "^${profile} "; then
+            MISSING_PROFILES+=("$profile")
+        fi
     done
-    echo ""
-    echo "   Once the profiles are applied, re-run this script to verify the improvement."
-    exit 1
+    if [ ${#MISSING_PROFILES[@]} -gt 0 ]; then
+        echo "❌ Performance profiles are in admin-only mode."
+        echo "   The following profiles are not yet deployed: ${MISSING_PROFILES[*]}"
+        echo ""
+        echo "   Ask your IT admin to deploy these profiles via MDM (Intune, JAMF, etc.)."
+        echo "   Missing profiles:"
+        for profile in "${MISSING_PROFILES[@]}"; do
+            echo "     - $profile"
+        done
+        echo ""
+        echo "   Once all profiles are deployed, re-run this script."
+        exit 1
+    fi
+    echo "   ✅ Profile mode: admin-only (all required profiles are deployed)"
+else
+    echo "   ✅ Profile mode: merge (user can apply/remove locally)"
 fi
-echo "   ✅ Profile mode: merge (user can apply/remove)"
 
 if ! command -v brew &>/dev/null; then
     echo "❌ Homebrew not found. Install it: https://brew.sh"
@@ -119,11 +133,15 @@ fi
 echo "   ✅ Repo: $REPO_DIR"
 echo ""
 
-# Remove any active profiles for clean baseline
-for profile in $PROFILES; do
-    mdatp performance-profiles remove --name "$profile" &>/dev/null || true
-done
-echo "   🧹 All test profiles removed (clean baseline)"
+# Remove any active profiles for clean baseline (skip in admin-only mode)
+if [ "$ADMIN_ONLY" = false ]; then
+    for profile in $PROFILES; do
+        mdatp performance-profiles remove --name "$profile" &>/dev/null || true
+    done
+    echo "   🧹 All test profiles removed (clean baseline)"
+else
+    echo "   ℹ️  Admin-only mode — skipping profile removal (managed via MDM)"
+fi
 echo ""
 
 # ── Helper functions ──────────────────────────────────────────────
@@ -335,13 +353,20 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 echo "   ✅ Applying profiles for our build stack:"
-for profile in $PROFILES; do
-    if mdatp performance-profiles apply --name "$profile" 2>/dev/null; then
-        echo "      ✅ $profile"
-    else
-        echo "      ⚠️  $profile (may not be available in this MDE version)"
-    fi
-done
+if [ "$ADMIN_ONLY" = true ]; then
+    echo "      ℹ️  Admin-only mode — profiles already deployed via MDM"
+    mdatp performance-profiles list-applied 2>/dev/null | grep -v '^=' | grep -v '^-' | grep -v '^$' | grep -v 'Merge policy' | while read -r line; do
+        echo "      ✅ $line"
+    done
+else
+    for profile in $PROFILES; do
+        if mdatp performance-profiles apply --name "$profile" 2>/dev/null; then
+            echo "      ✅ $profile"
+        else
+            echo "      ⚠️  $profile (may not be available in this MDE version)"
+        fi
+    done
+fi
 echo ""
 
 echo "   📋 Active profiles:"
