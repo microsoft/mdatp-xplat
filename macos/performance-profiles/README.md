@@ -107,6 +107,73 @@ chmod +x perf-profile-demo-xcode.sh
 
 ## Diagnostic Tools Used
 
+### Admin-Only Mode (MDM-Managed Profiles)
+
+When performance profiles are deployed via MDM (Intune, JAMF, etc.), the endpoint is in **admin-only mode** — local users cannot apply or remove profiles. The demo scripts detect this automatically and guide you through a two-session workflow.
+
+#### Step 1: Enable Performance Profiles in Intune
+
+In your management portal, create or edit a **Settings Catalog** policy. Add the **Microsoft Defender > Performance Profiles Configuration** and **Features** settings:
+
+- **Performance profiles merge policy** → `admin_only` (prevents local users from applying/removing profiles)
+- **Performance Profiles** → `enabled`
+
+**Intune:**
+
+![Intune Settings Catalog — Performance Profiles enabled with admin-only merge policy](images/intune-perf-profiles-enabled.png)
+
+**Security Settings Management (Microsoft Defender portal):**
+
+![Security Settings Management — Performance Profiles enabled with admin-only merge policy](images/ssm-perf-profiles-enabled.png)
+
+> With `admin_only` merge policy, profiles can only be deployed and removed through MDM. The demo scripts detect this and guide you through a two-session workflow.
+
+#### Step 2: Run the Baseline (Session 1)
+
+Run the demo script. It detects admin-only mode with no profiles applied and runs the baseline build:
+
+```
+✅ Profile mode: admin-only (no profiles applied — ready for baseline)
+```
+
+After the baseline completes, the script saves a checkpoint and exits with instructions:
+
+```
+⚠️  Admin-only mode — profiles cannot be applied locally.
+Ask your IT admin to deploy these profiles via MDM (Intune, JAMF, etc.):
+  - node
+  - git
+  - vscode
+  - vscode-tree
+
+Once deployed, re-run this script to see the comparison.
+(Your baseline results have been saved — you'll be prompted to continue.)
+```
+
+#### Step 3: Deploy Profiles via MDM
+
+<!-- TODO: Add screenshot of Intune profile deployment with specific profiles selected -->
+
+Deploy the requested profiles through your MDM solution. The profiles will appear in `mdatp performance-profiles list-applied` once the policy syncs to the endpoint.
+
+#### Step 4: Resume the Demo (Session 2)
+
+Re-run the script. It detects the saved checkpoint and prompts:
+
+```
+📋 Previous run detected — baseline already complete.
+   Baseline build time: 182 seconds
+   MDE avg CPU:         94%
+
+Continue to comparison build, or restart from scratch? [C/r]
+```
+
+Press **Enter** (or **C**) to continue. The script verifies all profiles are deployed, then runs the comparison build and shows results.
+
+---
+
+### Diagnostic Tools Used
+
 ### `mdatp diagnostic hot-event-sources`
 
 Counts **all sensor-level events** (AUTH + NOTIFY) by process. Shows which processes are generating the most file system activity that MDE must process.
