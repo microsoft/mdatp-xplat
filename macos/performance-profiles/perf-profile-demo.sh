@@ -194,10 +194,25 @@ echo "   ✅ Build tools: node, npm, git, jq, python3"
 # ── Node.js version check ──
 NODE_VERSION=$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)
 if [ "$NODE_VERSION" -lt 24 ]; then
-    echo "❌ Node.js v24+ required, but found $(node -v)"
-    echo "   Install with: nvm install 24 && nvm use 24"
-    echo "   Or download from: https://nodejs.org"
-    exit 1
+    echo "   ⚠️  Node.js v24+ required, but found $(node -v)"
+    read -rp "   Install Node.js v24 via Homebrew? [Y/n] " answer
+    if [[ "$answer" =~ ^[Nn] ]]; then
+        echo "   Please install Node.js v24+ and re-run the script."
+        echo "   Options:"
+        echo "     - nvm install 24 && nvm use 24"
+        echo "     - Or download from: https://nodejs.org"
+        exit 1
+    fi
+    echo "   ⬇️  Installing Node.js via Homebrew..."
+    brew install node@24 || brew upgrade node@24
+    # Try to link it
+    brew link node@24 --force --overwrite 2>/dev/null || true
+    NODE_VERSION=$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)
+    if [ "$NODE_VERSION" -lt 24 ]; then
+        echo "   ⚠️  Installation complete, but Node.js v24 not yet active."
+        echo "   Please re-run this script."
+        exit 1
+    fi
 fi
 echo "   ✅ Node.js: $(node -v)"
 
