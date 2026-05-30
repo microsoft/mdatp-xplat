@@ -16,8 +16,9 @@ set -euo pipefail
 # Prerequisites:
 #   - macOS with MDE installed (real-time protection enabled)
 #   - Xcode (with command line tools), git, jq
-#   - Repo cloned: git clone https://github.com/microsoft/fluentui-apple.git
 #   - sudo access (for hot-event-sources collection)
+#
+# Note: The fluentui-apple repo will be cloned automatically if not present.
 #
 # Learn more: https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles
 #=============================================================================
@@ -51,9 +52,9 @@ echo "   ✅ Real-time protection: ON"
 echo "   ✅ MDE version: $(mdatp health --field app_version 2>/dev/null || echo '?')"
 
 if [ ! -d "$REPO_DIR" ]; then
-    echo "❌ Repo not found at $REPO_DIR"
-    echo "   Clone it: git clone https://github.com/microsoft/fluentui-apple.git $REPO_DIR"
-    exit 1
+    echo "   ⬇️  Repo not found — cloning now..."
+    mkdir -p "$(dirname "$REPO_DIR")"
+    git clone --depth 1 https://github.com/microsoft/fluentui-apple.git "$REPO_DIR"
 fi
 echo "   ✅ Repo: $REPO_DIR"
 

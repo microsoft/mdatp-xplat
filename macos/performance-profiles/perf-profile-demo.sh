@@ -17,9 +17,9 @@ set -euo pipefail
 # Prerequisites:
 #   - macOS with MDE installed (real-time protection enabled)
 #   - node (v18+), yarn (v1), git, jq, python3
-#   - VS Code repo cloned: git clone https://github.com/microsoft/vscode.git
-#   - Initial yarn install done: cd vscode && yarn install --frozen-lockfile
 #   - sudo access (for hot-event-sources collection)
+#
+# Note: The VS Code repo will be cloned automatically if not present.
 #
 # Learn more: https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles
 #=============================================================================
@@ -58,7 +58,7 @@ echo "   ✅ Real-time protection: ON"
 VERSION=$(mdatp health --field app_version 2>/dev/null || echo "unknown")
 echo "   ✅ MDE version: $VERSION"
 
-PROFILE_COUNT=$(mdatp performance-profiles list-available 2>/dev/null | grep -c '^[a-z]' || echo "0")
+PROFILE_COUNT=$(mdatp performance-profiles list-available 2>/dev/null | grep -v '^=' | grep -v '^-' | grep -v '^$' | wc -l | tr -d ' ')
 if [ "$PROFILE_COUNT" = "0" ]; then
     echo "❌ Performance profiles not available in this MDE version."
     echo "   Update to the latest MDE version."
@@ -67,10 +67,11 @@ fi
 echo "   ✅ Profiles available: $PROFILE_COUNT"
 
 if [ ! -d "$REPO_DIR" ]; then
-    echo "❌ VS Code repo not found at $REPO_DIR"
-    echo "   Clone it first: git clone https://github.com/microsoft/vscode.git $REPO_DIR"
-    echo "   Then run: cd $REPO_DIR && yarn install --frozen-lockfile"
-    exit 1
+    echo "   ⬇️  VS Code repo not found — cloning now..."
+    mkdir -p "$(dirname "$REPO_DIR")"
+    git clone --depth 1 https://github.com/microsoft/vscode.git "$REPO_DIR"
+    echo "   📦 Running initial yarn install (this may take a few minutes)..."
+    cd "$REPO_DIR" && yarn install --frozen-lockfile 2>&1 | tail -3
 fi
 echo "   ✅ Repo: $REPO_DIR"
 
