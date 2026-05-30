@@ -279,10 +279,23 @@ class VSCodeScenario(DemoScenario):
                 check=False,
             )
             if res.returncode != 0:
+                err_line = ""
+                for line in (res.stderr or "").splitlines():
+                    if line.strip():
+                        err_line = line.strip()
+                        break
+                if err_line:
+                    print_info(f"GHCP recommendation command failed: {err_line}")
+                else:
+                    print_info(f"GHCP recommendation command failed (exit {res.returncode})")
                 return []
 
-            return self._parse_ghcp_recommended_profiles(res.stdout or "", allowed_profiles)
+            parsed = self._parse_ghcp_recommended_profiles(res.stdout or "", allowed_profiles)
+            if not parsed:
+                print_info("GHCP returned output, but no valid available profile names were parsed")
+            return parsed
         except Exception:
+            print_info("GHCP recommendation call raised an exception")
             return []
 
     def _parse_ghcp_recommended_profiles(self, output_text: str, allowed_profiles: List[str]) -> List[str]:
