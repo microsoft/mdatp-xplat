@@ -57,6 +57,12 @@ Examples:
         help="For vscode scenario, include npm install in timed baseline/optimized build phases"
     )
 
+    parser.add_argument(
+        "--require-client-analyzer",
+        action="store_true",
+        help="Require XMDE Client Analyzer as a preflight prerequisite (prompt to install if missing)"
+    )
+
     args = parser.parse_args()
 
     if args.scenario is None:
@@ -70,7 +76,10 @@ Examples:
     print_info("Checking prerequisites...")
     preflight = Preflight()
     require_node = args.scenario == "vscode"
-    if not preflight.run_all(require_node=require_node):
+    if not preflight.run_all(
+        require_node=require_node,
+        require_client_analyzer=args.require_client_analyzer,
+    ):
         print_error("Preflight checks failed")
         return 1
 

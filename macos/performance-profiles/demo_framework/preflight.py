@@ -16,6 +16,9 @@ class PreflightError(Exception):
 class Preflight:
     """Check system prerequisites before running demo."""
 
+    DEFAULT_ANALYZER_DIR = Path.home() / "demo" / "analyzer" / "XMDEClientAnalyzerBinary"
+    DEFAULT_ANALYZER_BIN = DEFAULT_ANALYZER_DIR / "MDESupportTool"
+
     @staticmethod
     def check_command_exists(cmd: str) -> bool:
         """Check if a command is available in PATH."""
@@ -158,7 +161,112 @@ class Preflight:
 
         return True
 
-    def run_all(self, required_major_node: int = 24, require_node: bool = True) -> bool:
+    @staticmethod
+    def find_client_analyzer_binary(install_dir: Optional[Path] = None) -> Optional[Path]:
+        """Find MDESupportTool binary in expected install locations."""
+        target = (install_dir or Preflight.DEFAULT_ANALYZER_DIR).expanduser()
+
+        candidates = [
+            target / "MDESupportTool",
+            target / "ClientAnalyzer" / "MDESupportTool",
+        ]
+
+        for candidate in candidates:
+            if candidate.exists() and candidate.is_file():
+                return candidate
+
+        if target.exists():
+            for found in target.rglob("MDESupportTool"):
+                if found.is_file():
+                    return found
+
+        return None
+
+    @staticmethod
+    def install_client_analyzer(install_dir: Optional[Path] = None) -> bool:
+        """Download and install XMDE Client Analyzer into install_dir."""
+        target = (install_dir or Preflight.DEFAULT_ANALYZER_DIR).expanduser()
+        parent = target.parent
+        parent.mkdir(parents=True, exist_ok=True)
+
+        if not Preflight.check_command_exists("curl"):
+            print("   ⚠️  curl is required to download Client Analyzer")
+            if not Preflight.install_missing_tools(["curl"]):
+                return False
+
+        if not Preflight.check_command_exists("unzip"):
+            print("   ⚠️  unzip is required to extract Client Analyzer")
+            if not Preflight.install_missing_tools(["unzip"]):
+                return False
+
+        zip_path = parent / "XMDEClientAnalyzer.zip"
+        extract_dir = parent / "_analyzer_extract"
+
+        print("   ⬇️  Downloading XMDE Client Analyzer...")
+        try:
+            dl = subprocess.run(
+                ["curl", "-L", "-o", str(zip_path), "https://aka.ms/XMDEClientAnalyzer"],
+                timeout=300,
+                capture_output=False,
+            )
+            if dl.returncode != 0:
+                print("   ⚠️  Download failed")
+                return False
+
+            if extract_dir.exists():
+                subprocess.run(["rm", "-rf", str(extract_dir)], check=False)
+            extract_dir.mkdir(parents=True, exist_ok=True)
+
+            uz = subprocess.run(
+                ["unzip", "-o", str(zip_path), "-d", str(extract_dir)],
+                timeout=120,
+                capture_output=False,
+            )
+            if uz.returncode != 0:
+                print("   ⚠️  Extraction failed")
+                return False
+
+            found = None
+            for candidate in extract_dir.rglob("MDESupportTool"):
+                if candidate.is_file():
+                    found = candidate
+                    break
+
+            if not found:
+                print("   ⚠️  MDESupportTool not found after extraction")
+                return False
+
+            target.mkdir(parents=True, exist_ok=True)
+            final_bin = target / "MDESupportTool"
+            cp = subprocess.run(["cp", str(found), str(final_bin)], timeout=30, capture_output=False)
+            if cp.returncode != 0:
+                print("   ⚠️  Failed to place MDESupportTool in install path")
+                return False
+
+            subprocess.run(["chmod", "+x", str(final_bin)], timeout=10, check=False)
+            print(f"   ✅ Client Analyzer installed: {final_bin}")
+            return True
+        except Exception as e:
+            print(f"   ⚠️  Client Analyzer install failed: {e}")
+            return False
+        finally:
+            try:
+                if zip_path.exists():
+                    zip_path.unlink()
+            except Exception:
+                pass
+            try:
+                if extract_dir.exists():
+                    subprocess.run(["rm", "-rf", str(extract_dir)], check=False)
+            except Exception:
+                pass
+
+    def run_all(
+        self,
+        required_major_node: int = 24,
+        require_node: bool = True,
+        require_client_analyzer: bool = False,
+    ) -> bool:
         """Run all preflight checks. Returns True if all pass."""
         print("🔍 Preflight checks...\n")
 
@@ -245,5 +353,25 @@ class Preflight:
                     return False
 
             print(f"   ✅ Node.js: {node_version}")
+
+        # Optional required prerequisite for richer diagnostics.
+        analyzer = self.find_client_analyzer_binary()
+        if analyzer:
+            print(f"   ✅ Client Analyzer: {analyzer}")
+        elif require_client_analyzer:
+            print("   ⚠️  Client Analyzer required but not found.")
+            answer = input("   Download and install Client Analyzer now? [Y/n] ").strip().lower()
+            if answer in ("n", "no"):
+                print("   Please install Client Analyzer and re-run.")
+                return False
+            if not self.install_client_analyzer():
+                return False
+            analyzer = self.find_client_analyzer_binary()
+            if not analyzer:
+                print("   ⚠️  Client Analyzer install completed, but binary was not found.")
+                return False
+            print(f"   ✅ Client Analyzer: {analyzer}")
+        else:
+            print("   ℹ️  Client Analyzer: not found (optional)")
         print()
         return True

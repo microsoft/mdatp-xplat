@@ -190,6 +190,9 @@ python3 demo.py vscode
 # Run VS Code demo with full developer build timing (install + compile)
 python3 demo.py vscode --include-install
 
+# Require Client Analyzer in preflight (auto-prompt install if missing)
+python3 demo.py vscode --require-client-analyzer
+
 # Run Xcode demo directly
 python3 demo.py xcode
 

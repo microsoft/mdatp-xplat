@@ -102,3 +102,39 @@ git
             count = Preflight.check_mdatp_profiles()
 
             assert count == 0
+
+    def test_run_all_succeeds_when_client_analyzer_found(self):
+        """Require analyzer should pass if binary is found."""
+        with patch.object(Preflight, "check_mdatp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_rtp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
+             patch.object(Preflight, "check_xcode_clt", return_value=True), \
+             patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "find_client_analyzer_binary", return_value="/tmp/MDESupportTool"):
+            ok = Preflight().run_all(require_node=False, require_client_analyzer=True)
+            assert ok is True
+
+    def test_run_all_fails_when_client_analyzer_required_and_declined(self):
+        """Require analyzer should fail when user declines installation."""
+        with patch.object(Preflight, "check_mdatp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_rtp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
+             patch.object(Preflight, "check_xcode_clt", return_value=True), \
+             patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "find_client_analyzer_binary", return_value=None), \
+             patch("builtins.input", return_value="n"):
+            ok = Preflight().run_all(require_node=False, require_client_analyzer=True)
+            assert ok is False
+
+    def test_run_all_installs_client_analyzer_when_required(self):
+        """Require analyzer should install and pass when user accepts."""
+        with patch.object(Preflight, "check_mdatp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_rtp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
+             patch.object(Preflight, "check_xcode_clt", return_value=True), \
+             patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "find_client_analyzer_binary", side_effect=[None, "/tmp/MDESupportTool"]), \
+             patch.object(Preflight, "install_client_analyzer", return_value=True), \
+             patch("builtins.input", return_value="y"):
+            ok = Preflight().run_all(require_node=False, require_client_analyzer=True)
+            assert ok is True
