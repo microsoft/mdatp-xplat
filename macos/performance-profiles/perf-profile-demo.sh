@@ -228,6 +228,25 @@ calc_avg_cpu() {
     fi
 }
 
+# Spinner for long-running commands — shows elapsed time so demo doesn't look hung
+run_with_spinner() {
+    local label="$1"; shift
+    local pid elapsed
+    "$@" &
+    pid=$!
+    elapsed=0
+    printf "\r   %s %ds..." "$label" "$elapsed"
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 5
+        elapsed=$((elapsed + 5))
+        printf "\r   %s %ds..." "$label" "$elapsed"
+    done
+    wait "$pid"
+    local ret=$?
+    printf "\r   %s done (%ds)\n" "$label" "$elapsed"
+    return $ret
+}
+
 count_rtp_scans() {
     local json_file="$1"
     python3 -c "
@@ -260,7 +279,7 @@ echo ""
 clean_build
 
 # Enable RTP statistics collection
-mdatp config real-time-protection-statistics --value enabled 2>/dev/null || true
+mdatp config real-time-protection-statistics --value enabled >/dev/null 2>&1 || true
 
 # Start CPU monitoring
 CPU_PID=$(start_cpu_monitor "$RESULTS_DIR/phase1_cpu.log")
@@ -269,8 +288,8 @@ echo "   ⏱️  Building VS Code (yarn compile)..."
 cd "$REPO_DIR"
 BUILD_START=$(date +%s)
 
-yarn install --frozen-lockfile 2>&1 | tail -3
-yarn compile 2>&1 | tail -5
+run_with_spinner "📦 yarn install" yarn install --frozen-lockfile
+run_with_spinner "🔨 yarn compile" yarn compile
 
 BUILD_END=$(date +%s)
 PHASE1_TIME=$((BUILD_END - BUILD_START))
@@ -472,7 +491,7 @@ echo ""
 clean_build
 
 # Reset RTP stats for clean comparison
-mdatp config real-time-protection-statistics --value enabled 2>/dev/null || true
+mdatp config real-time-protection-statistics --value enabled >/dev/null 2>&1 || true
 
 # Start CPU monitoring
 CPU_PID=$(start_cpu_monitor "$RESULTS_DIR/phase5_cpu.log")
@@ -481,8 +500,8 @@ echo "   ⏱️  Building VS Code (yarn compile) WITH profiles..."
 cd "$REPO_DIR"
 BUILD_START=$(date +%s)
 
-yarn install --frozen-lockfile 2>&1 | tail -3
-yarn compile 2>&1 | tail -5
+run_with_spinner "📦 yarn install" yarn install --frozen-lockfile
+run_with_spinner "🔨 yarn compile" yarn compile
 
 BUILD_END=$(date +%s)
 PHASE5_TIME=$((BUILD_END - BUILD_START))
