@@ -110,6 +110,7 @@ class DemoOrchestrator:
                     error=str(e)
                 )
                 print(f"\n❌ Phase {idx + 1} failed: {e}\n")
+                self.results.append(result)
                 return False
 
             self.results.append(result)
