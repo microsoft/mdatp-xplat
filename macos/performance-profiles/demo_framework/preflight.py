@@ -155,7 +155,7 @@ class Preflight:
 
         return True
 
-    def run_all(self, required_major_node: int = 24) -> bool:
+    def run_all(self, required_major_node: int = 24, require_node: bool = True) -> bool:
         """Run all preflight checks. Returns True if all pass."""
         print("🔍 Preflight checks...\n")
 
@@ -203,39 +203,44 @@ class Preflight:
 
         # Check build tools
         missing_tools = []
-        for cmd in ["git", "jq", "python3"]:
+        required_tools = ["git", "jq", "python3"]
+        if require_node:
+            required_tools.append("node")
+
+        for cmd in required_tools:
             if not self.check_command_exists(cmd):
                 missing_tools.append(cmd)
 
         if missing_tools and not self.install_missing_tools(missing_tools):
             return False
 
-        print("   ✅ Build tools: git, jq, python3")
+        print(f"   ✅ Build tools: {', '.join(required_tools)}")
 
-        # Check Node.js version
-        node_version = self.check_node_version(required_major_node)
-        if node_version is None:
-            current = self.get_version("node")
-            print(f"   ⚠️  Node.js v{required_major_node}+ required, but found {current}")
-            answer = input("   Install Node.js v24 via Homebrew? [Y/n] ").strip().lower()
-            
-            if answer in ("n", "no"):
-                print(f"   Please install Node.js v{required_major_node}+ and re-run the script.")
-                print("   Options:")
-                print("     - nvm install 24 && nvm use 24")
-                print("     - Or download from: https://nodejs.org")
-                return False
-
-            if not self.install_node_homebrew():
-                return False
-
-            # Re-check
+        # Check Node.js version for Node-based scenarios only
+        if require_node:
             node_version = self.check_node_version(required_major_node)
             if node_version is None:
-                print("   ⚠️  Installation complete, but Node.js v24 not yet active.")
-                print("   Please re-run this script.")
-                return False
+                current = self.get_version("node")
+                print(f"   ⚠️  Node.js v{required_major_node}+ required, but found {current}")
+                answer = input("   Install Node.js v24 via Homebrew? [Y/n] ").strip().lower()
 
-        print(f"   ✅ Node.js: {node_version}")
+                if answer in ("n", "no"):
+                    print(f"   Please install Node.js v{required_major_node}+ and re-run the script.")
+                    print("   Options:")
+                    print("     - nvm install 24 && nvm use 24")
+                    print("     - Or download from: https://nodejs.org")
+                    return False
+
+                if not self.install_node_homebrew():
+                    return False
+
+                # Re-check
+                node_version = self.check_node_version(required_major_node)
+                if node_version is None:
+                    print("   ⚠️  Installation complete, but Node.js v24 not yet active.")
+                    print("   Please re-run this script.")
+                    return False
+
+            print(f"   ✅ Node.js: {node_version}")
         print()
         return True

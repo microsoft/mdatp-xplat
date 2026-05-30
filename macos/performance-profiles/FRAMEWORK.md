@@ -7,7 +7,7 @@ The new Python-based demo framework replaces the bash script with a more extensi
 ### Install Dependencies
 
 ```bash
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -15,7 +15,7 @@ pip install -r requirements.txt
 ### Run VS Code Demo
 
 ```bash
-python demo.py vscode
+python3 demo.py
 ```
 
 ### Run Tests
@@ -54,7 +54,7 @@ Scenarios are extensible demo templates. Each scenario:
 #### Available Scenarios
 
 - **`VSCodeScenario`** — Build microsoft/vscode, showing profile impact
-- **`XCodeScenario`** — (Planned) Build Xcode/Swift projects
+- **`XcodeScenario`** — Build microsoft/fluentui-apple with Xcode/Swift
 
 ### Example: Create New Scenario
 
@@ -129,16 +129,15 @@ macos/performance-profiles/
 │       ├── __init__.py
 │       ├── base.py                 # Base scenario class
 │       ├── vscode.py               # VS Code scenario
-│       └── xcode.py                # (Planned) Xcode scenario
+│       └── xcode.py                # Xcode scenario
 │
 ├── tests/                          # Test suite
 │   ├── __init__.py
 │   ├── test_orchestrator.py
 │   ├── test_preflight.py
-│   └── test_scenarios.py           # (Planned)
+│   └── test_scenarios.py           # (Optional extension)
 │
 ├── perf-profile-demo.sh            # (Legacy) Bash version
-├── perf-profile-demo-xcode.sh      # (Legacy) Bash Xcode demo
 └── README.md                       # (Legacy) Original docs
 ```
 
@@ -159,7 +158,6 @@ The Python framework has feature parity with the original bash scripts:
 
 ## Future Enhancements
 
-- [ ] Add Xcode scenario
 - [ ] Add macOS-native build scenario  
 - [ ] Rich progress bars with `rich` library
 - [ ] Save/restore state across runs
@@ -171,17 +169,23 @@ The Python framework has feature parity with the original bash scripts:
 ## Command Reference
 
 ```bash
-# Run VS Code demo
-python demo.py vscode
+# Prompt and choose scenario interactively
+python3 demo.py
+
+# Run VS Code demo directly
+python3 demo.py vscode
+
+# Run Xcode demo directly
+python3 demo.py xcode
 
 # Run with custom repo path
-python demo.py vscode --repo ~/my-vscode
+python3 demo.py vscode --repo ~/my-vscode
 
 # Resume from phase 3
-python demo.py vscode --resume-from 3
+python3 demo.py vscode --resume-from 3
 
 # Show help
-python demo.py --help
+python3 demo.py --help
 
 # Run tests
 pytest

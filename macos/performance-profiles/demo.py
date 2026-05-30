@@ -14,7 +14,7 @@ import argparse
 from pathlib import Path
 
 from demo_framework.preflight import Preflight
-from demo_framework.scenarios import VSCodeScenario
+from demo_framework.scenarios import VSCodeScenario, XcodeScenario
 from demo_framework.ui import print_error, print_info
 
 
@@ -33,9 +33,9 @@ Examples:
     parser.add_argument(
         "scenario",
         nargs="?",
-        default="vscode",
+        default=None,
         choices=["vscode", "xcode"],
-        help="Demo scenario to run (default: vscode)"
+        help="Demo scenario to run (if omitted, you'll be prompted)"
     )
 
     parser.add_argument(
@@ -52,16 +52,26 @@ Examples:
 
     args = parser.parse_args()
 
-    # Run preflight checks
+    if args.scenario is None:
+        print_info("Select a demo scenario:")
+        print("   1) vscode  - Microsoft VS Code build demo")
+        print("   2) xcode   - FluentUI Apple Xcode build demo")
+        choice = input("   Enter choice [1/2] (default: 1): ").strip()
+        args.scenario = "xcode" if choice == "2" else "vscode"
+
+    # Run preflight checks with scenario-aware requirements
     print_info("Checking prerequisites...")
     preflight = Preflight()
-    if not preflight.run_all():
+    require_node = args.scenario == "vscode"
+    if not preflight.run_all(require_node=require_node):
         print_error("Preflight checks failed")
         return 1
 
     # Run selected scenario
     if args.scenario == "vscode":
         scenario = VSCodeScenario(repo_path=args.repo)
+    elif args.scenario == "xcode":
+        scenario = XcodeScenario(repo_path=args.repo)
     else:
         print_error(f"Unknown scenario: {args.scenario}")
         return 1

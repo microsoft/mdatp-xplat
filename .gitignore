@@ -9,3 +9,12 @@
 
 # macOS system files
 .DS_Store
+
+# Python virtual environments and caches
+venv/
+**/venv/
+.pytest_cache/
+**/.pytest_cache/
+__pycache__/
+**/__pycache__/
+
