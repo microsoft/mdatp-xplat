@@ -196,11 +196,17 @@ class TestVSCodeScenarioBuildModes:
         scenario.orchestrator.results[1].name = "Baseline Build (No Profiles)"
 
         with patch.object(scenario, "_collect_hot_event_sources", return_value=False):
-            with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
-                ok = scenario._collect_diagnostics()
+            with patch.object(
+                scenario,
+                "_run_client_analyzer",
+                return_value="/tmp/MDESupportTool_test.zip",
+            ):
+                with patch("demo_framework.scenarios.vscode.subprocess.run") as mock_run:
+                    mock_run.return_value = MagicMock(returncode=0)
+                    ok = scenario._collect_diagnostics()
 
         assert ok is True
         assert scenario.state_file.exists()
         state = scenario.state_file.read_text()
         assert "baseline_complete" in state
+        assert "baseline_client_analyzer" in state

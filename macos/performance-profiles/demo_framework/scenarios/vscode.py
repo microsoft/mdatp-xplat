@@ -34,8 +34,9 @@ class VSCodeScenario(DemoScenario):
         self.include_install_in_build = include_install_in_build
         self.admin_only = False
         self.hot_event_duration = 60
+        self.analyzer_dir = Path.home() / "demo" / "analyzer" / "XMDEClientAnalyzerBinary"
         self.state_file = self.orchestrator.results_dir / ".vscode-demo-state.json"
-        self.baseline = {"time": 0.0, "cpu": "N/A", "scans": "N/A"}
+        self.baseline = {"time": 0.0, "cpu": "N/A", "scans": "N/A", "client_analyzer": None}
         self.optimized = {"time": 0.0, "cpu": "N/A", "scans": "N/A"}
         self._register_phases()
 
@@ -171,6 +172,28 @@ class VSCodeScenario(DemoScenario):
             pass
         return False
 
+    def _run_client_analyzer(self):
+        """Run XMDE Client Analyzer performance capture if available."""
+        tool = self.analyzer_dir / "MDESupportTool"
+        if not tool.exists() or os.environ.get("PYTEST_CURRENT_TEST"):
+            return None
+
+        try:
+            subprocess.run(
+                ["sudo", str(tool), "performance", "--length", "10"],
+                cwd=self.orchestrator.results_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=600,
+                check=False,
+            )
+            zips = sorted(self.orchestrator.results_dir.glob("MDESupportTool_*.zip"), key=lambda p: p.stat().st_mtime)
+            if zips:
+                return str(zips[-1])
+        except Exception:
+            pass
+        return None
+
     def _load_state(self):
         """Load saved scenario state from disk."""
         if not self.state_file.exists():
@@ -205,6 +228,7 @@ class VSCodeScenario(DemoScenario):
                 self.baseline["time"] = float(baseline_time or 0)
                 self.baseline["cpu"] = state.get("baseline_cpu_avg", "N/A")
                 self.baseline["scans"] = state.get("baseline_scans", "N/A")
+                self.baseline["client_analyzer"] = state.get("baseline_client_analyzer")
                 print("")
                 print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 print("  📋 Previous run detected — baseline already complete.")
@@ -520,6 +544,8 @@ class VSCodeScenario(DemoScenario):
         print(f"   📁 Optimized scans:       {self.optimized.get('scans', 'N/A')}")
         print(f"   ⚡ Speedup:               {speedup}% ({saved:.1f}s saved)")
         print(f"   📦 Artifacts:             {self.orchestrator.results_dir}")
+        if self.baseline.get("client_analyzer"):
+            print(f"   📊 Client Analyzer:       {self.baseline.get('client_analyzer')}")
 
         print_success("Analysis complete")
         return True
@@ -534,6 +560,13 @@ class VSCodeScenario(DemoScenario):
             print_success(f"Hot event sources saved: {hot_before}")
         else:
             print_info("Hot event sources were not captured")
+
+        analyzer_zip = self._run_client_analyzer()
+        if analyzer_zip:
+            self.baseline["client_analyzer"] = analyzer_zip
+            print_success(f"Client Analyzer report: {analyzer_zip}")
+        else:
+            print_info("Client Analyzer not available (skipping)")
         
         try:
             result = subprocess.run(
@@ -548,6 +581,7 @@ class VSCodeScenario(DemoScenario):
                     "baseline_duration_seconds": self.baseline.get("time", 0),
                     "baseline_cpu_avg": self.baseline.get("cpu", "N/A"),
                     "baseline_scans": self.baseline.get("scans", "N/A"),
+                    "baseline_client_analyzer": self.baseline.get("client_analyzer"),
                 }
             )
             print_success("Diagnostics collected")
@@ -559,6 +593,7 @@ class VSCodeScenario(DemoScenario):
                     "baseline_duration_seconds": self.baseline.get("time", 0),
                     "baseline_cpu_avg": self.baseline.get("cpu", "N/A"),
                     "baseline_scans": self.baseline.get("scans", "N/A"),
+                    "baseline_client_analyzer": self.baseline.get("client_analyzer"),
                 }
             )
             print_info("Could not collect full diagnostics (this is optional)")
