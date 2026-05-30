@@ -64,10 +64,23 @@ Examples:
     )
 
     parser.add_argument(
+        "--require-ghcp-cli",
+        action="store_true",
+        help="Require GitHub Copilot CLI as a preflight prerequisite (prompt to install if missing)"
+    )
+
+    parser.add_argument(
         "--hot-events-analysis",
         choices=["prompt", "python", "ghcp", "both"],
         default="prompt",
         help="Hot-event analysis mode for vscode scenario (default: prompt)"
+    )
+
+    parser.add_argument(
+        "--profile-change-policy",
+        choices=["prompt", "always", "never"],
+        default="prompt",
+        help="Consent policy for applying/removing profiles (default: prompt)"
     )
 
     args = parser.parse_args()
@@ -86,6 +99,7 @@ Examples:
     if not preflight.run_all(
         require_node=require_node,
         require_client_analyzer=args.require_client_analyzer,
+        require_ghcp_cli=args.require_ghcp_cli,
     ):
         print_error("Preflight checks failed")
         return 1
@@ -96,13 +110,17 @@ Examples:
             repo_path=args.repo,
             include_install_in_build=args.include_install,
             hot_events_analysis_mode=args.hot_events_analysis,
+            profile_change_policy=args.profile_change_policy,
         )
     elif args.scenario == "xcode":
         if args.include_install:
             print_info("--include-install is ignored for xcode scenario")
         if args.hot_events_analysis != "prompt":
             print_info("--hot-events-analysis is ignored for xcode scenario")
-        scenario = XcodeScenario(repo_path=args.repo)
+        scenario = XcodeScenario(
+            repo_path=args.repo,
+            profile_change_policy=args.profile_change_policy,
+        )
     else:
         print_error(f"Unknown scenario: {args.scenario}")
         return 1

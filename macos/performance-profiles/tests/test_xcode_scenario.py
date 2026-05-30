@@ -1,99 +1,50 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+from demo_framework.scenarios.profiled_build import ProfiledBuildScenario
 from demo_framework.scenarios.xcode import XcodeScenario
 
 
-class TestXcodeScenario:
-    def test_xcode_scenario_uses_six_phase_template(self, tmp_path: Path):
+class TestXcodeScenarioConfig:
+    def test_xcode_scenario_uses_profiled_build_base(self, tmp_path: Path):
         scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
-        phase_names = [name for name, _ in scenario.orchestrator.phases]
-        assert phase_names == [
-            "Setup and Preflight",
-            "Baseline Build (No Profiles)",
-            "Analyze Baseline Telemetry",
-            "Apply Performance Profiles",
-            "Optimized Build (With Profiles)",
-            "Analyze Impact",
-        ]
-
-    def test_setup_validates_tools_only(self, tmp_path: Path):
-        scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
-
-        with patch("demo_framework.scenarios.profiled_build.subprocess.run") as mock_run:
-            mock_run.side_effect = [
-                MagicMock(returncode=0),  # git --version
-                MagicMock(returncode=0),  # swift --version
-            ]
-            ok = scenario.setup()
-
-        assert ok is True
-        calls = [c.args[0] for c in mock_run.call_args_list]
-        assert ["git", "--version"] in calls
-        assert ["swift", "--version"] in calls
+        assert isinstance(scenario, ProfiledBuildScenario)
 
     def test_xcode_scenario_uses_data_driven_clone_phase_paths(self, tmp_path: Path):
         scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
         assert str(scenario.baseline_repo_path).endswith("fluentui-apple-baseline")
         assert str(scenario.optimized_repo_path).endswith("fluentui-apple-optimized")
 
-    def test_apply_profiles_uses_apply_command(self, tmp_path: Path):
+    def test_xcode_scenario_wires_expected_common_options(self, tmp_path: Path):
         scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
+        assert scenario.clone_in_timed_phases is True
+        assert scenario.install_command == []
+        assert scenario.tool_checks == [["git", "--version"], ["swift", "--version"]]
 
-        with patch("demo_framework.scenarios.profiled_build.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            ok = scenario.apply_profiles()
-
-        assert ok is True
-        calls = [c.args[0] for c in mock_run.call_args_list]
-        assert ["sudo", "mdatp", "performance-profiles", "apply", "--name", "git"] in calls
-
-    def test_build_baseline_clones_and_builds(self, tmp_path: Path):
+    def test_select_profiles_choice_union(self, tmp_path: Path):
         scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
+        hot = tmp_path / "hot.json"
+        hot.write_text('{"eventSource": [{"path":"/Applications/Xcode.app","authCount":10,"notifyCount":5}]}')
 
-        with patch.object(scenario, "_fresh_clone", return_value=True) as mock_clone:
-            with patch.object(scenario, "_get_profile_state", return_value=(False, set())):
-                with patch("demo_framework.scenarios.profiled_build.subprocess.run") as mock_run:
-                    mock_run.side_effect = [
-                        MagicMock(returncode=0),  # remove xcode
-                        MagicMock(returncode=0),  # remove xcode-ide-tree
-                        MagicMock(returncode=0),  # remove git
-                        MagicMock(returncode=0),  # swift build
-                    ]
-                    ok = scenario.build_baseline()
+        with patch.object(scenario, "_get_available_profiles", return_value=["xcode", "git", "xcode-ide-tree"]):
+            with patch.object(scenario, "_ghcp_profile_recommendations", return_value=["git"]):
+                with patch.object(scenario, "_python_profile_recommendations", return_value=["xcode"]):
+                    with patch("builtins.input", return_value="3"):
+                        scenario._select_profiles_for_phase4(hot)
 
-        assert ok is True
-        mock_clone.assert_called_once_with(scenario.baseline_repo_path)
-        assert mock_run.call_args_list[-1].args[0] == ["swift", "build", "-c", "release"]
+        assert scenario.recommended_profiles == ["git", "xcode"]
+        assert scenario.recommendation_source == "union"
 
-    def test_build_baseline_fails_when_profiles_still_applied(self, tmp_path: Path):
+    def test_select_profiles_choice_intersection(self, tmp_path: Path):
         scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
+        hot = tmp_path / "hot.json"
+        hot.write_text('{"eventSource": [{"path":"/Applications/Xcode.app","authCount":10,"notifyCount":5}]}')
 
-        with patch.object(scenario, "_get_profile_state", return_value=(False, {"git"})):
-            with patch("demo_framework.scenarios.profiled_build.subprocess.run") as mock_run:
-                mock_run.side_effect = [
-                    MagicMock(returncode=0),  # remove xcode
-                    MagicMock(returncode=0),  # remove xcode-ide-tree
-                    MagicMock(returncode=0),  # remove git
-                ]
-                ok = scenario.build_baseline()
+        with patch.object(scenario, "_get_available_profiles", return_value=["xcode", "git", "xcode-ide-tree"]):
+            with patch.object(scenario, "_ghcp_profile_recommendations", return_value=["git", "xcode"]):
+                with patch.object(scenario, "_python_profile_recommendations", return_value=["xcode"]):
+                    with patch("builtins.input", return_value="3"):
+                        scenario._select_profiles_for_phase4(hot)
 
-        assert ok is False
-        calls = [c.args[0] for c in mock_run.call_args_list]
-        assert ["swift", "build", "-c", "release"] not in calls
-
-    def test_build_optimized_clones_and_builds(self, tmp_path: Path):
-        scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
-
-        with patch.object(scenario, "_fresh_clone", return_value=True) as mock_clone:
-            with patch("demo_framework.scenarios.profiled_build.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
-                ok = scenario.build_optimized()
-
-        assert ok is True
-        mock_clone.assert_called_once_with(scenario.optimized_repo_path)
-        mock_run.assert_called_once()
-
-    def test_analyze_baseline_telemetry_default_phase_returns_true(self, tmp_path: Path):
-        scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
-        assert scenario.analyze_baseline_telemetry() is True
+        assert scenario.recommended_profiles == ["xcode"]
+        assert scenario.recommendation_source == "intersection"

@@ -90,12 +90,22 @@ chmod +x perf-profile-demo.sh
 # Run with default settings (builds VS Code from ~/demo/vscode)
 ./perf-profile-demo.sh
 
+# Choose consent policy for applying/removing profiles
+python3 demo.py vscode --profile-change-policy prompt   # default
+python3 demo.py vscode --profile-change-policy always   # no prompts
+python3 demo.py vscode --profile-change-policy never    # never apply/remove
+
 # Or specify a custom repo path
 ./perf-profile-demo.sh ~/my/vscode/checkout
 
 # Quick Xcode demo
 chmod +x perf-profile-demo-xcode.sh
 ./perf-profile-demo-xcode.sh
+
+# When recommendations are available, you'll be prompted with consolidated choices.
+# Duplicate profile sets are merged and labeled with all contributing sources
+# (GHCP, Python, Intersection, Union, Defaults).
+# The run log records each source set and the selected consolidated source label.
 ```
 
 ## The 5-Phase Story
@@ -155,7 +165,11 @@ Once deployed, re-run this script to see the comparison.
 
 #### Step 3: Deploy Profiles via MDM
 
-<!-- TODO: Add screenshot of Intune profile deployment with specific profiles selected -->
+In **Microsoft Defender > Performance Profiles Configuration > Performance Profiles**, add the profiles requested by the demo (for VS Code: `git`, `node`, `vscode`, `vscode-tree`).
+
+**Intune profile selection example:**
+
+![Intune Settings Catalog — Performance Profiles enabled with selected profiles for deployment](images/intune-perf-profiles-enabled-with-profiles.png)
 
 Deploy the requested profiles through your MDM solution. The profiles will appear in `mdatp performance-profiles list-applied` once the policy syncs to the endpoint.
 

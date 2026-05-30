@@ -133,8 +133,48 @@ git
              patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
              patch.object(Preflight, "check_xcode_clt", return_value=True), \
              patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "check_ghcp_cli", return_value=True), \
              patch.object(Preflight, "find_client_analyzer_binary", side_effect=[None, "/tmp/MDESupportTool"]), \
              patch.object(Preflight, "install_client_analyzer", return_value=True), \
              patch("builtins.input", return_value="y"):
             ok = Preflight().run_all(require_node=False, require_client_analyzer=True)
+            assert ok is True
+
+    def test_run_all_allows_missing_ghcp_when_optional(self):
+        """Missing GHCP should not fail preflight when not required."""
+        with patch.object(Preflight, "check_mdatp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_rtp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
+             patch.object(Preflight, "check_xcode_clt", return_value=True), \
+             patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "find_client_analyzer_binary", return_value=None), \
+             patch.object(Preflight, "check_ghcp_cli", return_value=False):
+            ok = Preflight().run_all(require_node=False)
+            assert ok is True
+
+    def test_run_all_fails_when_ghcp_required_and_declined(self):
+        """Require GHCP should fail when user declines installation."""
+        with patch.object(Preflight, "check_mdatp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_rtp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
+             patch.object(Preflight, "check_xcode_clt", return_value=True), \
+             patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "find_client_analyzer_binary", return_value=None), \
+             patch.object(Preflight, "check_ghcp_cli", return_value=False), \
+             patch("builtins.input", return_value="n"):
+            ok = Preflight().run_all(require_node=False, require_ghcp_cli=True)
+            assert ok is False
+
+    def test_run_all_installs_ghcp_when_required(self):
+        """Require GHCP should install and pass when user accepts."""
+        with patch.object(Preflight, "check_mdatp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_rtp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
+             patch.object(Preflight, "check_xcode_clt", return_value=True), \
+             patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "find_client_analyzer_binary", return_value=None), \
+             patch.object(Preflight, "check_ghcp_cli", side_effect=[False, True]), \
+             patch.object(Preflight, "install_ghcp_cli", return_value=True), \
+             patch("builtins.input", return_value="y"):
+            ok = Preflight().run_all(require_node=False, require_ghcp_cli=True)
             assert ok is True

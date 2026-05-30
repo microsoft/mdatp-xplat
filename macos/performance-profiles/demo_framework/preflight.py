@@ -266,6 +266,7 @@ class Preflight:
         required_major_node: int = 24,
         require_node: bool = True,
         require_client_analyzer: bool = False,
+        require_ghcp_cli: bool = False,
     ) -> bool:
         """Run all preflight checks. Returns True if all pass."""
         print("🔍 Preflight checks...\n")
@@ -373,5 +374,67 @@ class Preflight:
             print(f"   ✅ Client Analyzer: {analyzer}")
         else:
             print("   ℹ️  Client Analyzer: not found (optional)")
+
+        # Optional required prerequisite for GHCP-assisted recommendations/analysis.
+        ghcp_ok = self.check_ghcp_cli()
+        if ghcp_ok:
+            print("   ✅ GitHub Copilot CLI: available")
+        elif require_ghcp_cli:
+            print("   ⚠️  GitHub Copilot CLI required but not found.")
+            answer = input("   Install GitHub Copilot CLI now? [Y/n] ").strip().lower()
+            if answer in ("n", "no"):
+                print("   Please install GitHub Copilot CLI and re-run.")
+                return False
+            if not self.install_ghcp_cli():
+                return False
+            if not self.check_ghcp_cli():
+                print("   ⚠️  GitHub Copilot CLI install completed, but command is still unavailable.")
+                return False
+            print("   ✅ GitHub Copilot CLI: available")
+        else:
+            print("   ℹ️  GitHub Copilot CLI: not found (optional)")
         print()
         return True
+
+    @staticmethod
+    def check_ghcp_cli() -> bool:
+        """Check if a working GitHub Copilot CLI binary is available."""
+        if not Preflight.check_command_exists("copilot"):
+            return False
+
+        try:
+            result = subprocess.run(
+                ["copilot", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            output = ((result.stdout or "") + "\n" + (result.stderr or "")).lower()
+            if result.returncode != 0:
+                return False
+            if "cannot find github copilot cli" in output:
+                return False
+            return "github copilot cli" in output
+        except Exception:
+            return False
+
+    @staticmethod
+    def install_ghcp_cli() -> bool:
+        """Install GitHub Copilot CLI via Homebrew."""
+        print("   ⬇️  Installing GitHub Copilot CLI via Homebrew...")
+        try:
+            result = subprocess.run(
+                ["brew", "install", "copilot-cli"],
+                capture_output=False,
+                timeout=300,
+            )
+            if result.returncode != 0:
+                result = subprocess.run(
+                    ["brew", "upgrade", "copilot-cli"],
+                    capture_output=False,
+                    timeout=300,
+                )
+            return result.returncode == 0
+        except Exception as e:
+            print(f"   ⚠️  GHCP CLI install failed: {e}")
+            return False
