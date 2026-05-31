@@ -975,8 +975,10 @@ class ProfiledBuildScenario(DemoScenario):
         if os.environ.get("PYTEST_CURRENT_TEST"):
             return None, set()
         try:
-            scan_dir = cwd or self.config.repo_path
-            existing = {str(p.resolve()) for p in scan_dir.glob("hot_event_source_*.json")}
+            # Always write hot-event JSON files to the results dir, not the source tree.
+            output_dir = self.orchestrator.results_dir
+            output_dir.mkdir(parents=True, exist_ok=True)
+            existing = {str(p.resolve()) for p in output_dir.glob("hot_event_source_*.json")}
             proc = subprocess.Popen(
                 [
                     "sudo",
@@ -985,7 +987,7 @@ class ProfiledBuildScenario(DemoScenario):
                     "hot-event-sources",
                     f"--time={self.hot_event_duration}",
                 ],
-                cwd=scan_dir,
+                cwd=output_dir,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -1008,7 +1010,7 @@ class ProfiledBuildScenario(DemoScenario):
             except Exception:
                 pass
 
-        scan_dir = cwd or self.config.repo_path
+        scan_dir = self.orchestrator.results_dir
         candidates = sorted(scan_dir.glob("hot_event_source_*.json"), key=lambda p: p.stat().st_mtime)
         if not candidates:
             return False

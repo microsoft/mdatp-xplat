@@ -14,7 +14,7 @@ import argparse
 from pathlib import Path
 
 from demo_framework.preflight import Preflight
-from demo_framework.scenarios import VSCodeScenario, XcodeScenario, XcodeSimulatorScenario
+from demo_framework.scenarios import VSCodeScenario, XcodeScenario, XcodeSimulatorScenario, AndroidStudioScenario
 from demo_framework.ui import print_error, print_info
 
 
@@ -35,7 +35,7 @@ Examples:
         "scenario",
         nargs="?",
         default=None,
-        choices=["vscode", "xcode", "xcode-simulator"],
+        choices=["vscode", "xcode", "xcode-simulator", "android-studio"],
         help="Demo scenario to run (if omitted, you'll be prompted)"
     )
 
@@ -90,11 +90,14 @@ Examples:
         print("   1) vscode  - Microsoft VS Code build demo")
         print("   2) xcode   - FluentUI Apple Xcode build demo")
         print("   3) xcode-simulator - HelloDefender iOS simulator demo")
-        choice = input("   Enter choice [1/2/3] (default: 1): ").strip()
+        print("   4) android-studio - HelloDefender Android emulator demo")
+        choice = input("   Enter choice [1/2/3/4] (default: 1): ").strip()
         if choice == "2":
             args.scenario = "xcode"
         elif choice == "3":
             args.scenario = "xcode-simulator"
+        elif choice == "4":
+            args.scenario = "android-studio"
         else:
             args.scenario = "vscode"
 
@@ -133,6 +136,15 @@ Examples:
         if args.hot_events_analysis != "prompt":
             print_info("--hot-events-analysis is ignored for xcode-simulator scenario")
         scenario = XcodeSimulatorScenario(
+            repo_path=args.repo,
+            profile_change_policy=args.profile_change_policy,
+        )
+    elif args.scenario == "android-studio":
+        if args.include_install:
+            print_info("--include-install is ignored for android-studio scenario")
+        if args.hot_events_analysis != "prompt":
+            print_info("--hot-events-analysis is ignored for android-studio scenario")
+        scenario = AndroidStudioScenario(
             repo_path=args.repo,
             profile_change_policy=args.profile_change_policy,
         )

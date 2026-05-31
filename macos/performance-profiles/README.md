@@ -43,6 +43,7 @@ The demo tells a complete story: diagnose → identify → fix → verify — th
 
 For the Python entrypoint (`demo.py`), an additional scenario is available:
 - `xcode-simulator` (HelloDefender simulator workflow): runs `xcodebuild test` by default, then builds the in-repo `apps/hello-defender-ios` app, boots simulator, installs and launches app using `simctl`; profile set: `xcode`, `ios-simulator-tree`, `iphone-simulator-tree`, `git`
+- `android-studio` (HelloDefender emulator workflow): runs `connectedDebugAndroidTest` by default, then builds the in-repo `apps/hello-defender-android` app, boots emulator if needed, installs and launches app using `adb`; profile set: `android-studio`, `android-studio-tree`, `java`, `git`
 
 ## Prerequisites
 
@@ -107,6 +108,9 @@ chmod +x perf-profile-demo-xcode.sh
 
 # Simulator-profile demo via Python entrypoint
 python3 demo.py xcode-simulator
+
+# Android Studio emulator-profile demo via Python entrypoint
+python3 demo.py android-studio
 
 # Optional: run xcode-simulator with your own local iOS app project
 # python3 demo.py xcode-simulator --repo ~/demo/my-ios-app

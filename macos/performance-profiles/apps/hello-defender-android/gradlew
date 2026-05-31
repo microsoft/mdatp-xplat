@@ -1,0 +1,61 @@
+#!/usr/bin/env sh
+
+set -eu
+
+APP_HOME=$(cd "$(dirname "$0")" && pwd)
+WRAPPER_PROPERTIES="$APP_HOME/gradle/wrapper/gradle-wrapper.properties"
+
+if [ ! -f "$WRAPPER_PROPERTIES" ]; then
+  echo "Missing gradle-wrapper.properties at $WRAPPER_PROPERTIES" >&2
+  exit 1
+fi
+
+if [ -z "${JAVA_HOME:-}" ] && [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then
+  export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+fi
+
+DIST_URL=$(grep '^distributionUrl=' "$WRAPPER_PROPERTIES" | cut -d= -f2-)
+DIST_URL=$(printf '%s' "$DIST_URL" | sed 's#\\:#:#g; s#\\=#=#g')
+if [ -z "$DIST_URL" ]; then
+  echo "distributionUrl is missing in gradle-wrapper.properties" >&2
+  exit 1
+fi
+
+DIST_FILE=$(basename "$DIST_URL")
+DIST_NAME=${DIST_FILE%.zip}
+DIST_DIR_NAME=${DIST_NAME%-bin}
+DIST_DIR_NAME=${DIST_DIR_NAME%-all}
+DIST_ROOT="$APP_HOME/.gradle/wrapper/dists"
+DIST_DIR="$DIST_ROOT/$DIST_DIR_NAME"
+GRADLE_BIN="$DIST_DIR/bin/gradle"
+
+if [ ! -x "$GRADLE_BIN" ]; then
+  mkdir -p "$DIST_ROOT"
+  TMP_ZIP="$DIST_ROOT/$DIST_FILE"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL -o "$TMP_ZIP" "$DIST_URL"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O "$TMP_ZIP" "$DIST_URL"
+  else
+    echo "Neither curl nor wget found; cannot download Gradle distribution" >&2
+    exit 1
+  fi
+
+  rm -rf "$DIST_DIR"
+  unzip -q "$TMP_ZIP" -d "$DIST_ROOT"
+  rm -f "$TMP_ZIP"
+
+  EXTRACTED_DIR=$(find "$DIST_ROOT" -maxdepth 1 -type d -name 'gradle-*' | head -n 1)
+  if [ -z "$EXTRACTED_DIR" ]; then
+    echo "Failed to extract Gradle distribution" >&2
+    exit 1
+  fi
+
+  if [ "$EXTRACTED_DIR" != "$DIST_DIR" ]; then
+    rm -rf "$DIST_DIR"
+    mv "$EXTRACTED_DIR" "$DIST_DIR"
+  fi
+fi
+
+exec "$GRADLE_BIN" "$@"
