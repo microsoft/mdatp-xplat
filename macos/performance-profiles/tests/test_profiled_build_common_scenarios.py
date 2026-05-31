@@ -126,6 +126,158 @@ def test_build_optimized_runs_build_command(tmp_path: Path, scenario_factory, ex
     assert expected_build_cmd in calls
 
 
+def test_final_report_includes_summary_table_and_ghcp_analysis(tmp_path: Path):
+    scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
+    results_dir = tmp_path / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    scenario.orchestrator.results_dir = results_dir
+    scenario.baseline = {
+        "time": 11.8,
+        "cpu": 13.5,
+        "scans": 0,
+        "profiles_at_start": "(none)",
+        "client_analyzer": results_dir / "client.zip",
+    }
+    scenario.optimized = {"time": 10.3, "cpu": 7.2, "scans": 0}
+    scenario.recommended_profiles = ["git", "xcode", "xcode-ide-tree"]
+    scenario.recommendation_source = "ghcp+union+scenario-default"
+    scenario.recommended_exclusions = []
+    scenario.applied_temp_exclusions = []
+    scenario.exclusions_before = []
+    scenario.exclusions_after_optimized = []
+    scenario.exclusions_after_cleanup = []
+    scenario.compensating_scan_status = "started"
+    scenario.compensating_scan_target = "/Users/joshbregman/demo/fluentui-apple-optimized"
+    scenario.compensating_scan_files_scanned = "221"
+    scenario.compensating_scan_threats_found = "0"
+    scenario.phase3_ghcp_analysis = (
+        "Hotspots:\n"
+        " • swift-frontend dominates with 6,058 events.\n"
+        " • auth_readdir is a major directory-read signal."
+    )
+
+    (results_dir / "phase2_hot_events.json").write_text(
+        '{"eventSource": ['
+        '{"path":"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend","authCount":4935,"notifyCount":1123},'
+        '{"path":"/usr/bin/git","authCount":500,"notifyCount":100}'
+        ']}'
+    )
+    (results_dir / "phase5_hot_events.json").write_text(
+        '{"eventSource": ['
+        '{"path":"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend","authCount":1200,"notifyCount":200},'
+        '{"path":"/usr/bin/git","authCount":250,"notifyCount":90}'
+        ']}'
+    )
+
+    with patch.object(scenario, "_get_profile_state", return_value=(False, {"git", "xcode", "xcode-ide-tree"})):
+        scenario._write_final_markdown_report(11.8, 10.3)
+
+    report_path = results_dir / f"final_report_{scenario.config.name.lower().replace(' ', '_')}.md"
+    report = report_path.read_text()
+    assert "## 📋 Analysis" in report
+    assert "### ℹ️ Summary" in report
+    assert "| Metric | Before | After | Impact |" in report
+    assert "### 🧠 Analysis" in report
+    assert "AI caveat: GitHub Copilot recommendations use AI" in report
+    assert "| 🧩 Profiles applied |" in report
+    assert "| 🔹 AV exclusions |" in report
+    assert "| ⚡ Hot events (total) |" in report
+    assert "| Files scanned | 221 |" in report
+    assert "| Threats found | 0 |" in report
+    assert "swift-frontend dominates" in report
+
+
+def test_ghcp_exclusion_parser_accepts_markdown_style_candidates(tmp_path: Path):
+    scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
+    output = (
+        "ANALYSIS: Hotspots look dominated by build outputs.\n"
+        "Exclusion candidates:\n"
+        "- <repo>/.build/\n"
+        "- ~/Library/Developer/Xcode/DerivedData/\n"
+        "- process:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend\n"
+        "RECOMMENDED_PROFILES: xcode, xcode-ide-tree\n"
+    )
+
+    parsed = scenario._parse_ghcp_exclusion_candidates(output)
+
+    assert parsed == [
+        {"type": "folder", "value": str(scenario.config.repo_path / ".build/")},
+        {"type": "folder", "value": str(Path.home() / "Library/Developer/Xcode/DerivedData")},
+        {
+            "type": "process",
+            "value": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend",
+        },
+    ]
+
+
+def test_ghcp_exclusion_parser_handles_inline_recommended_profiles(tmp_path: Path):
+    scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
+    output = (
+        "EXCLUSION_CANDIDATES: ~/Library/Developer/Xcode/DerivedData, ~/.build, "
+        "~/Library/Caches/org.swift.swiftpm, "
+        "process:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend "
+        "RECOMMENDED_PROFILES: xcode, xcode-ide-tree\n"
+    )
+
+    parsed = scenario._parse_ghcp_exclusion_candidates(output)
+
+    assert parsed == [
+        {"type": "folder", "value": str(Path.home() / "Library/Developer/Xcode/DerivedData")},
+        {"type": "folder", "value": str(Path.home() / ".build")},
+        {"type": "folder", "value": str(Path.home() / "Library/Caches/org.swift.swiftpm")},
+        {
+            "type": "process",
+            "value": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend",
+        },
+    ]
+
+
+def test_build_optimized_skips_compensating_scan_when_no_temp_exclusions(tmp_path: Path):
+    scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
+    scenario.config.repo_path.mkdir(parents=True, exist_ok=True)
+
+    with patch.object(scenario, "_fresh_clone", return_value=True), \
+        patch.object(scenario, "_prepare_build_environment"), \
+        patch.object(scenario, "_collect_rtp_stats"), \
+        patch.object(scenario, "_start_cpu_monitor", return_value=(MagicMock(), MagicMock())), \
+        patch.object(scenario, "_start_hot_event_collection", return_value=(None, False)), \
+        patch.object(scenario, "_finalize_hot_event_collection"), \
+        patch.object(scenario, "_run_build_command", return_value=True), \
+        patch.object(scenario, "_calc_avg_cpu", return_value="7.2"), \
+        patch.object(scenario, "_count_rtp_scan_delta", return_value="0"), \
+        patch.object(scenario, "_run_compensating_scan") as mock_scan, \
+        patch("demo_framework.scenarios.profiled_build.subprocess.run"):
+        scenario.applied_temp_exclusions = []
+        ok = scenario.build_optimized()
+
+    assert ok is True
+    assert scenario.compensating_scan_status == "skipped_no_temp_exclusions"
+    mock_scan.assert_not_called()
+
+
+def test_format_exclusion_snapshot_shows_all_entries(tmp_path: Path):
+    scenario = VSCodeScenario(repo_path=tmp_path / "vscode")
+    entries = [f"folder:/tmp/path-{i}" for i in range(1, 8)]
+
+    rendered = scenario._format_exclusion_snapshot(entries)
+
+    assert rendered == ", ".join(entries)
+    assert "+" not in rendered
+
+
+def test_rtp_scan_count_supports_counters_schema_and_delta(tmp_path: Path):
+    scenario = XcodeScenario(repo_path=tmp_path / "fluentui-apple")
+
+    before = tmp_path / "rtp_before.json"
+    after = tmp_path / "rtp_after.json"
+    before.write_text('{"counters": [{"totalFilesScanned": "100"}, {"totalFilesScanned": "30"}]}')
+    after.write_text('{"counters": [{"totalFilesScanned": "145"}, {"totalFilesScanned": "55"}]}')
+
+    assert scenario._count_rtp_scans(before) == "130"
+    assert scenario._count_rtp_scans(after) == "200"
+    assert scenario._count_rtp_scan_delta(before, after) == "70"
+
+
 @pytest.mark.parametrize(
     "scenario_factory",
     [

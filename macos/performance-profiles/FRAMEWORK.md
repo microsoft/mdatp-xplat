@@ -13,7 +13,7 @@ The new Python-based demo framework replaces the bash script with a more extensi
 The bootstrap script will:
 - create and activate `venv` if needed
 - install/update dependencies from `requirements.txt`
-- prompt for scenario selection (`vscode` or `xcode`)
+- prompt for scenario selection (`vscode`, `xcode`, or `android-studio`)
 - launch the Python framework
 
 ### Install Dependencies
@@ -53,6 +53,7 @@ pytest
     - profile apply flow (including admin-only handling)
     - optimized build execution
     - standardized analysis summary/reporting
+    - hot-event artifact capture to `~/demo/results` (prevents generated JSON files from being written into source repos)
 
 Standard phase template (used as the model for scenarios):
 1. Setup and Preflight
@@ -87,6 +88,11 @@ Scenarios are extensible demo templates. Each scenario:
 - **`XcodeScenario`** — Build microsoft/fluentui-apple with Swift toolchain
     - Uses `swift build -c release` (compatible with current repo layout)
     - Includes a fresh `git clone` in baseline and optimized phases so `git` profile impact is measurable
+- **`AndroidStudioScenario`** — Build/test/install/launch local Android app on emulator
+    - Uses local app at `apps/hello-defender-android`
+    - Baseline/optimized flow: `clean` -> `connectedDebugAndroidTest` -> `assembleDebug` -> `adb install` -> `adb shell am start`
+    - Auto-detects Android SDK tools from PATH, `ANDROID_SDK_ROOT`, `ANDROID_HOME`, and default `~/Library/Android/sdk`
+    - Requires Android Studio installed and at least one configured AVD in Device Manager
 
 ### Example: Create New Scenario
 
@@ -161,11 +167,17 @@ macos/performance-profiles/
 │   └── scenarios/                  # Demo scenario templates
 │       ├── __init__.py
 │       ├── base.py                 # Base scenario class
+│       ├── android_studio.py       # Android Studio emulator scenario
 │       ├── vscode.py               # VS Code scenario
 │       └── xcode.py                # Xcode scenario
 │
+├── apps/                           # Local app fixtures for scenarios
+│   ├── hello-defender-android/
+│   └── hello-defender-ios/
+│
 ├── tests/                          # Test suite
 │   ├── __init__.py
+│   ├── test_android_studio_scenario.py
 │   ├── test_orchestrator.py
 │   ├── test_preflight.py
 │   └── test_scenarios.py           # (Optional extension)
@@ -213,6 +225,28 @@ python3 demo.py vscode --include-install
 # Require Client Analyzer in preflight (auto-prompt install if missing)
 python3 demo.py vscode --require-client-analyzer
 
+# Override Client Analyzer install/detection directory
+python3 demo.py vscode --require-client-analyzer --client-analyzer-dir ~/demo/analyzer/custom
+
+# Client Analyzer preference across scenarios (user/environment driven)
+python3 demo.py xcode --client-analyzer-mode on
+python3 demo.py android-studio --client-analyzer-mode off
+export MDE_DEMO_CLIENT_ANALYZER=on   # auto|on|off
+
+# Temporary AV exclusion workflow preference (parallel to profile workflow)
+python3 demo.py xcode --av-exclusions-mode auto
+python3 demo.py xcode --av-exclusions-mode on
+export MDE_DEMO_AV_EXCLUSIONS=auto   # auto|on|off
+
+# NOTE: The current XMDE Client Analyzer package is Python-based
+# (mde_support_tool.sh + mde_tools/) and no longer provides SupportToolMacOSBinary.zip.
+# This integration is validated with the latest package from
+# https://aka.ms/XMDEClientAnalyzerBinary; older package layouts may not
+# be detected or may behave differently.
+# If you run analyzer manually, use:
+#   ./mde_support_tool.sh -h
+#   sudo ./mde_support_tool.sh performance --length 30
+
 # Choose hot-event analysis mode directly
 python3 demo.py vscode --hot-events-analysis python
 python3 demo.py vscode --hot-events-analysis ghcp
@@ -222,17 +256,42 @@ python3 demo.py vscode --hot-events-analysis both
 # including hot-event aggregates (before/after/delta) and profiles applied.
 # Use ghcp or both only if you also want optional GHCP narrative output.
 
-# During phase 3, recommendations are generated from hot events and available
-# profiles discovered from mdatp CLI.
+# During phase 3, the flow is intentionally two user-facing steps:
+# 1) Collect baseline logs
+#    - hot-event telemetry (always expected)
+#    - optional Client Analyzer output
+# 2) Analyze telemetry and choose profiles
+#    - recommendations are generated from hot events and available profiles
+#      discovered from mdatp CLI
+#
+# MDE diagnostic bundle export is treated as a fallback artifact collection step
+# (not a separate decision/analysis step). It can overlap with Client Analyzer
+# content, so when Client Analyzer output is present the framework may skip the
+# mdatp diagnostic bundle export.
 # Default behavior is GHCP-first recommendation; if GHCP is unavailable or
 # returns no profile matches, it falls back to Python heuristics.
 # GHCP is asked to emit a machine-readable line:
 # RECOMMENDED_PROFILES: profile1, profile2
 # so phase 4 can directly apply the parsed profile list.
 # Phase 4 then applies the selected recommendation set.
+#
+# When the temporary exclusion workflow is enabled and Client Analyzer output
+# exists, GHCP may also emit EXCLUSION_CANDIDATES. These can be applied as
+# temporary exclusions for the optimized retest and are removed automatically
+# during analysis cleanup.
 
 # Run Xcode demo directly
 python3 demo.py xcode
+
+# Run Android Studio demo directly
+python3 demo.py android-studio
+
+# Run Android Studio demo from bootstrap script
+./perf-profile-demo.sh android-studio
+
+# Bootstrap prewarms sudo credentials once by default to reduce repeated prompts.
+# Opt out if needed:
+./perf-profile-demo.sh --no-sudo-prep xcode
 
 # Run with custom repo path
 python3 demo.py vscode --repo ~/my-vscode

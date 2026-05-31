@@ -81,8 +81,13 @@ git clone https://github.com/microsoft/fluentui-apple.git ~/demo/fluentui-apple
 mkdir -p ~/demo/analyzer && cd ~/demo/analyzer
 curl -s -L -o XMDEClientAnalyzerBinary.zip "https://aka.ms/XMDEClientAnalyzerBinary"
 unzip -q XMDEClientAnalyzerBinary.zip -d XMDEClientAnalyzerBinary
-cd XMDEClientAnalyzerBinary && unzip -q SupportToolMacOSBinary.zip
-xattr -cr MDESupportTool
+cd XMDEClientAnalyzerBinary
+chmod +x mde_support_tool.sh
+
+# NOTE: XMDEClientAnalyzerBinary now ships the Python wrapper package
+# (mde_support_tool.sh + mde_tools/) instead of SupportToolMacOSBinary.zip.
+# The first run bootstraps Python dependencies into mde_tools/.deps.
+./mde_support_tool.sh -h
 ```
 
 ## Running the Demo
@@ -93,6 +98,10 @@ chmod +x perf-profile-demo.sh
 
 # Run with default settings (builds VS Code from ~/demo/vscode)
 ./perf-profile-demo.sh
+
+# Bootstrap prewarms sudo credentials once by default to reduce repeated prompts.
+# Opt out if needed:
+./perf-profile-demo.sh --no-sudo-prep xcode
 
 # Choose consent policy for applying/removing profiles
 python3 demo.py vscode --profile-change-policy prompt   # default
@@ -111,6 +120,19 @@ python3 demo.py xcode-simulator
 
 # Android Studio emulator-profile demo via Python entrypoint
 python3 demo.py android-studio
+
+# Require Client Analyzer and use a custom install/detection path
+python3 demo.py vscode --require-client-analyzer --client-analyzer-dir ~/demo/analyzer/custom
+
+# Client Analyzer preference across scenarios (user/environment driven)
+python3 demo.py xcode --client-analyzer-mode on
+python3 demo.py android-studio --client-analyzer-mode off
+export MDE_DEMO_CLIENT_ANALYZER=on   # auto|on|off
+
+# Temporary AV exclusion workflow preference (parallel to profile workflow)
+python3 demo.py xcode --av-exclusions-mode auto
+python3 demo.py xcode --av-exclusions-mode on
+export MDE_DEMO_AV_EXCLUSIONS=auto   # auto|on|off
 
 # Optional: run xcode-simulator with your own local iOS app project
 # python3 demo.py xcode-simulator --repo ~/demo/my-ios-app
@@ -236,12 +258,30 @@ cat rtp_stats.json | python3 high_cpu_parser.py | head -10
 
 ### XMDE Client Analyzer (optional)
 
-The Client Analyzer's `performance` mode produces an HTML report with hot event sources in a visual, shareable format.
+The Client Analyzer `performance` mode produces a support archive (`*.zip`) that
+contains text diagnostics and supporting artifacts such as hot-event snapshots,
+RTP statistics, and analyzer summaries.
 
 ```bash
-sudo ./MDESupportTool performance --length 30
-# Output: MDESupportTool_<timestamp>.zip with eps_event_stat_sample.html
+sudo ./mde_support_tool.sh performance --length 30
+# Output: support_tool_output_*.zip with text/zip performance artifacts
 ```
+
+When enabled, the demo can run a temporary AV exclusion loop in parallel with
+the performance profile workflow:
+1. Baseline build and telemetry collection
+2. GHCP recommends least-privilege exclusion candidates + profiles
+3. Temporary exclusions are optionally applied for optimized retest
+4. Optimized build runs with applied recommendations
+5. Temporary exclusions are removed automatically during analysis cleanup
+
+> Note: older documentation and packages may reference `MDESupportTool` and
+> `SupportToolMacOSBinary.zip`. Current packages from `aka.ms/XMDEClientAnalyzerBinary`
+> use `mde_support_tool.sh`.
+>
+> Compatibility: framework integration is validated against the latest
+> Client Analyzer package from `aka.ms/XMDEClientAnalyzerBinary`. Older
+> package layouts may not be detected or may behave differently.
 
 > **Learn more:** [Troubleshoot performance issues](https://learn.microsoft.com/en-us/defender-endpoint/mac-support-perf)
 

@@ -9,14 +9,17 @@ from typing import Dict, List, Optional
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
+import sys
 import threading
 import time
+import zipfile
 from datetime import datetime
 
 from .base import DemoScenario, ScenarioConfig
-from ..ui import print_section, print_success, print_error, print_info
+from ..ui import print_section, print_success, print_error, print_info, print_warning
 
 
 class ProfiledBuildScenario(DemoScenario):
@@ -39,6 +42,7 @@ class ProfiledBuildScenario(DemoScenario):
         recommend_keywords: Optional[Dict[str, List[str]]] = None,
         hot_events_analysis_mode: str = "none",
         enable_client_analyzer: bool = False,
+        enable_exclusion_workflow: Optional[bool] = None,
         analyzer_dir: Optional[Path] = None,
         enable_resume_checkpoint: bool = False,
         state_file_name: str = ".profiled-build-state.json",
@@ -57,6 +61,7 @@ class ProfiledBuildScenario(DemoScenario):
         self.recommend_keywords = dict(recommend_keywords or {})
         self.hot_events_analysis_mode = hot_events_analysis_mode
         self.enable_client_analyzer = enable_client_analyzer
+        self.enable_exclusion_workflow = enable_client_analyzer if enable_exclusion_workflow is None else enable_exclusion_workflow
         self.analyzer_dir = analyzer_dir or (Path.home() / "demo" / "analyzer" / "XMDEClientAnalyzerBinary")
         self.enable_resume_checkpoint = enable_resume_checkpoint
         self.profile_change_policy = profile_change_policy
@@ -65,6 +70,19 @@ class ProfiledBuildScenario(DemoScenario):
         self.recommended_profiles = list(self.config.profiles or [])
         self.recommendation_source = "default"
         self.hot_event_duration = 60
+        self.client_analyzer_last_error = None
+        self.client_analyzer_log_file = None
+        self.recommended_exclusions = []
+        self.applied_temp_exclusions = []
+        self.exclusion_recommendation_source = "none"
+        self.exclusions_before = []
+        self.exclusions_after_optimized = []
+        self.exclusions_after_cleanup = []
+        self.compensating_scan_started = False
+        self.compensating_scan_target = None
+        self.compensating_scan_status = "not_run"
+        self.compensating_scan_files_scanned = "N/A"
+        self.compensating_scan_threats_found = "N/A"
         self.baseline = {
             "time": 0.0,
             "cpu": "N/A",
@@ -73,6 +91,8 @@ class ProfiledBuildScenario(DemoScenario):
             "client_analyzer": None,
         }
         self.optimized = {"time": 0.0, "cpu": "N/A", "scans": "N/A"}
+        self.phase6_hotspot_analysis = ""
+        self.phase3_ghcp_analysis = ""
 
         self.baseline_repo_path = self.config.repo_path
         self.optimized_repo_path = self.config.repo_path
@@ -118,27 +138,39 @@ class ProfiledBuildScenario(DemoScenario):
         print_info("Collecting MDE performance data...")
 
         hot_before = self.orchestrator.results_dir / "phase2_hot_events.json"
-        print_info("Step 1/3: Analyze baseline hot-event telemetry")
-        if hot_before.exists() and hot_before.stat().st_size > 0:
+        hot_before_available = hot_before.exists() and hot_before.stat().st_size > 0
+
+        print_info("Step 1/2: Collect baseline logs")
+        if hot_before_available:
+            entries = self._load_hot_event_entries(hot_before)
+            print_info(f"Hot-event telemetry entries loaded: {len(entries)}")
+        else:
+            print_info("Hot-event telemetry missing/empty")
+
+        print_info("Client Analyzer logs (optional)")
+        self._run_phase3_optional_diagnostics()
+
+        print_info("Step 2/2: Analyze telemetry and choose profiles")
+        if hot_before_available:
             self._select_profiles_for_phase4(hot_before)
         else:
             self.recommended_profiles = self._get_available_profiles()
             self.recommendation_source = "default"
 
-        print_info("Step 2/3: Scenario optional diagnostics")
-        self._run_phase3_optional_diagnostics()
-
-        print_info("Step 3/3: MDE diagnostic bundle export")
-        try:
-            subprocess.run(
-                ["mdatp", "diagnostic", "create", "--folder", str(self.orchestrator.results_dir)],
-                timeout=60,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-        except Exception:
-            pass
+        if self.baseline.get("client_analyzer"):
+            print_info("Skipping MDE diagnostic bundle export (covered by Client Analyzer output)")
+        else:
+            print_info("Exporting MDE diagnostic bundle (fallback artifact)")
+            try:
+                subprocess.run(
+                    ["mdatp", "diagnostic", "create", "--folder", str(self.orchestrator.results_dir)],
+                    timeout=60,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+            except Exception:
+                pass
 
         self._persist_phase3_state()
         print_info(f"Phase 4 will apply ({self.recommendation_source}): {', '.join(self.recommended_profiles)}")
@@ -150,12 +182,570 @@ class ProfiledBuildScenario(DemoScenario):
 
     def _run_phase3_optional_diagnostics(self):
         """Scenario hook for phase 3 optional diagnostics."""
-        analyzer_zip = self._run_client_analyzer()
+        if not self.enable_client_analyzer:
+            print_info("Client Analyzer disabled by configuration; skipping optional logs")
+            return None
+
+        print_info("Starting optional Client Analyzer capture (~10s, requires sudo credentials)")
+        analyzer_zip = self._run_client_analyzer("phase3")
+        if self.client_analyzer_log_file:
+            print_info(f"Client Analyzer log: {self.client_analyzer_log_file}")
         if analyzer_zip:
             self.baseline["client_analyzer"] = analyzer_zip
             print_success(f"Client Analyzer report: {analyzer_zip}")
+            print_info("Optional diagnostics complete")
         elif self.enable_client_analyzer:
-            print_info("Client Analyzer not available (skipping)")
+            if self.client_analyzer_last_error:
+                print_info(f"Client Analyzer skipped: {self.client_analyzer_last_error}")
+            else:
+                print_info("Client Analyzer not available (skipping)")
+            print_info("Optional diagnostics complete")
+        return None
+
+    def _parse_ghcp_exclusion_candidates(self, output_text: str):
+        """Parse GHCP exclusion candidates into normalized [{type, value}] entries."""
+        if not output_text:
+            return []
+
+        parsed = []
+        lines = output_text.splitlines()
+        raw_tokens = []
+
+        for idx, raw_line in enumerate(lines):
+            line = raw_line.strip().strip("*_`")
+            heading_match = re.search(r"EXCLUSION[\s_-]*CANDIDATES\s*:\s*(.*)", line, flags=re.IGNORECASE)
+            if not heading_match:
+                continue
+
+            rhs = heading_match.group(1).strip()
+            rhs = re.split(r"\bRECOMMENDED[\s_-]*PROFILES\s*:", rhs, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+            if rhs and rhs.lower() != "none":
+                raw_tokens.extend([item.strip() for item in re.split(r"[,;]", rhs) if item.strip()])
+
+            for follow in lines[idx + 1 :]:
+                follow_line = follow.strip().strip("*_`")
+                if not follow_line:
+                    if raw_tokens:
+                        break
+                    continue
+                if re.match(r"RECOMMENDED[\s_-]*PROFILES\s*:", follow_line, flags=re.IGNORECASE):
+                    break
+                if re.match(r"ANALYSIS\s*:", follow_line, flags=re.IGNORECASE):
+                    break
+                if re.match(r"EXCLUSION[\s_-]*CANDIDATES\s*:", follow_line, flags=re.IGNORECASE):
+                    break
+                if follow_line.startswith(("-", "*")):
+                    raw_tokens.append(follow_line.lstrip("-* ").strip())
+                else:
+                    raw_tokens.extend([item.strip() for item in re.split(r"[,;]", follow_line) if item.strip()])
+            break
+
+        if not raw_tokens:
+            return []
+
+        for raw in raw_tokens:
+            token = raw.strip().strip("`").strip()
+            token = re.sub(r"\bRECOMMENDED[\s_-]*PROFILES\s*:.*$", "", token, flags=re.IGNORECASE).strip()
+            token = re.sub(r"\bANALYSIS\s*:.*$", "", token, flags=re.IGNORECASE).strip()
+            token_lower = token.lower()
+            exclusion_type = "folder"
+
+            if token_lower.startswith("folder:"):
+                exclusion_type = "folder"
+                token = token.split(":", 1)[1].strip()
+            elif token_lower.startswith("file:"):
+                exclusion_type = "file"
+                token = token.split(":", 1)[1].strip()
+            elif token_lower.startswith("process:"):
+                exclusion_type = "process"
+                token = token.split(":", 1)[1].strip()
+
+            if not token or token.lower() == "none":
+                continue
+            if token.startswith("<repo>/"):
+                token = str(self.config.repo_path / token[len("<repo>/") :])
+            elif token.startswith("./"):
+                token = str(self.config.repo_path / token[2:])
+            elif token.startswith("~"):
+                token = os.path.expanduser(token)
+
+            if token.endswith("/") and token != "/":
+                token = token.rstrip("/")
+
+            if exclusion_type == "process":
+                candidate = {"type": exclusion_type, "value": token}
+                if candidate not in parsed:
+                    parsed.append(candidate)
+                continue
+
+            if not token.startswith("/"):
+                continue
+
+            candidate = {"type": exclusion_type, "value": token}
+            if candidate not in parsed:
+                parsed.append(candidate)
+
+        return parsed[:5]
+
+    def _print_markdown_analysis(self, title: str, text: str, max_lines: int = 40):
+        """Render GHCP analysis as Markdown-style text in terminal output."""
+        if not text:
+            return None
+
+        lines = text.splitlines()
+        if max_lines and len(lines) > max_lines:
+            text = "\n".join(lines[:max_lines] + ["... (truncated)"])
+
+        try:
+            from rich.console import Console
+            from rich.markdown import Markdown
+
+            print_info(f"{title} (markdown)")
+            console = Console()
+            console.print(Markdown(text))
+        except Exception:
+            print_info(f"{title} (markdown)")
+            for line in text.splitlines():
+                print(f"   {line}")
+        return None
+
+    def _markdown_table(self, headers: List[str], rows: List[List[str]]) -> str:
+        """Build a simple GitHub-flavored Markdown table."""
+        if not headers:
+            return ""
+
+        def escape_cell(value):
+            return str(value).replace("|", "\\|")
+
+        lines = [
+            "| " + " | ".join(escape_cell(header) for header in headers) + " |",
+            "| " + " | ".join("---" for _ in headers) + " |",
+        ]
+        for row in rows:
+            lines.append("| " + " | ".join(escape_cell(cell) for cell in row) + " |")
+        return "\n".join(lines)
+
+    def _format_delta(self, after, before) -> str:
+        """Format a numeric delta when both values are present."""
+        try:
+            if after is None or before is None:
+                return "N/A"
+            return f"{int(after) - int(before):+d}"
+        except Exception:
+            return "N/A"
+
+    def _percent_change(self, before, after) -> str:
+        """Return percent reduction/increase text for numeric before/after values."""
+        try:
+            before_val = float(before)
+            after_val = float(after)
+            if before_val <= 0:
+                return "N/A"
+            pct = ((before_val - after_val) / before_val) * 100.0
+            return f"{pct:.0f}%"
+        except Exception:
+            return "N/A"
+
+    def _active_profiles_text(self) -> str:
+        """Return a stable textual summary of active profiles on the endpoint."""
+        _, active_applied = self._get_profile_state()
+        if not active_applied:
+            return "(none detected)"
+        active_sorted = sorted([p for p in active_applied if p in self.config.profiles])
+        return ", ".join(active_sorted) if active_sorted else "(none detected)"
+
+    def _format_hotspot_analysis_for_report(self, text: str) -> str:
+        """Wrap hotspot analysis text for inclusion in the final markdown report."""
+        if not text:
+            return ""
+
+        lines = ["### 🔎 Hotspots", ""]
+        lines.extend(text.splitlines())
+        return "\n".join(lines)
+
+    def _confirm_exclusion_change(self, exclusions: List[dict]) -> bool:
+        """Apply configured consent policy for temporary exclusion changes."""
+        if not exclusions:
+            return True
+
+        mode = (self.profile_change_policy or "prompt").lower()
+        if mode == "always":
+            return True
+        if mode == "never":
+            print_info("Temporary exclusions cancelled by profile change policy (never)")
+            self._log_line("temporary_exclusions:cancelled policy=never")
+            return False
+
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return True
+
+        print_info("This step can apply temporary AV exclusions for the optimized retest:")
+        for candidate in exclusions:
+            print(f"   - {candidate['type']}: {candidate['value']}")
+        answer = input("Proceed to apply temporary exclusions? [Y/n] ").strip().lower()
+        return answer not in ("n", "no")
+
+    def _apply_recommended_exclusions(self):
+        """Apply recommended AV exclusions temporarily for optimized build retest."""
+        if not self.enable_exclusion_workflow:
+            print_info("Temporary AV exclusion workflow is disabled")
+            return None
+
+        if not self.baseline.get("client_analyzer"):
+            print_info("Client Analyzer archive not found; using telemetry/GHCP exclusion candidates only")
+
+        candidates = list(self.recommended_exclusions or [])
+        if not candidates:
+            print_info("No temporary AV exclusion candidates were recommended")
+            return None
+
+        candidate_text = ", ".join([f"{c['type']}:{c['value']}" for c in candidates])
+
+        print_info(
+            "Temporary AV exclusion recommendation set "
+            f"({self.exclusion_recommendation_source}): "
+            f"{candidate_text}"
+        )
+
+        if not self._confirm_exclusion_change(candidates):
+            print_info("Temporary AV exclusions cancelled by user")
+            self._log_line("temporary_exclusions:cancelled user_declined")
+            return None
+
+        self.applied_temp_exclusions = []
+        for candidate in candidates:
+            exclusion_type = candidate.get("type")
+            value = candidate.get("value")
+            if exclusion_type not in {"folder", "file", "process"} or not value:
+                continue
+
+            try:
+                result = subprocess.run(
+                    ["sudo", "mdatp", "exclusion", exclusion_type, "add", "--path", value],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    self.applied_temp_exclusions.append({"type": exclusion_type, "value": value})
+                    self._log_line(f"temporary_exclusion:add type={exclusion_type} value={value} status=applied")
+                    print_success(f"Temporary exclusion applied: {exclusion_type}:{value}")
+                else:
+                    self._log_line(f"temporary_exclusion:add type={exclusion_type} value={value} status=nonzero")
+                    print_info(f"Temporary exclusion not applied: {exclusion_type}:{value}")
+            except Exception as e:
+                self._log_line(f"temporary_exclusion:add type={exclusion_type} value={value} exception={e}")
+                print_info(f"Temporary exclusion error for {exclusion_type}:{value}: {e}")
+
+        return None
+
+    def _cleanup_temporary_exclusions(self):
+        """Remove exclusions added by this run so endpoint state is restored."""
+        if not self.applied_temp_exclusions:
+            return None
+
+        removed = 0
+        for candidate in reversed(self.applied_temp_exclusions):
+            exclusion_type = candidate.get("type")
+            value = candidate.get("value")
+            try:
+                result = subprocess.run(
+                    ["sudo", "mdatp", "exclusion", exclusion_type, "remove", "--path", value],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    removed += 1
+                    self._log_line(f"temporary_exclusion:remove type={exclusion_type} value={value} status=removed")
+                else:
+                    self._log_line(f"temporary_exclusion:remove type={exclusion_type} value={value} status=nonzero")
+            except Exception as e:
+                self._log_line(f"temporary_exclusion:remove type={exclusion_type} value={value} exception={e}")
+                print_info(f"Temporary exclusion cleanup error for {exclusion_type}:{value}: {e}")
+
+        print_info(f"Temporary AV exclusions removed: {removed}/{len(self.applied_temp_exclusions)}")
+        self.applied_temp_exclusions = []
+        return None
+
+    def _get_exclusion_snapshot(self) -> List[str]:
+        """Return current exclusion entries in a compact, stable text format."""
+        commands = [
+            ["sudo", "mdatp", "exclusion", "list"],
+            ["mdatp", "exclusion", "list"],
+        ]
+        output = ""
+        for command in commands:
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                output = (result.stdout or "").strip()
+                if result.returncode == 0 and output:
+                    break
+            except Exception:
+                continue
+
+        if not output:
+            return []
+
+        entries = []
+        for raw in output.splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            lower = line.lower()
+            if lower in {
+                "no exclusions",
+                "exclusion list is empty",
+                "exclusions list is empty",
+            }:
+                return []
+            if line.startswith("===") or line.startswith("---"):
+                continue
+            entries.append(line)
+        return entries
+
+    @staticmethod
+    def _format_exclusion_snapshot(entries: List[str]) -> str:
+        """Render exclusion entries for summary output."""
+        if not entries:
+            return "(none)"
+        return ", ".join(entries)
+
+    def _run_compensating_scan(self, target: Path):
+        """Start a compensating custom scan that ignores exclusions."""
+        self.compensating_scan_target = str(target)
+        self.compensating_scan_files_scanned = "N/A"
+        self.compensating_scan_threats_found = "N/A"
+        try:
+            result = subprocess.run(
+                [
+                    "sudo",
+                    "mdatp",
+                    "scan",
+                    "custom",
+                    "--path",
+                    str(target),
+                    "--ignore-exclusions",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            if result.returncode == 0:
+                self.compensating_scan_started = True
+                self.compensating_scan_status = "started"
+                self._collect_compensating_scan_summary()
+                self._log_line(f"phase5:compensating_scan started path={target}")
+                print_success("Compensating custom scan started (--ignore-exclusions)")
+            else:
+                self.compensating_scan_started = False
+                self.compensating_scan_status = f"failed_exit_{result.returncode}"
+                self._log_line(
+                    f"phase5:compensating_scan failed path={target} exit={result.returncode} stderr={result.stderr.strip()}"
+                )
+                print_info("Compensating custom scan did not start (see run log)")
+        except Exception as e:
+            self.compensating_scan_started = False
+            self.compensating_scan_status = "error"
+            self._log_line(f"phase5:compensating_scan exception={e}")
+            print_info(f"Compensating custom scan error: {e}")
+        return None
+
+    def _collect_compensating_scan_summary(self):
+        """Best-effort capture of files-scanned and threats-found from scan list output."""
+        def _pick_from_entry(entry):
+            if not isinstance(entry, dict):
+                return None, None
+
+            file_keys = [
+                "filesScanned",
+                "totalFilesScanned",
+                "files_scanned",
+                "scannedFiles",
+            ]
+            threat_keys = [
+                "threatsFound",
+                "threatCount",
+                "malwareFound",
+                "threats_found",
+            ]
+
+            files = next((entry.get(k) for k in file_keys if entry.get(k) is not None), None)
+            threats = next((entry.get(k) for k in threat_keys if entry.get(k) is not None), None)
+            return files, threats
+
+        try:
+            result = subprocess.run(
+                ["mdatp", "scan", "list", "--output", "json"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                data = json.loads(result.stdout)
+                candidates = []
+                if isinstance(data, list):
+                    candidates = data
+                elif isinstance(data, dict):
+                    for key in ["scans", "scanEntries", "items", "data", "value"]:
+                        value = data.get(key)
+                        if isinstance(value, list):
+                            candidates = value
+                            break
+                    if not candidates:
+                        candidates = [data]
+
+                for entry in candidates:
+                    files, threats = _pick_from_entry(entry)
+                    if files is not None or threats is not None:
+                        if files is not None:
+                            self.compensating_scan_files_scanned = str(files)
+                        if threats is not None:
+                            self.compensating_scan_threats_found = str(threats)
+                        return None
+        except Exception:
+            pass
+
+        try:
+            result = subprocess.run(
+                ["mdatp", "scan", "list"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout:
+                files_match = re.search(r"files\s+scanned\s*[:=]\s*(\d+)", result.stdout, re.IGNORECASE)
+                threats_match = re.search(r"threats\s+found\s*[:=]\s*(\d+)", result.stdout, re.IGNORECASE)
+                if files_match:
+                    self.compensating_scan_files_scanned = files_match.group(1)
+                if threats_match:
+                    self.compensating_scan_threats_found = threats_match.group(1)
+        except Exception:
+            pass
+        return None
+
+    def _write_final_markdown_report(self, baseline: float, optimized: float):
+        """Persist a concise markdown report to the results directory."""
+        try:
+            speedup_saved = baseline - optimized
+            speedup_pct = ((speedup_saved / baseline) * 100) if baseline > 0 else 0
+            report_path = self.orchestrator.results_dir / f"final_report_{self.config.name.lower().replace(' ', '_')}.md"
+            exclusion_candidates_text = ", ".join(
+                [f"{c['type']}:{c['value']}" for c in self.recommended_exclusions]
+            ) or "(none)"
+            temporary_exclusions_text = ", ".join(
+                [f"{c['type']}:{c['value']}" for c in self.applied_temp_exclusions]
+            ) or "(none)"
+            scan_target = self.optimized_repo_path if self.optimized_repo_path.exists() else self.config.repo_path
+            before_agg = self._hot_event_aggregate(self.orchestrator.results_dir / "phase2_hot_events.json")
+            after_agg = self._hot_event_aggregate(self.orchestrator.results_dir / "phase5_hot_events.json")
+            before_hot_total = (before_agg or {}).get("total")
+            after_hot_total = (after_agg or {}).get("total")
+            selected_profiles = ", ".join(self.recommended_profiles or self.config.profiles)
+            analysis_text = (self.phase3_ghcp_analysis or self.phase6_hotspot_analysis or "(GHCP analysis unavailable)").strip()
+            speedup_text = f"{speedup_pct:.0f}% ({speedup_saved:.1f}s saved)"
+
+            summary_rows = [
+                ["⏱️ Build time", f"{baseline:.1f}s", f"{optimized:.1f}s", speedup_text],
+                [
+                    "🖥️ MDE avg CPU",
+                    f"{self.baseline.get('cpu', 'N/A')}%",
+                    f"{self.optimized.get('cpu', 'N/A')}%",
+                    self._percent_change(self.baseline.get("cpu"), self.optimized.get("cpu")),
+                ],
+                [
+                    "📁 Scans",
+                    str(self.baseline.get("scans", "N/A")),
+                    str(self.optimized.get("scans", "N/A")),
+                    self._percent_change(self.baseline.get("scans"), self.optimized.get("scans")),
+                ],
+                [
+                    "⚡ Hot events (total)",
+                    str(before_hot_total if before_hot_total is not None else "N/A"),
+                    str(after_hot_total if after_hot_total is not None else "N/A"),
+                    self._percent_change(before_hot_total, after_hot_total),
+                ],
+                ["🧩 Profiles applied", self.baseline.get("profiles_at_start", "(unknown)"), self._active_profiles_text(), "N/A"],
+                [
+                    "🔹 AV exclusions",
+                    self._format_exclusion_snapshot(self.exclusions_before),
+                    self._format_exclusion_snapshot(self.exclusions_after_optimized),
+                    "N/A",
+                ],
+                ["🧪 Temp exclusions used", "(none)", temporary_exclusions_text, "N/A"],
+            ]
+
+            report_sections = [
+                f"# {self.config.name} - Final Report",
+                "",
+                "## 📋 Analysis",
+                "",
+                "### ℹ️ Summary",
+                self._markdown_table(["Metric", "Before", "After", "Impact"], summary_rows),
+                "",
+                "### 🧠 Analysis",
+                analysis_text,
+                "",
+                "AI caveat: GitHub Copilot recommendations use AI; review all recommendations before applying.",
+                "",
+                "### 📦 Artifacts",
+                self._markdown_table(
+                    ["Item", "Value"],
+                    [
+                        ["📦 Artifacts", str(self.orchestrator.results_dir)],
+                        ["📝 Run log", str(self.run_log_file)],
+                        ["📊 Client Analyzer (base)", str(self.baseline.get('client_analyzer', '(none)'))],
+                        ["📊 Client Analyzer (opt)", str(self.optimized.get('client_analyzer', '(none)'))],
+                    ],
+                ),
+            ]
+
+            report_sections.extend(
+                [
+                    "",
+                    "### ⚠️ SECURITY CAUTION",
+                    "Exclusions or performance profiles reduce Defender protection.",
+                    "Use exclusions sparingly and keep profile/exclusion scope as narrow as possible.",
+                    "Mitigation: run compensating scans after build/retest to reduce supply-chain risk.",
+                    "",
+                    "### ℹ️ Compensating scan recommendation",
+                    f"1. One-time post-build custom scan (ignore exclusions):\n   `sudo mdatp scan custom --path {shlex.quote(str(scan_target))} --ignore-exclusions`",
+                    "2. Optional quick scan immediately after custom scan:\n   `sudo mdatp scan quick`",
+                    "3. Check scan status and completion:\n   `mdatp scan list`",
+                    "",
+                    "### 🛡️ Compensating scan status",
+                    self._markdown_table(
+                        ["Field", "Value"],
+                        [
+                            ["Status", self.compensating_scan_status],
+                            ["Target", self.compensating_scan_target or "(none)"],
+                            ["Files scanned", self.compensating_scan_files_scanned],
+                            ["Threats found", self.compensating_scan_threats_found],
+                        ],
+                    ),
+                    "",
+                    f"*Temporary exclusions applied:* {temporary_exclusions_text}",
+                    f"*Exclusion candidates:* {exclusion_candidates_text}",
+                    f"*Selected profiles:* {selected_profiles}",
+                ]
+            )
+
+            report_path.write_text("\n".join(report_sections) + "\n")
+            print_info(f"Final markdown report: {report_path}")
+            self._log_line(f"phase_analysis:final_report {report_path}")
+        except Exception as e:
+            self._log_line(f"phase_analysis:final_report_error {e}")
         return None
 
     def _persist_phase3_state(self):
@@ -249,28 +839,114 @@ class ProfiledBuildScenario(DemoScenario):
             self._hot_event_ghcp_analysis(before_hot, after_hot)
         return None
 
-    def _run_client_analyzer(self):
+    def _run_client_analyzer(self, phase_tag: str = "phase3"):
         """Run XMDE Client Analyzer performance capture if available."""
         if not self.enable_client_analyzer:
             return None
 
-        tool = self.analyzer_dir / "MDESupportTool"
-        if not self._has_client_analyzer() or os.environ.get("PYTEST_CURRENT_TEST"):
+        self.client_analyzer_last_error = None
+        self.client_analyzer_log_file = None
+        tool = self._client_analyzer_tool()
+        if not tool or os.environ.get("PYTEST_CURRENT_TEST"):
             return None
 
         try:
-            subprocess.run(
-                ["sudo", str(tool), "performance", "--length", "10"],
-                cwd=self.orchestrator.results_dir,
+            sudo_check = subprocess.run(
+                ["sudo", "-n", "true"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                timeout=600,
+                timeout=5,
                 check=False,
             )
-            zips = sorted(self.orchestrator.results_dir.glob("MDESupportTool_*.zip"), key=lambda p: p.stat().st_mtime)
+            if sudo_check.returncode != 0:
+                self.client_analyzer_last_error = "sudo credentials required (run `sudo -v` first)"
+                return None
+
+            log_path = self.orchestrator.results_dir / f"{phase_tag}_client_analyzer.log"
+            self.client_analyzer_log_file = str(log_path)
+            print_info("Running Client Analyzer.....")
+            started_at = time.time()
+            with log_path.open("w") as log_handle:
+                proc = subprocess.Popen(
+                    ["sudo", "-n", str(tool), "--bypass-disclaimer", "performance", "--length", "10"],
+                    cwd=self.orchestrator.results_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                )
+                try:
+                    if proc.stdout is not None:
+                        for line in proc.stdout:
+                            log_handle.write(line)
+                            log_handle.flush()
+                            sys.stdout.write(line)
+                            sys.stdout.flush()
+                    run_result = proc.wait(timeout=600)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+                    self.client_analyzer_last_error = "client analyzer timed out after 600s"
+                    return None
+            if run_result != 0:
+                self.client_analyzer_last_error = (
+                    f"client analyzer failed (exit={run_result}; see {self.client_analyzer_log_file})"
+                )
+                return None
+
+            archive_hint = None
+            try:
+                log_text = log_path.read_text(errors="replace")
+                match = re.search(r"Archive created at:\s*(\S+\.zip)", log_text)
+                if match:
+                    archive_hint = Path(match.group(1))
+            except Exception:
+                archive_hint = None
+
+            zips = sorted(
+                [
+                    *self.orchestrator.results_dir.glob("MDESupportTool_*.zip"),
+                    *self.orchestrator.results_dir.glob("support_tool_output_*.zip"),
+                    *self.orchestrator.results_dir.glob("*_output.zip"),
+                ],
+                key=lambda p: p.stat().st_mtime,
+            )
+
+            if not zips and archive_hint and archive_hint.exists():
+                copied = self.orchestrator.results_dir / archive_hint.name
+                try:
+                    shutil.copy2(archive_hint, copied)
+                    zips.append(copied)
+                except Exception:
+                    zips.append(archive_hint)
+
+            if not zips:
+                tmp_candidates = []
+                for pattern in ("*_output.zip", "support_tool_output_*.zip", "MDESupportTool_*.zip"):
+                    for p in Path("/tmp").glob(pattern):
+                        try:
+                            if p.stat().st_mtime >= (started_at - 120):
+                                tmp_candidates.append(p)
+                        except Exception:
+                            continue
+                tmp_candidates = sorted(tmp_candidates, key=lambda p: p.stat().st_mtime)
+                if tmp_candidates:
+                    newest = tmp_candidates[-1]
+                    copied = self.orchestrator.results_dir / newest.name
+                    try:
+                        shutil.copy2(newest, copied)
+                        zips.append(copied)
+                    except Exception:
+                        zips.append(newest)
+
             if zips:
                 return str(zips[-1])
+
+            self.client_analyzer_last_error = (
+                f"client analyzer output archive not found (see {self.client_analyzer_log_file})"
+            )
         except Exception:
+            self.client_analyzer_last_error = "client analyzer execution failed"
             pass
         return None
 
@@ -393,6 +1069,7 @@ class ProfiledBuildScenario(DemoScenario):
         prompt = (
             f"Analyze these MDE hot event source summaries from a {self.config.name} build. "
             "Explain likely hotspots and which performance profiles matter most.\n\n"
+            f"{self._ghcp_developer_best_practices_context()}\n\n"
             f"Before profiles:\n{before_text}\n\nAfter profiles:\n{after_text}\n"
         )
 
@@ -403,9 +1080,8 @@ class ProfiledBuildScenario(DemoScenario):
                 return
             text = self._extract_ghcp_assistant_text(res.stdout or "")
             if res.returncode == 0 and text:
-                print("   GHCP analysis:")
-                for line in text.splitlines()[:40]:
-                    print(f"   {line}")
+                self.phase6_hotspot_analysis = text
+                self._print_markdown_analysis("GHCP analysis", text, max_lines=60)
             else:
                 print_info("GHCP analysis command did not return usable output")
         except Exception as e:
@@ -555,10 +1231,20 @@ class ProfiledBuildScenario(DemoScenario):
         except Exception:
             return False
 
+    def _client_analyzer_tool(self) -> Optional[Path]:
+        """Return Client Analyzer entrypoint path if available."""
+        candidates = [
+            self.analyzer_dir / "mde_support_tool.sh",
+            self.analyzer_dir / "MDESupportTool",
+        ]
+        for tool in candidates:
+            if tool.exists() and tool.is_file():
+                return tool
+        return None
+
     def _has_client_analyzer(self) -> bool:
-        """Return True when MDESupportTool is present in configured analyzer path."""
-        tool = self.analyzer_dir / "MDESupportTool"
-        return tool.exists() and tool.is_file()
+        """Return True when a supported Client Analyzer entrypoint is present."""
+        return self._client_analyzer_tool() is not None
 
     def _report_optional_capabilities(self):
         """Show optional capability status in setup without blocking the run."""
@@ -568,17 +1254,26 @@ class ProfiledBuildScenario(DemoScenario):
             print_info("GitHub Copilot CLI: not available (optional; using python/default recommendations)")
 
         if self.enable_client_analyzer:
-            if self._has_client_analyzer():
-                print_info(f"Client Analyzer: available (optional) at {self.analyzer_dir / 'MDESupportTool'}")
+            tool = self._client_analyzer_tool()
+            if tool:
+                print_info(f"Client Analyzer: available (optional) at {tool}")
             else:
                 print_info("Client Analyzer: not available (optional; skipping phase-3 analyzer capture)")
+
+        if self.enable_exclusion_workflow:
+            print_info("Temporary AV exclusion workflow: enabled (recommend/apply/retest/remove)")
+        else:
+            print_info("Temporary AV exclusion workflow: disabled")
 
     def _run_ghcp_suggest(self, prompt: str, timeout: int = 60):
         """Run Copilot CLI in non-interactive prompt mode with per-call consent."""
         answer = input("Allow GitHub Copilot CLI for this step? [y/N] ").strip().lower()
         if answer not in ("y", "yes"):
+            self._log_line("phase3.ghcp consent=declined")
             print_info("GHCP invocation declined; falling back to python/default behavior")
             return None
+
+        self._log_line("phase3.ghcp consent=accepted")
 
         return subprocess.run(
             [
@@ -634,13 +1329,158 @@ class ProfiledBuildScenario(DemoScenario):
             upper = line.upper()
             if upper.startswith("RECOMMENDED_PROFILES:"):
                 continue
+            if upper.startswith("EXCLUSION_CANDIDATES:"):
+                continue
             if upper.startswith("ANALYSIS:"):
                 line = line.split(":", 1)[1].strip()
-            if line.startswith(("●", "│", "└", "Search ", "List directory ")):
-                continue
             lines.append(line)
 
         return "\n".join(lines)
+
+    def _read_text_from_zip(self, zip_path: Path, member_name: str) -> str:
+        """Read a UTF-8-ish text member from a zip archive; return empty when unavailable."""
+        try:
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                with archive.open(member_name) as handle:
+                    return handle.read().decode("utf-8", errors="replace")
+        except Exception:
+            return ""
+
+    def _summarize_client_analyzer_for_ghcp(self) -> str:
+        """Build compact analyzer metrics context for GHCP prompts when archive is available."""
+        archive_path = self.baseline.get("client_analyzer")
+        if not archive_path:
+            return ""
+
+        zip_path = Path(str(archive_path))
+        if not zip_path.exists() or not zip_path.is_file():
+            return ""
+
+        lines: List[str] = []
+
+        top_summary = self._read_text_from_zip(zip_path, "top_summary.txt")
+        if top_summary:
+            max_cpu = {}
+            for raw in top_summary.splitlines():
+                line = raw.strip()
+                if not line.startswith("{"):
+                    continue
+                try:
+                    obj = json.loads(line)
+                    command = str(obj.get("command", ""))
+                    cpu = float(obj.get("%CPU", 0) or 0)
+                except Exception:
+                    continue
+                command_lower = command.lower()
+                if "wdavdaemon" not in command_lower and "epsext" not in command_lower:
+                    continue
+                current = max_cpu.get(command, 0.0)
+                if cpu > current:
+                    max_cpu[command] = cpu
+            if max_cpu:
+                top_cpu = sorted(max_cpu.items(), key=lambda item: item[1], reverse=True)[:3]
+                metric = ", ".join([f"{cmd}={cpu:.1f}%" for cmd, cpu in top_cpu])
+                lines.append(f"- Client Analyzer MDE CPU peaks: {metric}")
+
+        rtp_stats = self._read_text_from_zip(zip_path, "rtp_statistics.txt")
+        if rtp_stats:
+            entries = []
+            pid = name = path = None
+            files_scanned = scan_ns = 0
+            for raw in rtp_stats.splitlines():
+                line = raw.strip()
+                if line.startswith("Process id:"):
+                    pid = line.split(":", 1)[1].strip()
+                elif line.startswith("Name:"):
+                    name = line.split(":", 1)[1].strip()
+                elif line.startswith("Path:"):
+                    path = line.split(":", 1)[1].strip().strip('"')
+                elif line.startswith("Total files scanned:"):
+                    try:
+                        files_scanned = int(line.split(":", 1)[1].strip())
+                    except Exception:
+                        files_scanned = 0
+                elif line.startswith("Scan time (ns):"):
+                    try:
+                        scan_ns = int(re.search(r"(\d+)", line).group(1))
+                    except Exception:
+                        scan_ns = 0
+                elif line.startswith("Status:") and pid is not None:
+                    entries.append({"name": name or "Unknown", "path": path or "Unknown", "files": files_scanned})
+                    pid = name = path = None
+                    files_scanned = scan_ns = 0
+            if entries:
+                top_entries = sorted(entries, key=lambda item: item["files"], reverse=True)[:3]
+                metric = ", ".join([f"{item['name']}({item['files']} files)" for item in top_entries])
+                lines.append(f"- RTP top scanned processes: {metric}")
+
+        event_stats = self._read_text_from_zip(zip_path, "mde_event_statistics.txt")
+        if event_stats:
+            wanted = {
+                "Auth event count",
+                "AUTH_OPEN",
+                "AUTH_READDIR",
+                "Blocking open request count",
+                "Hold request count",
+            }
+            found = {}
+            for raw in event_stats.splitlines():
+                if ":" not in raw:
+                    continue
+                key, value = raw.split(":", 1)
+                key = key.strip()
+                if key in wanted:
+                    found[key] = value.strip()
+            if found:
+                metric = ", ".join(
+                    [
+                        f"auth_events={found.get('Auth event count', 'n/a')}",
+                        f"auth_open={found.get('AUTH_OPEN', 'n/a')}",
+                        f"auth_readdir={found.get('AUTH_READDIR', 'n/a')}",
+                        f"blocking_open={found.get('Blocking open request count', 'n/a')}",
+                        f"hold={found.get('Hold request count', 'n/a')}",
+                    ]
+                )
+                lines.append(f"- MDE event counters: {metric}")
+
+        exclusions = self._read_text_from_zip(zip_path, "exclusions.txt")
+        if exclusions:
+            exclusion_lines = []
+            for raw in exclusions.splitlines():
+                line = raw.strip()
+                if not line or line.startswith("==="):
+                    continue
+                if line.lower() == "no exclusions":
+                    exclusion_lines = []
+                    break
+                exclusion_lines.append(line)
+            if exclusion_lines:
+                preview = ", ".join(exclusion_lines[:5])
+                if len(exclusion_lines) > 5:
+                    preview += ", ..."
+                lines.append(f"- Existing AV exclusions: {preview}")
+            else:
+                lines.append("- Existing AV exclusions: none")
+
+        return "\n".join(lines)
+
+    def _ghcp_developer_best_practices_context(self) -> str:
+        """Return prompt context that nudges GHCP toward developer-safe recommendations."""
+        guidance = [
+            "Developer best-practices constraints:",
+            "- Use least-privilege ordering: identify narrow temporary AV exclusion opportunities first.",
+            "- Exclusions must be specific (high-churn build outputs/caches/temp paths or explicit build processes).",
+            "- Do not suggest broad exclusions (entire repo, home directory, or system paths).",
+            "- Respect existing exclusions and suggest only additive deltas when justified by telemetry.",
+            "- After exclusion candidates, recommend the minimum performance profiles needed from the available list.",
+            "- Tie recommendations to observed telemetry evidence.",
+            "- Include a compensating post-build scan recommendation because profiles/exclusions reduce protection.",
+        ]
+        analyzer = self._summarize_client_analyzer_for_ghcp()
+        if analyzer:
+            guidance.append("Client Analyzer signal summary:")
+            guidance.append(analyzer)
+        return "\n".join(guidance)
 
     def _get_available_profiles(self) -> List[str]:
         """Read available performance profiles from mdatp CLI with fallback."""
@@ -732,12 +1572,14 @@ class ProfiledBuildScenario(DemoScenario):
         allowed = ", ".join(allowed_profiles)
         prompt = (
             f"Analyze this MDE hot-event telemetry from a {self.config.name} build and recommend which available "
-            "performance profiles should be applied.\n"
+            "performance profiles should be applied using a least-privilege strategy.\n"
             f"Available profiles: {allowed}.\n"
             "Do not run tools or inspect files; use only the provided telemetry.\n"
+            f"{self._ghcp_developer_best_practices_context()}\n"
             "Return both of the following:\n"
-            "ANALYSIS: <short rationale of hotspots and profile choices>\n"
-            "Then your final recommendation in this exact machine-readable line:\n"
+            "ANALYSIS: <short rationale of hotspots, exclusion candidates, and profile choices>\n"
+            "EXCLUSION_CANDIDATES: <comma-separated narrow path/process candidates or none>\n"
+            "Then your final machine-readable profile recommendation in this exact line:\n"
             "RECOMMENDED_PROFILES: <comma-separated profile names from the available list>\n"
             f"Hot event sources:\n{top_text}\n"
         )
@@ -745,17 +1587,27 @@ class ProfiledBuildScenario(DemoScenario):
         try:
             res = self._run_ghcp_suggest(prompt, timeout=60)
             if res is None or res.returncode != 0:
+                self.recommended_exclusions = []
+                self.exclusion_recommendation_source = "none"
                 return []
 
             output = self._extract_ghcp_assistant_text(res.stdout or "")
             analysis = self._extract_ghcp_analysis(output)
+            self.phase3_ghcp_analysis = analysis or ""
+            self.recommended_exclusions = self._parse_ghcp_exclusion_candidates(output)
+            self.exclusion_recommendation_source = "ghcp" if self.recommended_exclusions else "none"
             if analysis:
-                print_info("GHCP analysis (phase 3):")
-                for line in analysis.splitlines()[:8]:
-                    print(f"   {line}")
+                self._print_markdown_analysis("GHCP analysis (phase 3)", analysis, max_lines=40)
+            if self.recommended_exclusions:
+                print_info(
+                    "GHCP temporary exclusion candidates: "
+                    + ", ".join([f"{c['type']}:{c['value']}" for c in self.recommended_exclusions])
+                )
 
             return self._parse_ghcp_recommended_profiles(output, allowed_profiles)
         except Exception:
+            self.recommended_exclusions = []
+            self.exclusion_recommendation_source = "none"
             return []
 
     def _python_profile_recommendations(self, hot_events: Path, available_profiles: Optional[List[str]] = None) -> List[str]:
@@ -956,19 +1808,42 @@ class ProfiledBuildScenario(DemoScenario):
         except Exception:
             pass
 
-    def _count_rtp_scans(self, json_file: Path):
-        """Return total scanned files from RTP stats JSON."""
+    def _rtp_total_files(self, json_file: Path):
+        """Return total scanned files from RTP stats JSON in either legacy or current schema."""
         if not json_file.exists() or json_file.stat().st_size == 0:
-            return "N/A"
+            return None
         try:
             data = json.loads(json_file.read_text())
+            counters = []
+            if isinstance(data, list):
+                counters = data
+            elif isinstance(data, dict):
+                raw = data.get("counters", [])
+                if isinstance(raw, list):
+                    counters = raw
+
             total = 0
-            for item in data:
+            for item in counters:
                 if isinstance(item, dict):
                     total += int(item.get("totalFilesScanned", 0) or 0)
-            return str(total)
+            return total
         except Exception:
+            return None
+
+    def _count_rtp_scans(self, json_file: Path):
+        """Return total scanned files from RTP stats JSON."""
+        total = self._rtp_total_files(json_file)
+        if total is None:
             return "N/A"
+        return str(total)
+
+    def _count_rtp_scan_delta(self, before_file: Path, after_file: Path):
+        """Return scanned-file delta across a phase using before/after RTP snapshots."""
+        before_total = self._rtp_total_files(before_file)
+        after_total = self._rtp_total_files(after_file)
+        if before_total is None or after_total is None:
+            return "N/A"
+        return str(max(0, after_total - before_total))
 
     def _start_hot_event_collection(self, cwd: Optional[Path] = None):
         """Start hot-event collection to run concurrently with an active build."""
@@ -1147,10 +2022,15 @@ class ProfiledBuildScenario(DemoScenario):
                     print("  ▶️  Resuming — skipping setup, baseline, and diagnostics...")
                 print("")
 
-        success = super().run(resume_from=selected_resume)
-        if success and self.enable_resume_checkpoint:
-            self._clear_state()
-        return success
+        success = False
+        try:
+            success = super().run(resume_from=selected_resume)
+            if success and self.enable_resume_checkpoint:
+                self._clear_state()
+            return success
+        finally:
+            if self.applied_temp_exclusions:
+                self._cleanup_temporary_exclusions()
 
     def build_baseline(self) -> bool:
         print_section("Baseline Build (No Profiles)")
@@ -1214,6 +2094,9 @@ class ProfiledBuildScenario(DemoScenario):
         except Exception:
             pass
 
+        rtp_before = self.orchestrator.results_dir / "phase1_rtp_stats_before.json"
+        self._collect_rtp_stats(rtp_before)
+
         cpu_log = self.orchestrator.results_dir / "phase1_cpu.log"
         hot_before = self.orchestrator.results_dir / "phase2_hot_events.json"
         stop_event, monitor_thread = self._start_cpu_monitor(cpu_log)
@@ -1234,7 +2117,7 @@ class ProfiledBuildScenario(DemoScenario):
         self.baseline["cpu"] = self._calc_avg_cpu(cpu_log)
         rtp_file = self.orchestrator.results_dir / "phase1_rtp_stats.json"
         self._collect_rtp_stats(rtp_file)
-        self.baseline["scans"] = self._count_rtp_scans(rtp_file)
+        self.baseline["scans"] = self._count_rtp_scan_delta(rtp_before, rtp_file)
         self._log_line(
             f"phase_baseline:complete time={elapsed:.2f}s cpu={self.baseline['cpu']} scans={self.baseline['scans']}"
         )
@@ -1247,6 +2130,8 @@ class ProfiledBuildScenario(DemoScenario):
 
         selected = self.recommended_profiles or list(self.config.profiles)
         print_info(f"Selected profile set ({self.recommendation_source}): {', '.join(selected)}")
+        print_warning("SECURITY CAUTION: Applying profiles or exclusions can reduce Defender protection")
+        print("   Use least privilege and review all recommendations before applying changes.")
 
         admin_only, applied = self._get_profile_state()
         if admin_only:
@@ -1284,6 +2169,10 @@ class ProfiledBuildScenario(DemoScenario):
                 print_info(f"Could not apply {profile}: {e}")
                 self._log_line(f"apply_profiles profile={profile} exception={e}")
 
+        self.exclusions_before = self._get_exclusion_snapshot()
+        self._log_line(f"temporary_exclusions:before {self.exclusions_before}")
+        self._apply_recommended_exclusions()
+
         self._log_profile_state_snapshot("apply_profiles.post_apply")
         self._log_line("phase_apply_profiles:complete")
         return True
@@ -1312,6 +2201,9 @@ class ProfiledBuildScenario(DemoScenario):
         except Exception:
             pass
 
+        rtp_before = self.orchestrator.results_dir / "phase5_rtp_stats_before.json"
+        self._collect_rtp_stats(rtp_before)
+
         cpu_log = self.orchestrator.results_dir / "phase5_cpu.log"
         hot_after = self.orchestrator.results_dir / "phase5_hot_events.json"
         stop_event, monitor_thread = self._start_cpu_monitor(cpu_log)
@@ -1332,16 +2224,35 @@ class ProfiledBuildScenario(DemoScenario):
         self.optimized["cpu"] = self._calc_avg_cpu(cpu_log)
         rtp_file = self.orchestrator.results_dir / "phase5_rtp_stats.json"
         self._collect_rtp_stats(rtp_file)
-        self.optimized["scans"] = self._count_rtp_scans(rtp_file)
+        self.optimized["scans"] = self._count_rtp_scan_delta(rtp_before, rtp_file)
         self._log_line(
             f"phase_optimized:complete time={elapsed:.2f}s cpu={self.optimized['cpu']} scans={self.optimized['scans']}"
         )
+
+        scan_target = optimized_cwd if optimized_cwd.exists() else self.config.repo_path
+        if self.applied_temp_exclusions:
+            print_info("Final step: start compensating custom scan (--ignore-exclusions)")
+            self._run_compensating_scan(scan_target)
+        else:
+            self.compensating_scan_target = str(scan_target)
+            self.compensating_scan_status = "skipped_no_temp_exclusions"
+            print_info("Final step: skipping compensating custom scan (no temporary AV exclusions were applied)")
+            self._log_line("phase_optimized:compensating_scan skipped reason=no_temp_exclusions")
 
         return True
 
     def analyze_results(self) -> bool:
         print_section("Analysis")
         self._log_line("phase_analysis:start")
+
+        if self.enable_client_analyzer:
+            print_info("Collecting post-optimized Client Analyzer capture (~10s)")
+            optimized_analyzer_zip = self._run_client_analyzer("phase6")
+            if optimized_analyzer_zip:
+                self.optimized["client_analyzer"] = optimized_analyzer_zip
+                print_success(f"Post-optimized Client Analyzer report: {optimized_analyzer_zip}")
+            elif self.client_analyzer_last_error:
+                print_info(f"Post-optimized Client Analyzer skipped: {self.client_analyzer_last_error}")
 
         baseline = float(self.baseline.get("time") or 0)
         optimized = float(self.optimized.get("time") or 0)
@@ -1359,7 +2270,22 @@ class ProfiledBuildScenario(DemoScenario):
         print(f"   📦 Artifacts:             {self.orchestrator.results_dir}")
         print(f"   📝 Run log:               {self.run_log_file}")
         if self.baseline.get("client_analyzer"):
-            print(f"   📊 Client Analyzer:       {self.baseline.get('client_analyzer')}")
+            print(f"   📊 Client Analyzer (base): {self.baseline.get('client_analyzer')}")
+        if self.optimized.get("client_analyzer"):
+            print(f"   📊 Client Analyzer (opt):  {self.optimized.get('client_analyzer')}")
+        if self.recommended_exclusions:
+            exclusions = ", ".join([f"{c['type']}:{c['value']}" for c in self.recommended_exclusions])
+            print(f"   🧩 Exclusion candidates:  {exclusions}")
+        if self.applied_temp_exclusions:
+            applied = ", ".join([f"{c['type']}:{c['value']}" for c in self.applied_temp_exclusions])
+            print(f"   🧪 Temp exclusions used:  {applied}")
+
+        self.exclusions_after_optimized = self._get_exclusion_snapshot()
+        before_text = self._format_exclusion_snapshot(self.exclusions_before)
+        after_opt_text = self._format_exclusion_snapshot(self.exclusions_after_optimized)
+        print_info("AV exclusions snapshot:")
+        print(f"   🔹 Before apply:          {before_text}")
+        print(f"   🔹 After optimized run:   {after_opt_text}")
 
         print_info("Profiles applied:")
         print(f"   📌 Requested apply set:  {', '.join(self.recommended_profiles or self.config.profiles)}")
@@ -1372,6 +2298,31 @@ class ProfiledBuildScenario(DemoScenario):
             print(f"   ✅ Active on endpoint:    {', '.join(active_sorted)}")
         else:
             print("   ✅ Active on endpoint:    (none detected)")
+
+        selected_profiles = self.recommended_profiles or self.config.profiles
+        risk_triggered = bool(selected_profiles or self.exclusions_after_optimized or self.applied_temp_exclusions)
+        if risk_triggered:
+            print_warning("SECURITY CAUTION: Exclusions or performance profiles reduce Defender protection")
+            print("   Use exclusions sparingly and keep profile/exclusion scope as narrow as possible.")
+            print("   Mitigation: run compensating scans after build/retest to reduce supply-chain risk.")
+            print_info("AI notice: GitHub Copilot recommendations use AI; review all recommendations before applying")
+
+            scan_target = self.optimized_repo_path if self.optimized_repo_path.exists() else self.config.repo_path
+            quoted_target = shlex.quote(str(scan_target))
+            print_info("Compensating scan recommendation:")
+            print("   1) One-time post-build custom scan (ignore exclusions):")
+            print(f"      sudo mdatp scan custom --path {quoted_target} --ignore-exclusions")
+            print("   2) Optional quick scan immediately after custom scan:")
+            print("      sudo mdatp scan quick")
+            print("   3) Check scan status and completion:")
+            print("      mdatp scan list")
+            self._log_line(f"phase_analysis:compensating_scan path={scan_target}")
+
+        if self.compensating_scan_status:
+            print_info("Compensating scan status:")
+            print(f"   Status:                {self.compensating_scan_status}")
+            print(f"   Files scanned:         {self.compensating_scan_files_scanned}")
+            print(f"   Threats found:         {self.compensating_scan_threats_found}")
 
         before_hot = self.orchestrator.results_dir / "phase2_hot_events.json"
         after_hot = self.orchestrator.results_dir / "phase5_hot_events.json"
@@ -1410,6 +2361,18 @@ class ProfiledBuildScenario(DemoScenario):
             f"baseline_cpu={self.baseline.get('cpu', 'N/A')} optimized_cpu={self.optimized.get('cpu', 'N/A')} "
             f"selected_profiles={self.recommended_profiles or self.config.profiles} source={self.recommendation_source}"
         )
+        self._log_line(
+            "phase_analysis:exclusions "
+            f"before={self.exclusions_before} after_optimized={self.exclusions_after_optimized}"
+        )
+
+        self._cleanup_temporary_exclusions()
+        self.exclusions_after_cleanup = self._get_exclusion_snapshot()
+        after_cleanup_text = self._format_exclusion_snapshot(self.exclusions_after_cleanup)
+        print(f"   🔹 After cleanup:         {after_cleanup_text}")
+        self._log_line(f"phase_analysis:exclusions_after_cleanup {self.exclusions_after_cleanup}")
+
+        self._write_final_markdown_report(baseline, optimized)
 
         print_success("Analysis complete")
         self._log_line("phase_analysis:complete")

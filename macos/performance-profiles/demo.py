@@ -10,6 +10,7 @@ Usage:
 """
 
 import sys
+import os
 import argparse
 from pathlib import Path
 
@@ -64,6 +65,29 @@ Examples:
     )
 
     parser.add_argument(
+        "--client-analyzer-dir",
+        type=Path,
+        help="Custom Client Analyzer install/detection directory (default: ~/demo/analyzer/XMDEClientAnalyzerBinary)"
+    )
+
+    parser.add_argument(
+        "--client-analyzer-mode",
+        choices=["auto", "on", "off"],
+        default=None,
+        help="Client Analyzer preference across scenarios: auto|on|off (or set MDE_DEMO_CLIENT_ANALYZER)"
+    )
+
+    parser.add_argument(
+        "--av-exclusions-mode",
+        choices=["auto", "on", "off"],
+        default=None,
+        help=(
+            "Temporary AV exclusion workflow preference: auto|on|off "
+            "(or set MDE_DEMO_AV_EXCLUSIONS)."
+        ),
+    )
+
+    parser.add_argument(
         "--require-ghcp-cli",
         action="store_true",
         help="Require GitHub Copilot CLI as a preflight prerequisite (prompt to install if missing)"
@@ -84,6 +108,40 @@ Examples:
     )
 
     args = parser.parse_args()
+
+    raw_client_analyzer_mode = (
+        args.client_analyzer_mode
+        or os.environ.get("MDE_DEMO_CLIENT_ANALYZER", "auto")
+    ).strip().lower()
+    if raw_client_analyzer_mode not in {"auto", "on", "off"}:
+        print_info(
+            "Invalid MDE_DEMO_CLIENT_ANALYZER value; using auto "
+            "(expected: auto|on|off)"
+        )
+        raw_client_analyzer_mode = "auto"
+
+    client_analyzer_enabled_override = None
+    if raw_client_analyzer_mode == "on":
+        client_analyzer_enabled_override = True
+    elif raw_client_analyzer_mode == "off":
+        client_analyzer_enabled_override = False
+
+    raw_av_exclusions_mode = (
+        args.av_exclusions_mode
+        or os.environ.get("MDE_DEMO_AV_EXCLUSIONS", "auto")
+    ).strip().lower()
+    if raw_av_exclusions_mode not in {"auto", "on", "off"}:
+        print_info(
+            "Invalid MDE_DEMO_AV_EXCLUSIONS value; using auto "
+            "(expected: auto|on|off)"
+        )
+        raw_av_exclusions_mode = "auto"
+
+    av_exclusions_enabled_override = None
+    if raw_av_exclusions_mode == "on":
+        av_exclusions_enabled_override = True
+    elif raw_av_exclusions_mode == "off":
+        av_exclusions_enabled_override = False
 
     if args.scenario is None:
         print_info("Select a demo scenario:")
@@ -109,6 +167,7 @@ Examples:
         require_node=require_node,
         require_client_analyzer=args.require_client_analyzer,
         require_ghcp_cli=args.require_ghcp_cli,
+        client_analyzer_dir=args.client_analyzer_dir,
     ):
         print_error("Preflight checks failed")
         return 1
@@ -120,6 +179,9 @@ Examples:
             include_install_in_build=args.include_install,
             hot_events_analysis_mode=args.hot_events_analysis,
             profile_change_policy=args.profile_change_policy,
+            analyzer_dir=args.client_analyzer_dir,
+            enable_client_analyzer=client_analyzer_enabled_override,
+            enable_exclusion_workflow=av_exclusions_enabled_override,
         )
     elif args.scenario == "xcode":
         if args.include_install:
@@ -129,6 +191,8 @@ Examples:
         scenario = XcodeScenario(
             repo_path=args.repo,
             profile_change_policy=args.profile_change_policy,
+            enable_client_analyzer=client_analyzer_enabled_override,
+            enable_exclusion_workflow=av_exclusions_enabled_override,
         )
     elif args.scenario == "xcode-simulator":
         if args.include_install:
@@ -138,6 +202,8 @@ Examples:
         scenario = XcodeSimulatorScenario(
             repo_path=args.repo,
             profile_change_policy=args.profile_change_policy,
+            enable_client_analyzer=client_analyzer_enabled_override,
+            enable_exclusion_workflow=av_exclusions_enabled_override,
         )
     elif args.scenario == "android-studio":
         if args.include_install:
@@ -147,6 +213,8 @@ Examples:
         scenario = AndroidStudioScenario(
             repo_path=args.repo,
             profile_change_policy=args.profile_change_policy,
+            enable_client_analyzer=client_analyzer_enabled_override,
+            enable_exclusion_workflow=av_exclusions_enabled_override,
         )
     else:
         print_error(f"Unknown scenario: {args.scenario}")

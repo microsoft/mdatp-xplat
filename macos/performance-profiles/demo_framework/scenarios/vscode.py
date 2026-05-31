@@ -20,6 +20,9 @@ class VSCodeScenario(ProfiledBuildScenario):
         include_install_in_build: bool = False,
         hot_events_analysis_mode: str = "prompt",
         profile_change_policy: str = "prompt",
+        analyzer_dir: Optional[Path] = None,
+        enable_client_analyzer: Optional[bool] = None,
+        enable_exclusion_workflow: Optional[bool] = None,
     ):
         config = ScenarioConfig(
             name="Microsoft VS Code Build Demo",
@@ -57,7 +60,9 @@ class VSCodeScenario(ProfiledBuildScenario):
                 "vscode-tree": ["fsevent", "chokidar", "watcher", "tree", "explorer", "filewatch"],
             },
             hot_events_analysis_mode=hot_events_analysis_mode,
-            enable_client_analyzer=True,
+            enable_client_analyzer=True if enable_client_analyzer is None else enable_client_analyzer,
+            enable_exclusion_workflow=enable_exclusion_workflow,
+            analyzer_dir=analyzer_dir,
             enable_resume_checkpoint=True,
             state_file_name=".vscode-demo-state.json",
             profile_change_policy=profile_change_policy,

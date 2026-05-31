@@ -14,7 +14,13 @@ from .profiled_build import ProfiledBuildScenario
 class XcodeScenario(ProfiledBuildScenario):
     """Demo scenario for building microsoft/fluentui-apple."""
 
-    def __init__(self, repo_path: Optional[Path] = None, profile_change_policy: str = "prompt"):
+    def __init__(
+        self,
+        repo_path: Optional[Path] = None,
+        profile_change_policy: str = "prompt",
+        enable_client_analyzer: Optional[bool] = None,
+        enable_exclusion_workflow: Optional[bool] = None,
+    ):
         config = ScenarioConfig(
             name="FluentUI Apple Xcode Build Demo",
             description="Demo showing MDE impact on Xcode/Swift builds",
@@ -30,5 +36,7 @@ class XcodeScenario(ProfiledBuildScenario):
             tool_checks=[["git", "--version"], ["swift", "--version"]],
             repo_validation_file="Package.swift",
             clone_in_timed_phases=True,
+            enable_client_analyzer=False if enable_client_analyzer is None else enable_client_analyzer,
+            enable_exclusion_workflow=enable_exclusion_workflow,
             profile_change_policy=profile_change_policy,
         )

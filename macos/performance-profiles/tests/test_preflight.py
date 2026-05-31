@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
+from pathlib import Path
 from demo_framework.preflight import Preflight
 
 
@@ -139,6 +140,27 @@ git
              patch("builtins.input", return_value="y"):
             ok = Preflight().run_all(require_node=False, require_client_analyzer=True)
             assert ok is True
+
+    def test_run_all_uses_custom_client_analyzer_dir(self):
+        """Custom analyzer dir should be used for detection and installation."""
+        custom_dir = Path("/tmp/custom-analyzer")
+        with patch.object(Preflight, "check_mdatp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_rtp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
+             patch.object(Preflight, "check_xcode_clt", return_value=True), \
+             patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "check_ghcp_cli", return_value=True), \
+             patch.object(Preflight, "find_client_analyzer_binary", side_effect=[None, "/tmp/custom-analyzer/mde_support_tool.sh"]) as mock_find, \
+             patch.object(Preflight, "install_client_analyzer", return_value=True) as mock_install, \
+             patch("builtins.input", return_value="y"):
+            ok = Preflight().run_all(
+                require_node=False,
+                require_client_analyzer=True,
+                client_analyzer_dir=custom_dir,
+            )
+            assert ok is True
+            mock_find.assert_any_call(custom_dir)
+            mock_install.assert_called_once_with(custom_dir)
 
     def test_run_all_allows_missing_ghcp_when_optional(self):
         """Missing GHCP should not fail preflight when not required."""

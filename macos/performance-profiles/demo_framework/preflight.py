@@ -4,6 +4,7 @@ Preflight checks for demo prerequisites.
 
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 from typing import List, Optional
 
@@ -17,7 +18,7 @@ class Preflight:
     """Check system prerequisites before running demo."""
 
     DEFAULT_ANALYZER_DIR = Path.home() / "demo" / "analyzer" / "XMDEClientAnalyzerBinary"
-    DEFAULT_ANALYZER_BIN = DEFAULT_ANALYZER_DIR / "MDESupportTool"
+    DEFAULT_ANALYZER_BIN = DEFAULT_ANALYZER_DIR / "mde_support_tool.sh"
 
     @staticmethod
     def check_command_exists(cmd: str) -> bool:
@@ -163,11 +164,13 @@ class Preflight:
 
     @staticmethod
     def find_client_analyzer_binary(install_dir: Optional[Path] = None) -> Optional[Path]:
-        """Find MDESupportTool binary in expected install locations."""
+        """Find Client Analyzer entrypoint in expected install locations."""
         target = (install_dir or Preflight.DEFAULT_ANALYZER_DIR).expanduser()
 
         candidates = [
+            target / "mde_support_tool.sh",
             target / "MDESupportTool",
+            target / "ClientAnalyzer" / "mde_support_tool.sh",
             target / "ClientAnalyzer" / "MDESupportTool",
         ]
 
@@ -176,9 +179,10 @@ class Preflight:
                 return candidate
 
         if target.exists():
-            for found in target.rglob("MDESupportTool"):
-                if found.is_file():
-                    return found
+            for name in ("mde_support_tool.sh", "MDESupportTool"):
+                for found in target.rglob(name):
+                    if found.is_file():
+                        return found
 
         return None
 
@@ -205,7 +209,7 @@ class Preflight:
         print("   ⬇️  Downloading XMDE Client Analyzer...")
         try:
             dl = subprocess.run(
-                ["curl", "-L", "-o", str(zip_path), "https://aka.ms/XMDEClientAnalyzer"],
+                ["curl", "-L", "-o", str(zip_path), "https://aka.ms/XMDEClientAnalyzerBinary"],
                 timeout=300,
                 capture_output=False,
             )
@@ -226,6 +230,23 @@ class Preflight:
                 print("   ⚠️  Extraction failed")
                 return False
 
+            # New package format: mde_support_tool.sh + mde_tools directory.
+            wrapper = extract_dir / "mde_support_tool.sh"
+            mde_tools_dir = extract_dir / "mde_tools"
+            if wrapper.is_file() and mde_tools_dir.is_dir():
+                if target.exists():
+                    shutil.rmtree(target, ignore_errors=True)
+                shutil.copytree(extract_dir, target)
+
+                final_bin = target / "mde_support_tool.sh"
+                subprocess.run(["chmod", "+x", str(final_bin)], timeout=10, check=False)
+                if Preflight.check_command_exists("xattr"):
+                    subprocess.run(["xattr", "-cr", str(target)], timeout=15, check=False)
+
+                print(f"   ✅ Client Analyzer installed: {final_bin}")
+                return True
+
+            # Legacy package format: standalone MDESupportTool binary.
             found = None
             for candidate in extract_dir.rglob("MDESupportTool"):
                 if candidate.is_file():
@@ -233,7 +254,7 @@ class Preflight:
                     break
 
             if not found:
-                print("   ⚠️  MDESupportTool not found after extraction")
+                print("   ⚠️  Client Analyzer entrypoint not found after extraction")
                 return False
 
             target.mkdir(parents=True, exist_ok=True)
@@ -244,6 +265,9 @@ class Preflight:
                 return False
 
             subprocess.run(["chmod", "+x", str(final_bin)], timeout=10, check=False)
+            if Preflight.check_command_exists("xattr"):
+                subprocess.run(["xattr", "-cr", str(final_bin)], timeout=15, check=False)
+
             print(f"   ✅ Client Analyzer installed: {final_bin}")
             return True
         except Exception as e:
@@ -267,6 +291,7 @@ class Preflight:
         require_node: bool = True,
         require_client_analyzer: bool = False,
         require_ghcp_cli: bool = False,
+        client_analyzer_dir: Optional[Path] = None,
     ) -> bool:
         """Run all preflight checks. Returns True if all pass."""
         print("🔍 Preflight checks...\n")
@@ -356,7 +381,7 @@ class Preflight:
             print(f"   ✅ Node.js: {node_version}")
 
         # Optional required prerequisite for richer diagnostics.
-        analyzer = self.find_client_analyzer_binary()
+        analyzer = self.find_client_analyzer_binary(client_analyzer_dir)
         if analyzer:
             print(f"   ✅ Client Analyzer: {analyzer}")
         elif require_client_analyzer:
@@ -364,12 +389,18 @@ class Preflight:
             answer = input("   Download and install Client Analyzer now? [Y/n] ").strip().lower()
             if answer in ("n", "no"):
                 print("   Please install Client Analyzer and re-run.")
+                print("   Note: this integration is validated with the latest package from")
+                print("   https://aka.ms/XMDEClientAnalyzerBinary; older package layouts may differ.")
                 return False
-            if not self.install_client_analyzer():
+            if not self.install_client_analyzer(client_analyzer_dir):
+                print("   Note: this integration is validated with the latest package from")
+                print("   https://aka.ms/XMDEClientAnalyzerBinary; older package layouts may differ.")
                 return False
-            analyzer = self.find_client_analyzer_binary()
+            analyzer = self.find_client_analyzer_binary(client_analyzer_dir)
             if not analyzer:
                 print("   ⚠️  Client Analyzer install completed, but binary was not found.")
+                print("   Note: this integration is validated with the latest package from")
+                print("   https://aka.ms/XMDEClientAnalyzerBinary; older package layouts may differ.")
                 return False
             print(f"   ✅ Client Analyzer: {analyzer}")
         else:
