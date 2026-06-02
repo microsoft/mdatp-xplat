@@ -91,6 +91,25 @@ class Preflight:
         return result.returncode == 0
 
     @staticmethod
+    def check_full_xcode() -> bool:
+        """Return True only when a full Xcode.app installation is active.
+
+        Command Line Tools alone are insufficient for Swift macro plugins
+        (e.g. #Preview) used by projects like FluentUI Apple.
+        """
+        result = subprocess.run(
+            ["xcode-select", "-p"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return False
+        dev_dir = result.stdout.strip()
+        # CLT path is /Library/Developer/CommandLineTools; full Xcode is under
+        # /Applications/Xcode*.app or wherever it was placed.
+        return "CommandLineTools" not in dev_dir
+
+    @staticmethod
     def check_node_version(required_major: int = 24) -> Optional[str]:
         """Check Node.js version. Returns version string if OK, None if too old."""
         try:
@@ -230,13 +249,32 @@ class Preflight:
                 print("   ⚠️  Extraction failed")
                 return False
 
+            # Current package format ships a nested SupportToolMacOSBinary.zip
+            # under XMDEClientAnalyzer/. Extract it in place so the rest of the
+            # detection logic below can find the entrypoint regardless of which
+            # package layout we received.
+            for nested_zip in extract_dir.rglob("SupportToolMacOSBinary.zip"):
+                nested_out = nested_zip.parent / "macos_bin"
+                if nested_out.exists():
+                    shutil.rmtree(nested_out, ignore_errors=True)
+                nested_out.mkdir(parents=True, exist_ok=True)
+                nz = subprocess.run(
+                    ["unzip", "-o", str(nested_zip), "-d", str(nested_out)],
+                    timeout=120,
+                    capture_output=False,
+                )
+                if nz.returncode != 0:
+                    print("   ⚠️  Failed to extract SupportToolMacOSBinary.zip")
+                    return False
+
             # New package format: mde_support_tool.sh + mde_tools directory.
-            wrapper = extract_dir / "mde_support_tool.sh"
-            mde_tools_dir = extract_dir / "mde_tools"
-            if wrapper.is_file() and mde_tools_dir.is_dir():
+            wrapper = next(iter(extract_dir.rglob("mde_support_tool.sh")), None)
+            mde_tools_dir = next(iter(extract_dir.rglob("mde_tools")), None)
+            if wrapper and wrapper.is_file() and mde_tools_dir and mde_tools_dir.is_dir():
+                wrapper_root = wrapper.parent
                 if target.exists():
                     shutil.rmtree(target, ignore_errors=True)
-                shutil.copytree(extract_dir, target)
+                shutil.copytree(wrapper_root, target)
 
                 final_bin = target / "mde_support_tool.sh"
                 subprocess.run(["chmod", "+x", str(final_bin)], timeout=10, check=False)
@@ -289,6 +327,7 @@ class Preflight:
         self,
         required_major_node: int = 24,
         require_node: bool = True,
+        require_xcode: bool = False,
         require_client_analyzer: bool = False,
         require_ghcp_cli: bool = False,
         client_analyzer_dir: Optional[Path] = None,
@@ -330,6 +369,17 @@ class Preflight:
             return False
 
         print("   ✅ Xcode Command Line Tools: OK")
+
+        # Full Xcode.app required for Swift macro plugins (#Preview etc.)
+        if require_xcode and not self.check_full_xcode():
+            print("❌ Full Xcode.app is required for this scenario but the active")
+            print("   developer directory is Command Line Tools only.")
+            print("   Fix: install Xcode from the App Store, then run:")
+            print("     sudo xcode-select -s /Applications/Xcode.app/Contents/Developer")
+            return False
+
+        if require_xcode:
+            print("   ✅ Full Xcode.app: OK")
 
         # Check Homebrew
         if not self.check_command_exists("brew"):
@@ -430,12 +480,13 @@ class Preflight:
     @staticmethod
     def check_ghcp_cli() -> bool:
         """Check if a working GitHub Copilot CLI binary is available."""
-        if not Preflight.check_command_exists("copilot"):
+        copilot_bin = shutil.which("copilot")
+        if not copilot_bin:
             return False
 
         try:
             result = subprocess.run(
-                ["copilot", "--version"],
+                [copilot_bin, "--version"],
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -456,16 +507,49 @@ class Preflight:
         try:
             result = subprocess.run(
                 ["brew", "install", "copilot-cli"],
-                capture_output=False,
+                capture_output=True,
+                text=True,
                 timeout=300,
             )
-            if result.returncode != 0:
-                result = subprocess.run(
-                    ["brew", "upgrade", "copilot-cli"],
+            combined = (result.stdout or "") + (result.stderr or "")
+            if result.stdout:
+                sys.stdout.write(result.stdout)
+            if result.stderr:
+                sys.stderr.write(result.stderr)
+
+            if result.returncode == 0:
+                return True
+
+            # Common case: a non-Homebrew `copilot` binary (e.g. from
+            # `npm i -g @github/copilot`) already occupies the link target.
+            # If that binary already satisfies our check, accept it instead
+            # of forcing the cask install.
+            if "already a Binary at" in combined or "already an App at" in combined:
+                if Preflight.check_ghcp_cli():
+                    print("   ✅ Existing GitHub Copilot CLI detected; skipping Homebrew install.")
+                    return True
+                print("   ⚠️  A non-Homebrew `copilot` binary is blocking the install.")
+                print("       Remove it (e.g. `npm uninstall -g @github/copilot` or")
+                print("       `rm /opt/homebrew/bin/copilot`) and rerun, or install with")
+                print("       `brew install --force copilot-cli`.")
+                return False
+
+            # Fall back to upgrade only when the cask is actually installed.
+            installed = subprocess.run(
+                ["brew", "list", "--cask", "copilot-cli"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if installed.returncode == 0:
+                upgrade = subprocess.run(
+                    ["brew", "upgrade", "--cask", "copilot-cli"],
                     capture_output=False,
                     timeout=300,
                 )
-            return result.returncode == 0
+                return upgrade.returncode == 0
+
+            return False
         except Exception as e:
             print(f"   ⚠️  GHCP CLI install failed: {e}")
             return False

@@ -10,6 +10,14 @@ venv/
 __pycache__/
 *.pyc
 
+# Local environment overrides (keep .env.example, ignore real .env files)
+.env
+.env.local
+.env.*.local
+
+# VS Code workspace files
+*.code-workspace
+
 # Downloaded signing key used in setup workflows
 microsoft.asc
 

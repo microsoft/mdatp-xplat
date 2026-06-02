@@ -346,7 +346,68 @@ if [ "$PREP_SUDO" -eq 1 ] && command -v sudo >/dev/null 2>&1; then
     fi
 fi
 
-if [ "$HAS_SCENARIO" -eq 0 ]; then
+
+# ---------------------------------------------------------------------------
+# Load .env defaults (script dir, then CWD as fallback).
+# Only un-set settings are populated; CLI flags always win.
+# ---------------------------------------------------------------------------
+_load_env_file() {
+    local env_file="$1"
+    [ -f "$env_file" ] || return 0
+
+    # Parse key=value lines; ignore comments and blanks.
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Strip leading whitespace, skip comments and empty lines.
+        line="${line#"${line%%[![:space:]]*}"}"
+        [ -z "$line" ] || [ "${line#\#}" != "$line" ] && continue
+
+        local key="${line%%=*}"
+        local val="${line#*=}"
+        # Strip optional surrounding quotes.
+        val="${val#\"}" ; val="${val%\"}"
+        val="${val#\'}" ; val="${val%\'}"
+
+        case "$key" in
+            MDE_DEMO_SCENARIO)
+                [ "$HAS_SCENARIO" -eq 0 ] && [ -z "$SCENARIO_VALUE" ] && SCENARIO_VALUE="$val" ;;
+            MDE_DEMO_REPO)
+                [ "$HAS_REPO" -eq 0 ] && REPO_OVERRIDE="${val/#\~/$HOME}" ;;
+            MDE_DEMO_RESUME_FROM)
+                [ "$HAS_RESUME_FROM" -eq 0 ] && RESUME_FROM_VALUE="$val" ;;
+            MDE_DEMO_INCLUDE_INSTALL)
+                if [ "$HAS_INCLUDE_INSTALL" -eq 0 ]; then
+                    case "$(printf '%s' "$val" | tr '[:upper:]' '[:lower:]')" in 1|true|yes|on|y|t) INCLUDE_INSTALL=1 ;; *) INCLUDE_INSTALL=0 ;; esac
+                fi ;;
+            MDE_DEMO_REQUIRE_CLIENT_ANALYZER)
+                if [ "$HAS_REQUIRE_CLIENT_ANALYZER" -eq 0 ]; then
+                    case "$(printf '%s' "$val" | tr '[:upper:]' '[:lower:]')" in 1|true|yes|on|y|t) REQUIRE_CLIENT_ANALYZER=1 ;; *) REQUIRE_CLIENT_ANALYZER=0 ;; esac
+                fi ;;
+            MDE_DEMO_CLIENT_ANALYZER_DIR)
+                [ "$HAS_CLIENT_ANALYZER_DIR" -eq 0 ] && CLIENT_ANALYZER_DIR_VALUE="${val/#\~/$HOME}" ;;
+            MDE_DEMO_CLIENT_ANALYZER)
+                [ "$HAS_CLIENT_ANALYZER_MODE" -eq 0 ] && CLIENT_ANALYZER_MODE_VALUE="$val" ;;
+            MDE_DEMO_AV_EXCLUSIONS)
+                [ "$HAS_AV_EXCLUSIONS_MODE" -eq 0 ] && AV_EXCLUSIONS_MODE_VALUE="$val" ;;
+            MDE_DEMO_REQUIRE_GHCP_CLI)
+                if [ "$HAS_REQUIRE_GHCP_CLI" -eq 0 ]; then
+                    case "$(printf '%s' "$val" | tr '[:upper:]' '[:lower:]')" in 1|true|yes|on|y|t) REQUIRE_GHCP_CLI=1 ;; *) REQUIRE_GHCP_CLI=0 ;; esac
+                fi ;;
+            MDE_DEMO_HOT_EVENTS_ANALYSIS)
+                [ "$HAS_HOT_EVENTS_ANALYSIS" -eq 0 ] && HOT_EVENTS_ANALYSIS_VALUE="$val" ;;
+            MDE_DEMO_PROFILE_CHANGE_POLICY)
+                [ "$HAS_PROFILE_CHANGE_POLICY" -eq 0 ] && PROFILE_CHANGE_POLICY_VALUE="$val" ;;
+        esac
+    done < "$env_file"
+}
+
+# Script-dir .env first, then CWD .env (CWD takes precedence if both exist).
+_load_env_file "$SCRIPT_DIR/.env"
+if [ "$(cd "$SCRIPT_DIR" && pwd)" != "$(pwd)" ]; then
+    _load_env_file "$(pwd)/.env"
+fi
+
+# Apply vscode fallback after .env (env may have set SCENARIO_VALUE already).
+if [ -z "$SCENARIO_VALUE" ]; then
     SCENARIO_VALUE="vscode"
 fi
 
