@@ -833,11 +833,40 @@ class ProfiledBuildScenario(DemoScenario):
     def _post_analysis_hook(self, before_hot: Path, after_hot: Path):
         """Scenario hook for extra phase 6 analysis output."""
         mode = self.hot_events_analysis_mode
+
+        if mode == "prompt" and not os.environ.get("PYTEST_CURRENT_TEST"):
+            mode = self._prompt_hot_events_mode()
+
         if mode in ("python", "both"):
             self._hot_event_python_summary(before_hot, after_hot)
         if mode in ("ghcp", "both"):
             self._hot_event_ghcp_analysis(before_hot, after_hot)
         return None
+
+    def _prompt_hot_events_mode(self) -> str:
+        """Interactively ask the user which hot-event analysis to run."""
+        has_ghcp = self._has_ghcp_cli()
+        print()
+        print("📊 Hot event sources were collected.  Run analysis?")
+        options = [
+            ("1", "python", "Python heuristic summary (fast, no AI)"),
+        ]
+        if has_ghcp:
+            options.append(("2", "ghcp", "GitHub Copilot CLI analysis (AI-powered)"))
+            options.append(("3", "both", "Both Python + GHCP"))
+        options.append(("0", "none", "Skip analysis"))
+
+        for key, _, label in options:
+            print(f"  {key}) {label}")
+
+        valid = {key: val for key, val, _ in options}
+        while True:
+            choice = input(f"Choose [{'/'.join(valid.keys())}] (default: 0): ").strip()
+            if choice == "":
+                return "none"
+            if choice in valid:
+                return valid[choice]
+            print(f"  Please enter one of: {', '.join(valid.keys())}")
 
     def _run_client_analyzer(self, phase_tag: str = "phase3"):
         """Run XMDE Client Analyzer performance capture if available."""
