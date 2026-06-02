@@ -307,35 +307,35 @@ Examples:
     elif args.scenario == "xcode":
         if args.include_install:
             print_info("--include-install is ignored for xcode scenario")
-        if args.hot_events_analysis != "prompt":
-            print_info("--hot-events-analysis is ignored for xcode scenario")
         scenario = XcodeScenario(
             repo_path=args.repo,
             profile_change_policy=args.profile_change_policy,
             enable_client_analyzer=client_analyzer_enabled_override,
             enable_exclusion_workflow=av_exclusions_enabled_override,
+            hot_events_analysis_mode=args.hot_events_analysis,
+            analyzer_dir=args.client_analyzer_dir,
         )
     elif args.scenario == "xcode-simulator":
         if args.include_install:
             print_info("--include-install is ignored for xcode-simulator scenario")
-        if args.hot_events_analysis != "prompt":
-            print_info("--hot-events-analysis is ignored for xcode-simulator scenario")
         scenario = XcodeSimulatorScenario(
             repo_path=args.repo,
             profile_change_policy=args.profile_change_policy,
             enable_client_analyzer=client_analyzer_enabled_override,
             enable_exclusion_workflow=av_exclusions_enabled_override,
+            hot_events_analysis_mode=args.hot_events_analysis,
+            analyzer_dir=args.client_analyzer_dir,
         )
     elif args.scenario == "android-studio":
         if args.include_install:
             print_info("--include-install is ignored for android-studio scenario")
-        if args.hot_events_analysis != "prompt":
-            print_info("--hot-events-analysis is ignored for android-studio scenario")
         scenario = AndroidStudioScenario(
             repo_path=args.repo,
             profile_change_policy=args.profile_change_policy,
             enable_client_analyzer=client_analyzer_enabled_override,
             enable_exclusion_workflow=av_exclusions_enabled_override,
+            hot_events_analysis_mode=args.hot_events_analysis,
+            analyzer_dir=args.client_analyzer_dir,
         )
     else:
         print_error(f"Unknown scenario: {args.scenario}")

@@ -26,6 +26,8 @@ class AndroidStudioScenario(ProfiledBuildScenario):
         run_tests_by_default: bool = True,
         enable_client_analyzer: Optional[bool] = None,
         enable_exclusion_workflow: Optional[bool] = None,
+        hot_events_analysis_mode: str = "none",
+        analyzer_dir: Optional[Path] = None,
     ):
         default_repo = Path(__file__).resolve().parents[2] / "apps" / "hello-defender-android"
         config = ScenarioConfig(
@@ -54,6 +56,8 @@ class AndroidStudioScenario(ProfiledBuildScenario):
             enable_client_analyzer=False if enable_client_analyzer is None else enable_client_analyzer,
             enable_exclusion_workflow=enable_exclusion_workflow,
             profile_change_policy=profile_change_policy,
+            hot_events_analysis_mode=hot_events_analysis_mode,
+            analyzer_dir=analyzer_dir,
         )
         self.adb_command = "adb"
         self.emulator_command = "emulator"
