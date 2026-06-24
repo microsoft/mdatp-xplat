@@ -111,6 +111,7 @@ git
              patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
              patch.object(Preflight, "check_xcode_clt", return_value=True), \
              patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "check_ghcp_cli", return_value=False), \
              patch.object(Preflight, "find_client_analyzer_binary", return_value="/tmp/MDESupportTool"):
             ok = Preflight().run_all(require_node=False, require_client_analyzer=True)
             assert ok is True
@@ -135,6 +136,7 @@ git
              patch.object(Preflight, "check_xcode_clt", return_value=True), \
              patch.object(Preflight, "check_command_exists", return_value=True), \
              patch.object(Preflight, "check_ghcp_cli", return_value=True), \
+             patch.object(Preflight, "check_ghcp_access", return_value=(True, "ok", "octocat")), \
              patch.object(Preflight, "find_client_analyzer_binary", side_effect=[None, "/tmp/MDESupportTool"]), \
              patch.object(Preflight, "install_client_analyzer", return_value=True), \
              patch("builtins.input", return_value="y"):
@@ -150,6 +152,7 @@ git
              patch.object(Preflight, "check_xcode_clt", return_value=True), \
              patch.object(Preflight, "check_command_exists", return_value=True), \
              patch.object(Preflight, "check_ghcp_cli", return_value=True), \
+             patch.object(Preflight, "check_ghcp_access", return_value=(True, "ok", "octocat")), \
              patch.object(Preflight, "find_client_analyzer_binary", side_effect=[None, "/tmp/custom-analyzer/mde_support_tool.sh"]) as mock_find, \
              patch.object(Preflight, "install_client_analyzer", return_value=True) as mock_install, \
              patch("builtins.input", return_value="y"):
@@ -196,7 +199,110 @@ git
              patch.object(Preflight, "check_command_exists", return_value=True), \
              patch.object(Preflight, "find_client_analyzer_binary", return_value=None), \
              patch.object(Preflight, "check_ghcp_cli", side_effect=[False, True]), \
+             patch.object(Preflight, "check_ghcp_access", return_value=(True, "ok", "octocat")), \
              patch.object(Preflight, "install_ghcp_cli", return_value=True), \
              patch("builtins.input", return_value="y"):
             ok = Preflight().run_all(require_node=False, require_ghcp_cli=True)
             assert ok is True
+
+    def test_check_ghcp_access_detects_policy_denial(self):
+        """A policy-blocked account must be detected even though the CLI exits 0."""
+        denial_output = (
+            "Error: Access denied by policy settings (Request ID: EE84:1234)\n"
+            "Your Copilot CLI policy setting may be preventing access."
+        )
+        with patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch("demo_framework.preflight.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=denial_output, stderr="")
+            ok, detail, user = Preflight.check_ghcp_access()
+            assert ok is False
+            assert "policy" in detail.lower()
+            assert user is None
+
+    def test_check_ghcp_access_succeeds_on_ok_response(self):
+        """A normal OK response should be treated as authorized."""
+        with patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch("demo_framework.preflight.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="OK\n", stderr="")
+            ok, _, _ = Preflight.check_ghcp_access()
+            assert ok is True
+
+    def test_check_ghcp_access_reports_authenticated_user(self):
+        """The probe should parse the authenticated GitHub login from the response."""
+        with patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch("demo_framework.preflight.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="USER:octocat\n", stderr="")
+            ok, _, user = Preflight.check_ghcp_access()
+            assert ok is True
+            assert user == "octocat"
+
+    def test_check_ghcp_access_user_unknown_is_none(self):
+        """A USER:unknown reply should resolve to no identified user but still pass."""
+        with patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch("demo_framework.preflight.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="USER:unknown\n", stderr="")
+            ok, _, user = Preflight.check_ghcp_access()
+            assert ok is True
+            assert user is None
+
+    def test_run_all_warns_but_passes_when_ghcp_blocked_and_optional(self):
+        """GHCP installed but policy-blocked should warn yet not fail an optional run."""
+        with patch.object(Preflight, "check_mdatp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_rtp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
+             patch.object(Preflight, "check_xcode_clt", return_value=True), \
+             patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "find_client_analyzer_binary", return_value=None), \
+             patch.object(Preflight, "check_ghcp_cli", return_value=True), \
+             patch.object(Preflight, "get_active_github_user", return_value="j0shbregman"), \
+             patch.object(Preflight, "check_ghcp_access", return_value=(False, "request blocked by Copilot policy/subscription/auth", None)):
+            ok = Preflight().run_all(require_node=False)
+            assert ok is True
+
+    def test_run_all_fails_when_ghcp_required_but_blocked(self):
+        """GHCP installed but policy-blocked must fail a required run."""
+        with patch.object(Preflight, "check_mdatp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_rtp", return_value=True), \
+             patch.object(Preflight, "check_mdatp_profiles", return_value=10), \
+             patch.object(Preflight, "check_xcode_clt", return_value=True), \
+             patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch.object(Preflight, "find_client_analyzer_binary", return_value=None), \
+             patch.object(Preflight, "check_ghcp_cli", return_value=True), \
+             patch.object(Preflight, "get_active_github_user", return_value="j0shbregman"), \
+             patch.object(Preflight, "check_ghcp_access", return_value=(False, "request blocked by Copilot policy/subscription/auth", None)):
+            ok = Preflight().run_all(require_node=False, require_ghcp_cli=True)
+            assert ok is False
+
+    def test_get_active_github_user_selects_active_account(self):
+        """With multiple accounts, the one marked active must be returned."""
+        status_output = (
+            "github.com\n"
+            "  ✓ Logged in to github.com account j0shbregman (keyring)\n"
+            "  - Active account: true\n"
+            "  - Token scopes: 'repo'\n"
+            "\n"
+            "  ✓ Logged in to github.com account josh-bregman (keyring)\n"
+            "  - Active account: false\n"
+            "  - Token scopes: 'repo'\n"
+        )
+        with patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch("demo_framework.preflight.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr=status_output)
+            assert Preflight.get_active_github_user() == "j0shbregman"
+
+    def test_get_active_github_user_single_account_fallback(self):
+        """A single signed-in account should be returned even without an active marker."""
+        status_output = (
+            "github.com\n"
+            "  ✓ Logged in to github.com account solo-user (keyring)\n"
+            "  - Git operations protocol: https\n"
+        )
+        with patch.object(Preflight, "check_command_exists", return_value=True), \
+             patch("demo_framework.preflight.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr=status_output)
+            assert Preflight.get_active_github_user() == "solo-user"
+
+    def test_get_active_github_user_returns_none_without_gh(self):
+        """No gh binary means no identity can be resolved."""
+        with patch.object(Preflight, "check_command_exists", return_value=False):
+            assert Preflight.get_active_github_user() is None

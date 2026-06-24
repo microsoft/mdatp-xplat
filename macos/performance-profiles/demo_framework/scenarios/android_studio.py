@@ -24,10 +24,6 @@ class AndroidStudioScenario(ProfiledBuildScenario):
         repo_path: Optional[Path] = None,
         profile_change_policy: str = "prompt",
         run_tests_by_default: bool = True,
-        enable_client_analyzer: Optional[bool] = None,
-        enable_exclusion_workflow: Optional[bool] = None,
-        hot_events_analysis_mode: str = "none",
-        analyzer_dir: Optional[Path] = None,
     ):
         default_repo = Path(__file__).resolve().parents[2] / "apps" / "hello-defender-android"
         config = ScenarioConfig(
@@ -47,17 +43,12 @@ class AndroidStudioScenario(ProfiledBuildScenario):
             repo_validation_file=None,
             clone_in_timed_phases=False,
             build_cleanup_paths=[".gradle", "app/build"],
-            recommend_keywords={
-                "android-studio": ["android studio", "gradle", "kotlin", "dex", "aapt", "android"],
-                "android-studio-tree": [".gradle", "build/intermediates", "build/generated", "javac", "kapt"],
-                "java": ["java", "javac", "jvm", "kotlinc"],
-                "git": ["/git", "git-core", "git "],
-            },
-            enable_client_analyzer=False if enable_client_analyzer is None else enable_client_analyzer,
-            enable_exclusion_workflow=enable_exclusion_workflow,
+            default_exclusions=[
+                {"type": "folder", "rel": ".gradle"},
+                {"type": "folder", "rel": "app/build"},
+            ],
+            eicar_subdir="app/build",
             profile_change_policy=profile_change_policy,
-            hot_events_analysis_mode=hot_events_analysis_mode,
-            analyzer_dir=analyzer_dir,
         )
         self.adb_command = "adb"
         self.emulator_command = "emulator"
@@ -174,7 +165,7 @@ class AndroidStudioScenario(ProfiledBuildScenario):
         self._log_line(f"android.setup avd_name={avd_name or '(none)'}")
         if not connected_serial and not avd_name:
             print_error("No Android emulator or device is available")
-            print_info("Create an Android Virtual Device in Android Studio Device Manager, or start/connect a device, then re-run this scenario.")
+            print_info("Create an Android Virtual Device in Android Studio Device Manager, then re-run.")
             return False
 
         return super().setup()
@@ -219,7 +210,6 @@ class AndroidStudioScenario(ProfiledBuildScenario):
 
     @staticmethod
     def _manifest_package_name(cwd: Path) -> Optional[str]:
-        # Prefer namespace from app/build.gradle.kts (modern AGP; manifest package= is deprecated)
         build_gradle = cwd / "app" / "build.gradle.kts"
         if build_gradle.exists():
             try:
@@ -230,7 +220,6 @@ class AndroidStudioScenario(ProfiledBuildScenario):
             except Exception:
                 pass
 
-        # Groovy build.gradle fallback
         build_gradle_groovy = cwd / "app" / "build.gradle"
         if build_gradle_groovy.exists():
             try:
@@ -241,7 +230,6 @@ class AndroidStudioScenario(ProfiledBuildScenario):
             except Exception:
                 pass
 
-        # Legacy: package= in AndroidManifest.xml
         manifest = cwd / "app" / "src" / "main" / "AndroidManifest.xml"
         try:
             text = manifest.read_text()
@@ -283,20 +271,14 @@ class AndroidStudioScenario(ProfiledBuildScenario):
         if self.run_tests_by_default:
             test_result = subprocess.run(
                 gradle_cmd + ["connectedDebugAndroidTest"],
-                cwd=cwd,
-                env=android_env,
-                timeout=2400,
-                check=False,
+                cwd=cwd, env=android_env, timeout=2400, check=False,
             )
             if test_result.returncode != 0:
                 return False
 
         build_result = subprocess.run(
             gradle_cmd + ["assembleDebug"],
-            cwd=cwd,
-            env=android_env,
-            timeout=1800,
-            check=False,
+            cwd=cwd, env=android_env, timeout=1800, check=False,
         )
         if build_result.returncode != 0:
             return False
@@ -312,10 +294,7 @@ class AndroidStudioScenario(ProfiledBuildScenario):
 
         install_result = subprocess.run(
             [self.adb_command, "-s", serial, "install", "-r", str(apk_path)],
-            cwd=cwd,
-            env=android_env,
-            timeout=120,
-            check=False,
+            cwd=cwd, env=android_env, timeout=120, check=False,
         )
         if install_result.returncode != 0:
             return False
@@ -326,12 +305,7 @@ class AndroidStudioScenario(ProfiledBuildScenario):
 
         resolve_result = subprocess.run(
             [self.adb_command, "-s", serial, "shell", "cmd", "package", "resolve-activity", "--brief", package_name],
-            cwd=cwd,
-            env=android_env,
-            capture_output=True,
-            text=True,
-            timeout=20,
-            check=False,
+            cwd=cwd, env=android_env, capture_output=True, text=True, timeout=20, check=False,
         )
         launch_activity = None
         if resolve_result.returncode == 0:
@@ -345,9 +319,6 @@ class AndroidStudioScenario(ProfiledBuildScenario):
 
         launch_result = subprocess.run(
             [self.adb_command, "-s", serial, "shell", "am", "start", "-n", launch_activity],
-            cwd=cwd,
-            env=android_env,
-            timeout=30,
-            check=False,
+            cwd=cwd, env=android_env, timeout=30, check=False,
         )
         return launch_result.returncode == 0

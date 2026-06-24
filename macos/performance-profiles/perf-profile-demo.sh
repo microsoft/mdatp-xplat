@@ -46,12 +46,6 @@ HAS_SCENARIO=0
 HAS_REPO=0
 HAS_RESUME_FROM=0
 HAS_INCLUDE_INSTALL=0
-HAS_REQUIRE_CLIENT_ANALYZER=0
-HAS_CLIENT_ANALYZER_DIR=0
-HAS_CLIENT_ANALYZER_MODE=0
-HAS_AV_EXCLUSIONS_MODE=0
-HAS_REQUIRE_GHCP_CLI=0
-HAS_HOT_EVENTS_ANALYSIS=0
 HAS_PROFILE_CHANGE_POLICY=0
 HAS_HELP=0
 
@@ -59,12 +53,6 @@ SCENARIO_VALUE=""
 REPO_OVERRIDE=""
 RESUME_FROM_VALUE=""
 INCLUDE_INSTALL=0
-REQUIRE_CLIENT_ANALYZER=0
-CLIENT_ANALYZER_DIR_VALUE=""
-CLIENT_ANALYZER_MODE_VALUE="auto"
-AV_EXCLUSIONS_MODE_VALUE="auto"
-REQUIRE_GHCP_CLI=0
-HOT_EVENTS_ANALYSIS_VALUE="prompt"
 PROFILE_CHANGE_POLICY_VALUE="prompt"
 
 while [ $# -gt 0 ]; do
@@ -109,82 +97,6 @@ while [ $# -gt 0 ]; do
         --include-install)
             HAS_INCLUDE_INSTALL=1
             INCLUDE_INSTALL=1
-            ARGS+=("$1")
-            shift
-            ;;
-        --require-client-analyzer)
-            HAS_REQUIRE_CLIENT_ANALYZER=1
-            REQUIRE_CLIENT_ANALYZER=1
-            ARGS+=("$1")
-            shift
-            ;;
-        --client-analyzer-dir)
-            HAS_CLIENT_ANALYZER_DIR=1
-            ARGS+=("$1")
-            shift
-            if [ $# -gt 0 ]; then
-                CLIENT_ANALYZER_DIR_VALUE="$1"
-                ARGS+=("$1")
-                shift
-            fi
-            ;;
-        --client-analyzer-dir=*)
-            HAS_CLIENT_ANALYZER_DIR=1
-            CLIENT_ANALYZER_DIR_VALUE="${1#--client-analyzer-dir=}"
-            ARGS+=("$1")
-            shift
-            ;;
-        --client-analyzer-mode)
-            HAS_CLIENT_ANALYZER_MODE=1
-            ARGS+=("$1")
-            shift
-            if [ $# -gt 0 ]; then
-                CLIENT_ANALYZER_MODE_VALUE="$1"
-                ARGS+=("$1")
-                shift
-            fi
-            ;;
-        --client-analyzer-mode=*)
-            HAS_CLIENT_ANALYZER_MODE=1
-            CLIENT_ANALYZER_MODE_VALUE="${1#--client-analyzer-mode=}"
-            ARGS+=("$1")
-            shift
-            ;;
-        --av-exclusions-mode)
-            HAS_AV_EXCLUSIONS_MODE=1
-            ARGS+=("$1")
-            shift
-            if [ $# -gt 0 ]; then
-                AV_EXCLUSIONS_MODE_VALUE="$1"
-                ARGS+=("$1")
-                shift
-            fi
-            ;;
-        --av-exclusions-mode=*)
-            HAS_AV_EXCLUSIONS_MODE=1
-            AV_EXCLUSIONS_MODE_VALUE="${1#--av-exclusions-mode=}"
-            ARGS+=("$1")
-            shift
-            ;;
-        --require-ghcp-cli)
-            HAS_REQUIRE_GHCP_CLI=1
-            REQUIRE_GHCP_CLI=1
-            ARGS+=("$1")
-            shift
-            ;;
-        --hot-events-analysis)
-            HAS_HOT_EVENTS_ANALYSIS=1
-            ARGS+=("$1")
-            shift
-            if [ $# -gt 0 ]; then
-                HOT_EVENTS_ANALYSIS_VALUE="$1"
-                ARGS+=("$1")
-                shift
-            fi
-            ;;
-        --hot-events-analysis=*)
-            HAS_HOT_EVENTS_ANALYSIS=1
-            HOT_EVENTS_ANALYSIS_VALUE="${1#--hot-events-analysis=}"
             ARGS+=("$1")
             shift
             ;;
@@ -275,7 +187,7 @@ prompt_choice() {
         reply="${reply:-$default_value}"
         reply_lower="$(printf '%s' "$reply" | tr '[:upper:]' '[:lower:]')"
         case "$reply_lower" in
-            auto|on|off|prompt|python|ghcp|both|always|never)
+            prompt|always|never)
                 printf '%s' "$reply_lower"
                 return 0
                 ;;
@@ -419,14 +331,8 @@ if [ "$HAS_HELP" -eq 0 ] && [ "$INTERACTIVE" -eq 1 ]; then
         echo "  2) Repo path override: ${REPO_OVERRIDE:-'(default)'}$(lock_text "$HAS_REPO")"
         echo "  3) Resume from phase: ${RESUME_FROM_VALUE:-'(none)'}$(lock_text "$HAS_RESUME_FROM")"
         echo "  4) Include install in timed build: $(yn_text "$INCLUDE_INSTALL")$(lock_text "$HAS_INCLUDE_INSTALL")"
-        echo "  5) Require Client Analyzer: $(yn_text "$REQUIRE_CLIENT_ANALYZER")$(lock_text "$HAS_REQUIRE_CLIENT_ANALYZER")"
-        echo "  6) Client Analyzer dir: ${CLIENT_ANALYZER_DIR_VALUE:-'(default)'}$(lock_text "$HAS_CLIENT_ANALYZER_DIR")"
-        echo "  7) Client Analyzer mode: $CLIENT_ANALYZER_MODE_VALUE$(lock_text "$HAS_CLIENT_ANALYZER_MODE")"
-        echo "  8) AV exclusions mode: $AV_EXCLUSIONS_MODE_VALUE$(lock_text "$HAS_AV_EXCLUSIONS_MODE")"
-        echo "  9) Require GH Copilot CLI: $(yn_text "$REQUIRE_GHCP_CLI")$(lock_text "$HAS_REQUIRE_GHCP_CLI")"
-        echo " 10) Hot events analysis: $HOT_EVENTS_ANALYSIS_VALUE$(lock_text "$HAS_HOT_EVENTS_ANALYSIS")"
-        echo " 11) Profile change policy: $PROFILE_CHANGE_POLICY_VALUE$(lock_text "$HAS_PROFILE_CHANGE_POLICY")"
-        read -r -p "Choose [1-11], R=run, Q=quit (default: R): " menu_choice
+        echo "  5) Profile change policy: $PROFILE_CHANGE_POLICY_VALUE$(lock_text "$HAS_PROFILE_CHANGE_POLICY")"
+        read -r -p "Choose [1-5], R=run, Q=quit (default: R): " menu_choice
         menu_choice="$(printf '%s' "${menu_choice:-r}" | tr '[:upper:]' '[:lower:]')"
 
         case "$menu_choice" in
@@ -483,56 +389,6 @@ if [ "$HAS_HELP" -eq 0 ] && [ "$INTERACTIVE" -eq 1 ]; then
                 fi
                 ;;
             5)
-                if [ "$HAS_REQUIRE_CLIENT_ANALYZER" -eq 1 ]; then
-                    echo "Require Client Analyzer is locked via CLI."
-                else
-                    if prompt_yes_no "Require Client Analyzer in preflight?" "$( [ "$REQUIRE_CLIENT_ANALYZER" -eq 1 ] && echo y || echo n )"; then
-                        REQUIRE_CLIENT_ANALYZER=1
-                    else
-                        REQUIRE_CLIENT_ANALYZER=0
-                    fi
-                fi
-                ;;
-            6)
-                if [ "$HAS_CLIENT_ANALYZER_DIR" -eq 1 ]; then
-                    echo "Client Analyzer dir is locked via CLI."
-                else
-                    read -r -p "Client Analyzer directory override (blank for default): " CLIENT_ANALYZER_DIR_VALUE
-                fi
-                ;;
-            7)
-                if [ "$HAS_CLIENT_ANALYZER_MODE" -eq 1 ]; then
-                    echo "Client Analyzer mode is locked via CLI."
-                else
-                    CLIENT_ANALYZER_MODE_VALUE="$(prompt_choice "Client Analyzer mode" "$CLIENT_ANALYZER_MODE_VALUE" "auto/on/off")"
-                fi
-                ;;
-            8)
-                if [ "$HAS_AV_EXCLUSIONS_MODE" -eq 1 ]; then
-                    echo "AV exclusions mode is locked via CLI."
-                else
-                    AV_EXCLUSIONS_MODE_VALUE="$(prompt_choice "Temporary AV exclusions mode" "$AV_EXCLUSIONS_MODE_VALUE" "auto/on/off")"
-                fi
-                ;;
-            9)
-                if [ "$HAS_REQUIRE_GHCP_CLI" -eq 1 ]; then
-                    echo "Require GH Copilot CLI is locked via CLI."
-                else
-                    if prompt_yes_no "Require GH Copilot CLI in preflight?" "$( [ "$REQUIRE_GHCP_CLI" -eq 1 ] && echo y || echo n )"; then
-                        REQUIRE_GHCP_CLI=1
-                    else
-                        REQUIRE_GHCP_CLI=0
-                    fi
-                fi
-                ;;
-            10)
-                if [ "$HAS_HOT_EVENTS_ANALYSIS" -eq 1 ]; then
-                    echo "Hot events analysis is locked via CLI."
-                else
-                    HOT_EVENTS_ANALYSIS_VALUE="$(prompt_choice "Hot events analysis mode" "$HOT_EVENTS_ANALYSIS_VALUE" "prompt/python/ghcp/both")"
-                fi
-                ;;
-            11)
                 if [ "$HAS_PROFILE_CHANGE_POLICY" -eq 1 ]; then
                     echo "Profile change policy is locked via CLI."
                 else
@@ -540,7 +396,7 @@ if [ "$HAS_HELP" -eq 0 ] && [ "$INTERACTIVE" -eq 1 ]; then
                 fi
                 ;;
             *)
-                echo "Please choose 1-11, R, or Q."
+                echo "Please choose 1-5, R, or Q."
                 ;;
         esac
     done
@@ -564,30 +420,6 @@ fi
 
 if [ "$HAS_HELP" -eq 0 ] && [ "$HAS_INCLUDE_INSTALL" -eq 0 ] && [ "$SCENARIO_VALUE" = "vscode" ] && [ "$INCLUDE_INSTALL" -eq 1 ]; then
     ARGS+=("--include-install")
-fi
-
-if [ "$HAS_HELP" -eq 0 ] && [ "$HAS_REQUIRE_CLIENT_ANALYZER" -eq 0 ] && [ "$REQUIRE_CLIENT_ANALYZER" -eq 1 ]; then
-    ARGS+=("--require-client-analyzer")
-fi
-
-if [ "$HAS_HELP" -eq 0 ] && [ "$HAS_CLIENT_ANALYZER_DIR" -eq 0 ] && [ -n "${CLIENT_ANALYZER_DIR_VALUE:-}" ]; then
-    ARGS+=("--client-analyzer-dir" "$CLIENT_ANALYZER_DIR_VALUE")
-fi
-
-if [ "$HAS_HELP" -eq 0 ] && [ "$HAS_CLIENT_ANALYZER_MODE" -eq 0 ]; then
-    ARGS+=("--client-analyzer-mode" "$CLIENT_ANALYZER_MODE_VALUE")
-fi
-
-if [ "$HAS_HELP" -eq 0 ] && [ "$HAS_AV_EXCLUSIONS_MODE" -eq 0 ]; then
-    ARGS+=("--av-exclusions-mode" "$AV_EXCLUSIONS_MODE_VALUE")
-fi
-
-if [ "$HAS_HELP" -eq 0 ] && [ "$HAS_REQUIRE_GHCP_CLI" -eq 0 ] && [ "$REQUIRE_GHCP_CLI" -eq 1 ]; then
-    ARGS+=("--require-ghcp-cli")
-fi
-
-if [ "$HAS_HELP" -eq 0 ] && [ "$HAS_HOT_EVENTS_ANALYSIS" -eq 0 ] && [ "$SCENARIO_VALUE" = "vscode" ]; then
-    ARGS+=("--hot-events-analysis" "$HOT_EVENTS_ANALYSIS_VALUE")
 fi
 
 if [ "$HAS_HELP" -eq 0 ] && [ "$HAS_PROFILE_CHANGE_POLICY" -eq 0 ]; then

@@ -2,6 +2,7 @@
 Preflight checks for demo prerequisites.
 """
 
+import re
 import subprocess
 import sys
 import shutil
@@ -459,7 +460,19 @@ class Preflight:
         # Optional required prerequisite for GHCP-assisted recommendations/analysis.
         ghcp_ok = self.check_ghcp_cli()
         if ghcp_ok:
-            print("   ✅ GitHub Copilot CLI: available")
+            access_ok, access_detail, ghcp_user = self.check_ghcp_access()
+            if access_ok:
+                user = ghcp_user or self.get_active_github_user()
+                print(f"   ✅ GitHub Copilot CLI: available and authorized (user: {user or 'unknown'})")
+            else:
+                gh_user = self.get_active_github_user()
+                print(f"   ⚠️  GitHub Copilot CLI installed but not usable: {access_detail}")
+                print(f"      → Authenticated GitHub account (gh): {gh_user or 'unknown'}")
+                print("      → GHCP profile recommendations and AV-exclusion analysis will be skipped.")
+                print("      → The demo will fall back to scenario-default profiles.")
+                print("      → Resolve Copilot access at https://github.com/settings/copilot")
+                if require_ghcp_cli:
+                    return False
         elif require_ghcp_cli:
             print("   ⚠️  GitHub Copilot CLI required but not found.")
             answer = input("   Install GitHub Copilot CLI now? [Y/n] ").strip().lower()
@@ -471,11 +484,35 @@ class Preflight:
             if not self.check_ghcp_cli():
                 print("   ⚠️  GitHub Copilot CLI install completed, but command is still unavailable.")
                 return False
-            print("   ✅ GitHub Copilot CLI: available")
+            access_ok, access_detail, ghcp_user = self.check_ghcp_access()
+            if not access_ok:
+                gh_user = self.get_active_github_user()
+                print(f"   ⚠️  GitHub Copilot CLI installed but not usable: {access_detail}")
+                print(f"      Authenticated GitHub account (gh): {gh_user or 'unknown'}")
+                print("      Resolve Copilot access at https://github.com/settings/copilot")
+                return False
+            user = ghcp_user or self.get_active_github_user()
+            print(f"   ✅ GitHub Copilot CLI: available and authorized (user: {user or 'unknown'})")
         else:
             print("   ℹ️  GitHub Copilot CLI: not found (optional)")
         print()
         return True
+
+    # Markers indicating the CLI is installed but cannot actually serve requests
+    # (org policy block, missing entitlement, or unauthenticated session). A plain
+    # `copilot --version` succeeds in all of these cases, so a live probe is required.
+    GHCP_DENIAL_MARKERS = (
+        "access denied by policy",
+        "policy setting",
+        "your organization has restricted",
+        "subscription does not include",
+        "not authorized",
+        "unauthorized",
+        "not logged in",
+        "please log in",
+        "please sign in",
+        "authentication failed",
+    )
 
     @staticmethod
     def check_ghcp_cli() -> bool:
@@ -499,6 +536,98 @@ class Preflight:
             return "github copilot cli" in output
         except Exception:
             return False
+
+    @staticmethod
+    def check_ghcp_access(timeout: int = 30):
+        """Probe whether the Copilot CLI can actually serve a request.
+
+        `copilot --version` succeeds even when the account is blocked by org policy,
+        lacks the CLI entitlement, or is unauthenticated. Those failures only surface
+        on a real model request, so this performs a minimal live prompt and inspects
+        the output. The prompt also asks the CLI to report the authenticated GitHub
+        login (resolved via its built-in GitHub tools), since the CLI has no
+        ``whoami`` command. Returns ``(ok: bool, detail: str, user: Optional[str])``.
+        """
+        if not Preflight.check_command_exists("copilot"):
+            return False, "Copilot CLI not installed", None
+
+        prompt = (
+            "Use your GitHub tools to look up the currently authenticated user, then "
+            "reply with exactly one line and nothing else: USER:<login>. "
+            "If you cannot determine the login, reply: USER:unknown"
+        )
+        try:
+            result = subprocess.run(
+                [
+                    "copilot",
+                    "-p",
+                    prompt,
+                    "--allow-all-tools",
+                    "--no-color",
+                    "-s",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                stdin=subprocess.DEVNULL,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return False, "live request timed out", None
+        except Exception as e:
+            return False, f"probe error: {e}", None
+
+        combined = (result.stdout or "") + "\n" + (result.stderr or "")
+        lowered = combined.lower()
+        for marker in Preflight.GHCP_DENIAL_MARKERS:
+            if marker in lowered:
+                return False, "request blocked by Copilot policy/subscription/auth", None
+
+        match = re.search(r"USER:\s*([A-Za-z0-9-]+)", combined)
+        user = match.group(1) if match and match.group(1).lower() != "unknown" else None
+        if match or "ok" in lowered:
+            return True, "live request succeeded", user
+        return False, "no usable response from Copilot CLI", None
+
+    @staticmethod
+    def get_active_github_user() -> Optional[str]:
+        """Return the active GitHub login reported by `gh auth status`.
+
+        This works even when Copilot model access is policy-blocked, and respects the
+        account selected via `gh auth switch` when multiple accounts are configured.
+        Returns the login string, or None if `gh` is unavailable or not signed in.
+        """
+        if not Preflight.check_command_exists("gh"):
+            return None
+
+        try:
+            result = subprocess.run(
+                ["gh", "auth", "status"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except Exception:
+            return None
+
+        output = (result.stdout or "") + "\n" + (result.stderr or "")
+        logins: List[str] = []
+        active: Optional[str] = None
+        current: Optional[str] = None
+        for line in output.splitlines():
+            login_match = re.search(r"account\s+(\S+)", line)
+            if login_match and "logged in" in line.lower():
+                current = login_match.group(1)
+                logins.append(current)
+            if current and re.search(r"active account:\s*true", line, re.IGNORECASE):
+                active = current
+
+        if active:
+            return active
+        if len(logins) == 1:
+            return logins[0]
+        return None
 
     @staticmethod
     def install_ghcp_cli() -> bool:

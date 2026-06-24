@@ -22,10 +22,6 @@ class XcodeSimulatorScenario(ProfiledBuildScenario):
         repo_path: Optional[Path] = None,
         profile_change_policy: str = "prompt",
         run_tests_by_default: bool = True,
-        enable_client_analyzer: Optional[bool] = None,
-        enable_exclusion_workflow: Optional[bool] = None,
-        hot_events_analysis_mode: str = "none",
-        analyzer_dir: Optional[Path] = None,
     ):
         default_repo = Path(__file__).resolve().parents[2] / "apps" / "hello-defender-ios"
         config = ScenarioConfig(
@@ -48,17 +44,11 @@ class XcodeSimulatorScenario(ProfiledBuildScenario):
             repo_validation_file=None,
             clone_in_timed_phases=False,
             build_cleanup_paths=[".mde-derived"],
-            recommend_keywords={
-                "xcode": ["xcode", "swift", "swift-frontend", "swift package", "xcbuild", "clang"],
-                "ios-simulator-tree": ["coresimulator", "ios simulator", "simruntime", "simctl", "iphonesimulator"],
-                "iphone-simulator-tree": ["iphone simulator", "com.apple.iphonesimulator", "simulator.app"],
-                "git": ["/git", "git-core", "git "],
-            },
-            enable_client_analyzer=False if enable_client_analyzer is None else enable_client_analyzer,
-            enable_exclusion_workflow=enable_exclusion_workflow,
+            default_exclusions=[
+                {"type": "folder", "rel": ".mde-derived"},
+            ],
+            eicar_subdir=".mde-derived",
             profile_change_policy=profile_change_policy,
-            hot_events_analysis_mode=hot_events_analysis_mode,
-            analyzer_dir=analyzer_dir,
         )
 
     def setup(self) -> bool:
@@ -156,14 +146,10 @@ class XcodeSimulatorScenario(ProfiledBuildScenario):
 
         clean_cmd = [
             "xcodebuild",
-            "-project",
-            project.name,
-            "-scheme",
-            scheme,
-            "-destination",
-            "generic/platform=iOS Simulator",
-            "-derivedDataPath",
-            str(derived),
+            "-project", project.name,
+            "-scheme", scheme,
+            "-destination", "generic/platform=iOS Simulator",
+            "-derivedDataPath", str(derived),
             "clean",
         ]
 
@@ -173,28 +159,20 @@ class XcodeSimulatorScenario(ProfiledBuildScenario):
 
         build_cmd = [
             "xcodebuild",
-            "-project",
-            project.name,
-            "-scheme",
-            scheme,
-            "-destination",
-            "generic/platform=iOS Simulator",
-            "-derivedDataPath",
-            str(derived),
+            "-project", project.name,
+            "-scheme", scheme,
+            "-destination", "generic/platform=iOS Simulator",
+            "-derivedDataPath", str(derived),
             "build",
         ]
 
         if self.run_tests_by_default:
             test_cmd = [
                 "xcodebuild",
-                "-project",
-                project.name,
-                "-scheme",
-                scheme,
-                "-destination",
-                "platform=iOS Simulator,name=iPhone 16",
-                "-derivedDataPath",
-                str(derived),
+                "-project", project.name,
+                "-scheme", scheme,
+                "-destination", "platform=iOS Simulator,name=iPhone 16",
+                "-derivedDataPath", str(derived),
                 "test",
             ]
             test_result = subprocess.run(test_cmd, cwd=cwd, timeout=2400, check=False)
@@ -217,7 +195,6 @@ class XcodeSimulatorScenario(ProfiledBuildScenario):
         if not udid:
             return False
 
-        # Use a separate simulator home to keep demo effects isolated.
         sim_home = Path(tempfile.gettempdir()) / f"mde-sim-home-{label.lower()}"
         sim_env = {"SIMULATOR_SHARED_RESOURCES_DIRECTORY": str(sim_home)}
 

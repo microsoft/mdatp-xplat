@@ -15,7 +15,6 @@ class TestVSCodeScenarioConfig:
         assert scenario.clone_args == ["--depth", "1", "--branch", "1.122.1"]
         assert scenario.install_command == ["npm", "install"]
         assert scenario.enable_resume_checkpoint is True
-        assert scenario.enable_client_analyzer is True
 
     def test_setup_installs_dependencies_by_default(self, tmp_path: Path):
         repo = tmp_path / "vscode"
@@ -61,7 +60,8 @@ class TestVSCodeScenarioConfig:
                     ok = scenario.run()
 
         assert ok is False
-        mock_run.assert_called_once_with(resume_from=3)
+        # Phase index 4 = "Profiles Build" in the new 6-phase flow
+        mock_run.assert_called_once_with(resume_from=4)
 
     def test_run_ignores_stale_resume_state_and_starts_fresh(self, tmp_path: Path):
         repo = tmp_path / "vscode"
@@ -102,73 +102,3 @@ class TestVSCodeScenarioConfig:
         assert not scenario.state_file.exists()
         mock_input.assert_not_called()
         mock_run.assert_called_once_with(resume_from=None)
-
-    def test_ghcp_recommendations_declined_each_call(self, tmp_path: Path):
-        scenario = VSCodeScenario(repo_path=tmp_path / "vscode")
-        hot = tmp_path / "hot.json"
-        hot.write_text(
-            '{"eventSource": ['
-            '{"path":"/usr/local/bin/node","authCount":10,"notifyCount":5}'
-            ']}'
-        )
-
-        with patch.object(scenario, "_has_ghcp_cli", return_value=True):
-            with patch("builtins.input", return_value="n"):
-                with patch("demo_framework.scenarios.profiled_build.subprocess.run") as mock_run:
-                    recs = scenario._ghcp_profile_recommendations(hot, ["node", "git"])
-
-        assert recs == []
-        mock_run.assert_not_called()
-
-    def test_ghcp_recommendations_include_analysis_and_profiles(self, tmp_path: Path):
-        scenario = VSCodeScenario(repo_path=tmp_path / "vscode")
-        hot = tmp_path / "hot.json"
-        hot.write_text(
-            '{"eventSource": ['
-            '{"path":"/usr/local/bin/node","authCount":10,"notifyCount":5}'
-            ']}'
-        )
-
-        with patch.object(scenario, "_has_ghcp_cli", return_value=True):
-            with patch("builtins.input", return_value="y"):
-                with patch("demo_framework.scenarios.profiled_build.subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(
-                        returncode=0,
-                        stdout='{"type":"assistant.message","data":{"content":"ANALYSIS: Node process dominates telemetry.\\nRECOMMENDED_PROFILES: node"}}\n',
-                    )
-                    recs = scenario._ghcp_profile_recommendations(hot, ["node", "git"])
-
-        assert recs == ["node"]
-        args = mock_run.call_args.args[0]
-        assert args[0] == "copilot"
-        assert "-p" in args
-        assert "--no-ask-user" in args
-        assert "json" in args
-
-    def test_select_profiles_choice_union(self, tmp_path: Path):
-        scenario = VSCodeScenario(repo_path=tmp_path / "vscode")
-        hot = tmp_path / "hot.json"
-        hot.write_text('{"eventSource": [{"path":"/usr/local/bin/node","authCount":10,"notifyCount":5}]}')
-
-        with patch.object(scenario, "_get_available_profiles", return_value=["node", "git", "vscode"]):
-            with patch.object(scenario, "_ghcp_profile_recommendations", return_value=["node"]):
-                with patch.object(scenario, "_python_profile_recommendations", return_value=["vscode"]):
-                    with patch("builtins.input", return_value="3"):
-                        scenario._select_profiles_for_phase4(hot)
-
-        assert scenario.recommended_profiles == ["node", "vscode"]
-        assert scenario.recommendation_source == "union"
-
-    def test_select_profiles_choice_intersection(self, tmp_path: Path):
-        scenario = VSCodeScenario(repo_path=tmp_path / "vscode")
-        hot = tmp_path / "hot.json"
-        hot.write_text('{"eventSource": [{"path":"/usr/local/bin/node","authCount":10,"notifyCount":5}]}')
-
-        with patch.object(scenario, "_get_available_profiles", return_value=["node", "git", "vscode"]):
-            with patch.object(scenario, "_ghcp_profile_recommendations", return_value=["node", "vscode"]):
-                with patch.object(scenario, "_python_profile_recommendations", return_value=["vscode"]):
-                    with patch("builtins.input", return_value="2"):
-                        scenario._select_profiles_for_phase4(hot)
-
-        assert scenario.recommended_profiles == ["vscode"]
-        assert scenario.recommendation_source == "python+intersection"
