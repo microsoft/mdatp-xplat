@@ -26,6 +26,7 @@ xcuserdata/
 *.xcuserstate
 
 # Demo-generated local build artifacts
+macos/performance-profiles/apps/hello-defender-ios/DerivedData/
 macos/performance-profiles/apps/hello-defender-ios/.mde-derived*/
 macos/performance-profiles/apps/hello-defender-ios/hot_event_source_*.json
 macos/performance-profiles/apps/hello-defender-android/hot_event_source_*.json

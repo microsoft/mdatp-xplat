@@ -38,5 +38,5 @@ The `android-studio` scenario runs this sequence for both baseline and optimized
 From `macos/performance-profiles`:
 
 ```bash
-python3 demo.py android-studio
+sudo -v && python -m pytest -m integration -s -k android
 ```

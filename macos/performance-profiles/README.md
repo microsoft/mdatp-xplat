@@ -19,203 +19,123 @@ mdatp performance-profiles list-active
 mdatp performance-profiles remove xcode
 ```
 
-**Why they matter:** Real-time protection scans every file read/write operation. During software builds, compilers read and write thousands of files per second. Without tuning, MDE’s scanning can add 30–200% overhead to build times. Build artifacts are critical assets — they need to stay protected. Performance profiles solve the performance problem without creating a protection gap.
+**Why they matter:** Developer build workflows are unusually file-intensive — compilers read and write thousands of files per second, and build directories are rewritten constantly. Performance profiles tune real-time protection for these well-understood developer patterns, so build-heavy workflows stay fast while every file remains protected. Unlike customer-configured folder exclusions, they reduce scanning work without leaving a protection gap.
 
 > **Learn more:** [Performance profiles documentation](https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles)
 
-## Demo Overview
+## How the demo works
 
-This demo tells a complete story in 5 phases: showing not just that performance profiles are faster, but that folder exclusions — a common approach — create a protection gap on the very build artifacts that need to be secured.
+The demo is a small **pytest** suite. Each scenario runs the same three-phase story against a real build, measuring build time and the MDE scanner's CPU usage, and dropping an [EICAR test file](https://www.eicar.org/download-anti-malware-testfile/) into the build directory to prove whether real-time protection can still see it:
 
-| Phase | What Happens | Security Signal |
+| Phase | What happens | Security signal |
 |---|---|---|
-| **1. Baseline Build** | Build with no exclusions, no profiles | Reference point — full protection, full overhead |
-| **2. AV Exclusions Build** | Apply folder exclusions, rebuild, place EICAR test file in excluded dir | ⚠️ Build is faster — but **EICAR is NOT detected** |
-| **3. Compensating Scan** | Run `mdatp scan custom --ignore-exclusions` (blocking) | ✅ EICAR found — but this scan is required every build |
-| **4. Profiles Build** | Remove exclusions, apply performance profiles, rebuild, place EICAR | ✅ Build is fast **and** EICAR **is detected** by real-time protection |
-| **5. Compare Results** | 3-way table: Baseline vs Exclusions vs Profiles | Profiles = same perf gain, zero security trade-off, no compensating scan |
+| **1. Baseline** | Build with no exclusions and no profiles | Reference point — full protection, full scanning overhead |
+| **2. AV exclusions** | Customer-configured exclusion of the build directories, rebuild, drop EICAR in an excluded dir | ⚠️ Build is faster — but **EICAR is NOT detected** (the protection gap) |
+| **3. Performance profiles** | Remove exclusions, apply profiles, rebuild, drop EICAR again | ✅ Build stays fast **and** EICAR **is detected** by real-time protection |
 
-**Key message:** Performance profiles are scoped to specific developer processes — only events from those processes are reduced. Any other process writing to the same directories is still fully monitored. With folder exclusions, the entire directory is unprotected regardless of which process touches it. Performance profiles deliver the same build performance improvement without that protection gap.
+At the end, each run prints a 3-way table (build time, MDE scan CPU, EICAR result) so you can compare Baseline vs Exclusions vs Profiles at a glance.
 
-## Available Scenarios
+**Key message:** Performance profiles are scoped to specific developer processes — only events from those processes are reduced. Any other process writing to the same directories is still fully monitored. With customer-configured folder exclusions, everything in that directory has less protection regardless of which process touches it. Profiles deliver the same build-performance improvement without that protection gap.
 
-| Scenario | Target Repo | Build System | Excluded Dirs (AV phase) | Profiles Used |
+## Scenarios
+
+| Scenario (`-k`) | Project | Build | Excluded in AV phase | Profiles applied |
 |---|---|---|---|---|
-| `vscode` | [microsoft/vscode](https://github.com/microsoft/vscode) | Node.js / TypeScript | `node_modules/`, `out/`, `.build/` | `node`, `git`, `vscode`, `vscode-tree` |
-| `xcode` | [microsoft/fluentui-apple](https://github.com/microsoft/fluentui-apple) | Xcode / Swift | `DerivedData/`, `.build/` | `xcode`, `xcode-ide-tree`, `git` |
-| `xcode-simulator` | In-repo `apps/hello-defender-ios` | xcodebuild + simctl | `.mde-derived/` | `xcode`, `ios-simulator-tree`, `iphone-simulator-tree`, `git` |
-| `android-studio` | In-repo `apps/hello-defender-android` | Gradle + adb | `.gradle/`, `app/build/` | `android-studio`, `android-studio-tree`, `java`, `git` |
+| `vscode` | clones [microsoft/vscode](https://github.com/microsoft/vscode) (tag 1.122.1) | `npm run compile` | `node_modules/`, `out/`, `.build/` | `node`, `git`, `vscode`, `vscode-tree` |
+| `xcode and not simulator` | clones [microsoft/fluentui-apple](https://github.com/microsoft/fluentui-apple) | `swift build -c release` | `.build/`, `DerivedData/` | `xcode`, `xcode-ide-tree`, `git` |
+| `xcode_simulator` | in-repo `apps/hello-defender-ios` | `xcodebuild` → install + launch on iOS Simulator | `DerivedData/`, `~/Library/Developer/CoreSimulator` | `xcode`, `ios-simulator-tree`, `iphone-simulator-tree`, `git` |
+| `android` | in-repo `apps/hello-defender-android` | `./gradlew assembleDebug` → install + launch on emulator | `.gradle/`, `app/build/`, `~/.android/avd` | `android-studio`, `android-studio-tree`, `openjdk-javac`, `git` |
+
+The two in-repo scenarios (`xcode_simulator`, `android`) install and launch the freshly built app **inside the timed window**, so the full build→install→launch scan-load is measured. The `vscode` and `xcode` scenarios clone large first-party repos into `~/demo/` (reused if already present).
 
 ## Prerequisites
 
-- **macOS** with [Microsoft Defender for Endpoint](https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-endpoint-mac) installed
-- MDE version that supports performance profiles (check `mdatp performance-profiles list-available`)
-- **Real-time protection enabled** (`mdatp health --field real_time_protection_enabled` should return `true`)
-- `sudo` access — most `mdatp` commands require elevated privileges (profile management, scanning, configuration). The script will prompt for your password on first use.
-- Build tools for your chosen demo:
-  - **VS Code demo:** `node` (v24+), `git`, `python3`, Xcode Command Line Tools — see the [official VS Code build prerequisites](https://github.com/microsoft/vscode/wiki/How-to-Contribute#prerequisites)
-  - **Xcode demo:** Xcode (with command line tools), `git`
-  - **Xcode Simulator demo:** Xcode (with command line tools), `xcrun`
-  - **Android Studio demo:** Android Studio, Android SDK (with `adb` and `emulator`), an Android Virtual Device
+- **macOS** with [Microsoft Defender for Endpoint](https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-endpoint-mac) installed, on a version that supports performance profiles (check `mdatp performance-profiles list-available`)
+- **Real-time protection enabled** (`mdatp health --field real_time_protection_enabled` returns `true`)
+- **`sudo`** — applying/removing profiles and exclusions requires elevated `mdatp`
+- **Python 3.9+**
+- Build tools for the scenario(s) you run:
+  - **`vscode`** — Node.js 22.x, `npm`, `git`, Xcode Command Line Tools (for `node-gyp`)
+  - **`xcode`** — `swift`, `git`
+  - **`xcode_simulator`** — Xcode with command line tools, `xcrun`/`simctl`, and at least one iOS Simulator runtime
+  - **`android`** — Android SDK (`adb` + `emulator`) with at least one AVD, and a JDK (Android Studio's bundled JBR is used as a fallback)
 
-### One-Time Setup
-
-```bash
-# ── For the VS Code demo ──
-
-# Install build tools (Python + Xcode CLT also required for node-gyp)
-brew install node@24 git
-xcode-select --install   # if not already installed
-
-# Clone VS Code (pinned to a stable tag) — or let the demo do it automatically
-git clone --depth 1 --branch 1.122.1 https://github.com/microsoft/vscode.git ~/demo/vscode
-cd ~/demo/vscode
-npm install   # follows official VS Code build steps
-
-# ── For the Xcode demo ──
-
-# Clone Fluent UI Apple — or let the demo clone it automatically
-git clone https://github.com/microsoft/fluentui-apple.git ~/demo/fluentui-apple
-```
-
-## Running the Demo
+## Running the demo
 
 ```bash
-chmod +x perf-profile-demo.sh
-./perf-profile-demo.sh
+# from macos/performance-profiles/
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# cache sudo, then run every scenario (-s shows the live phase-by-phase output)
+sudo -v && python -m pytest -m integration -s
+
+# run a single scenario
+sudo -v && python -m pytest -m integration -s -k xcode_simulator
+sudo -v && python -m pytest -m integration -s -k android
+sudo -v && python -m pytest -m integration -s -k vscode
+sudo -v && python -m pytest -m integration -s -k "xcode and not simulator"
 ```
 
-When run interactively without arguments, the script caches sudo credentials and then presents a configuration menu before starting:
+The scenarios are marked `integration` because they drive real `mdatp` commands and run real builds; the default `pytest` invocation skips them. The suite verifies the endpoint is in a known-clean state before each run (RTP on, no leftover demo exclusions or profiles) and restores it afterward, so a stray leftover can never be mistaken for a result.
 
-```
-⚙️  Demo defaults (select one to change, Enter to run):
-  1) Scenario: vscode
-  2) Repo path override: '(default)'
-  3) Resume from phase: '(none)'
-  4) Include install in timed build: off
-  5) Profile change policy: prompt
-Choose [1-5], R=run, Q=quit (default: R):
-```
+## What each phase proves
 
-Select a number to change that option, press **Enter** (or **R**) to run with the shown defaults, or **Q** to quit. Any option set via a CLI flag is shown as `[locked via CLI]` and cannot be changed in the menu.
+### Phase 1 — Baseline build
 
-You can also pass options directly on the command line — any option supplied this way is shown as `[locked via CLI]` in the menu and cannot be changed interactively:
+Build with no exclusions and no profiles: full real-time protection, full scanning overhead. This is the reference build time and MDE CPU.
 
-```bash
-# Run a specific scenario
-./perf-profile-demo.sh vscode
-./perf-profile-demo.sh xcode
-./perf-profile-demo.sh xcode-simulator
-./perf-profile-demo.sh android-studio
+### Phase 2 — AV exclusions build
 
-# Use a custom repo path
-./perf-profile-demo.sh vscode --repo ~/my/vscode/checkout
+Add the kind of folder exclusions a customer would configure for the scenario's build directories (e.g., `node_modules/`, `out/`, `.build/`) and rebuild. The build is faster — but the demo then drops an EICAR test file into an excluded directory and checks whether MDE saw it.
 
-# Choose consent policy for applying/removing profiles
-./perf-profile-demo.sh vscode --profile-change-policy always   # no prompts
-./perf-profile-demo.sh vscode --profile-change-policy never    # never apply/remove
+**Result:** MDE does **not** detect the EICAR. The customer-configured exclusion hid it from real-time protection.
 
-# Resume from a specific phase (0-based index)
-./perf-profile-demo.sh vscode --resume-from 4
-```
+This is the trade-off of customer-configured folder exclusions: once MDE is told to skip a directory, it can no longer see malware that lands there. Staying protected would require a compensating scan after every build, which adds the avoided overhead back.
 
-## The 5-Phase Story
+> **Note:** You *can* close this gap by running a compensating scan over the excluded directories after each build, for example:
+>
+> ```bash
+> mdatp scan custom --path <build-dir>
+> ```
+>
+> But that re-introduces the scanning cost the exclusion was meant to avoid — now serialized *after* the build rather than spread across it — and it only protects if the scan runs every time. Performance profiles avoid the gap without the extra step.
 
-### Phase 1 — Baseline Build
+### Phase 3 — Performance profiles build
 
-Build the project with no exclusions and no performance profiles. This is the reference point: full real-time protection, full overhead. Capture build time and MDE CPU usage.
+Remove the exclusions, apply the scenario's performance profiles, and rebuild. Drop EICAR in the same directory again.
 
-### Phase 2 — AV Exclusions Build
+**Result:** The build stays fast **and** MDE detects the EICAR via real-time protection — no exclusion, no compensating scan.
 
-Apply default folder exclusions for the scenario (e.g., `node_modules/`, `out/`, `.build/`). Rebuild. The build is faster — but before the audience celebrates, place an EICAR test file inside one of the excluded directories. Check whether MDE detected it.
+Performance profiles are scoped to the developer process: the compiler's events are reduced, but anything else writing to those directories is still scanned. The EICAR file isn't written by the compiler, so real-time protection still catches it. With a customer-configured folder exclusion, the directory is skipped no matter what writes to it.
 
-**Result:** MDE did NOT detect the EICAR. The exclusion hid it from real-time protection.
+## Deploying profiles via MDM (Intune, JAMF, etc.)
 
-> **Talking point:** "This is the security trade-off of folder exclusions. We told MDE 'never look in `out/`' — and now it can't see malware that lands there during or after a build."
+In production, performance profiles are typically deployed centrally rather than applied at the command line. In your management portal, create or edit a **Settings Catalog** policy and add **Microsoft Defender > Performance Profiles Configuration** and **Features**:
 
-### Phase 3 — Compensating Scan
-
-Run a custom scan with `--ignore-exclusions` over the excluded directories. This is a **blocking** step — the audience watches it run.
-
-**Result:** The compensating scan finds the EICAR. 
-
-> **Talking point:** "Security best practice says: if you use AV exclusions, you need a compensating control. That means running this scan after every build — adding overhead back in, but now you have to manage it, schedule it, and remember to do it."
-
-### Phase 4 — Profiles Build
-
-Remove all folder exclusions. Apply performance profiles. Rebuild. Place EICAR in the same directory again. Check whether MDE detected it.
-
-**Result:** MDE detected the EICAR via real-time protection — no compensating scan needed.
-
-> **Talking point:** "Profiles are scoped to the developer process — the compiler's events are reduced, but anything else writing to those directories is still watched. That's why EICAR dropped by the demo script is detected even with profiles applied: the shell isn't the compiler. With folder exclusions, it doesn't matter who drops the file — the directory is off-limits for scanning entirely."
-
-### Phase 5 — Compare Results
-
-A 3-way table: Baseline vs AV Exclusions vs Profiles. Same build speedup, but profiles deliver it without the security trade-off or operational overhead.
-
-## Admin-Only Mode (MDM-Managed Profiles)
-
-When performance profiles are deployed via MDM (Intune, JAMF, etc.), the endpoint is in **admin-only mode** — local users cannot apply or remove profiles. The demo detects this automatically.
-
-#### Step 1: Enable Performance Profiles in Intune
-
-In your management portal, create or edit a **Settings Catalog** policy. Add the **Microsoft Defender > Performance Profiles Configuration** and **Features** settings:
-
-- **Performance profiles merge policy** → `admin_only`
 - **Performance Profiles** → `enabled`
+- **Performance profiles merge policy** → `admin_only` (local users can't apply/remove profiles) or `merge`
 
 **Intune:**
 
-![Intune Settings Catalog — Performance Profiles enabled with admin-only merge policy](images/intune-perf-profiles-enabled.png)
+![Intune Settings Catalog — Performance Profiles enabled](images/intune-perf-profiles-enabled.png)
 
 **Security Settings Management (Microsoft Defender portal):**
 
-![Security Settings Management — Performance Profiles enabled with admin-only merge policy](images/ssm-perf-profiles-enabled.png)
+![Security Settings Management — Performance Profiles enabled](images/ssm-perf-profiles-enabled.png)
 
-#### Step 2: Run the Baseline (Session 1)
+Then add the specific profiles a scenario uses (for VS Code: `git`, `node`, `vscode`, `vscode-tree`):
 
-Run the demo script. It detects admin-only mode with no profiles applied and runs through the baseline, AV exclusions, and compensating scan phases. After saving a checkpoint, it exits with instructions:
+![Intune Settings Catalog — Performance Profiles with selected profiles](images/intune-perf-profiles-enabled-with-profiles.png)
 
-```
-⚠️  Admin-only mode — profiles cannot be applied locally.
-Ask your IT admin to deploy these profiles via MDM (Intune, JAMF, etc.):
-  - node
-  - git
-  - vscode
-  - vscode-tree
-
-Once deployed, re-run this script to continue.
-(Your baseline results have been saved — you'll be prompted to continue.)
-```
-
-#### Step 3: Deploy Profiles via MDM
-
-In **Microsoft Defender > Performance Profiles Configuration > Performance Profiles**, add the profiles requested by the demo (for VS Code: `git`, `node`, `vscode`, `vscode-tree`).
-
-**Intune profile selection example:**
-
-![Intune Settings Catalog — Performance Profiles enabled with selected profiles for deployment](images/intune-perf-profiles-enabled-with-profiles.png)
-
-Deploy the requested profiles through your MDM solution.
-
-#### Step 4: Resume the Demo (Session 2)
-
-Re-run the script. It detects the saved checkpoint and prompts:
-
-```
-📋 Previous run detected — baseline already complete.
-   Baseline build time: 182 seconds
-
-Continue to profiles build, or restart from scratch? [C/r]
-```
-
-Press **Enter** (or **C**) to resume from the Profiles Build phase.
+> **Note:** The automated demo applies profiles locally via `sudo mdatp performance-profiles apply`, so it requires an endpoint where local profile changes are allowed (not `admin_only`). Use the MDM steps above to demonstrate centralized deployment.
 
 ---
 
 ## Available Profiles
 
-The scripts use profiles relevant to the build being demonstrated. Here are some of the 60+ profiles available:
+The demo applies profiles relevant to the build being exercised. Here are some of the 60+ profiles available:
 
 | Profile | What It Excludes |
 |---|---|
@@ -233,29 +153,30 @@ The scripts use profiles relevant to the build being demonstrated. Here are some
 
 Run `mdatp performance-profiles list-available` to see the full list.
 
-## Expected Results
+## Expected results
 
-Results vary by hardware (Apple Silicon vs Intel), disk speed, and MDE version. Typical results:
+Numbers vary by hardware (Apple Silicon vs Intel), disk speed, project, and MDE version. The suite prints a table like this at the end of a run (illustrative):
 
-| Metric | Baseline | AV Exclusions | Profiles | Best Choice |
-|---|---|---|---|---|
-| VS Code build time | ~180s | ~120s | ~120s | Tie |
-| MDE CPU (avg) | 80–120% | 5–15% | 5–15% | Tie |
-| EICAR detection (RTP) | ✅ Yes | ⚠️ **No** | ✅ Yes | **Profiles** |
-| Compensating scan needed | No | ⚠️ **Yes** | No | **Profiles** |
+```
+=== MDE Performance Profiles — Demo Results ===
 
-> **Tip:** Run the demo on your target hardware at least once before presenting to get real numbers for your environment.
+Scenario / metric           Baseline          Exclusions              Profiles
+------------------------------------------------------------------------------
+vscode
+  build time                  XX.Xs      XX.Xs (XX.X% faster)    XX.Xs (XX.X% faster)
+  MDE scan CPU                XX.X%      XX.X% (-XX.X%)          XX.X% (-XX.X%)
+  EICAR                  detected ✅      not detected ⚠️       detected ✅
+```
 
-## Presenter Talking Points
+How to read it:
 
-1. "A customer calls: 'MDE is slowing down our developer builds on macOS.'"
-2. "The first instinct is to add folder exclusions. Let's show what happens when you do that."
-3. "Build is faster — great. But look: EICAR landed in that excluded directory and MDE never saw it."
-4. "The fix? A compensating scan after every build. Now you've added the overhead back in, plus operational complexity."
-5. "Performance profiles solve this properly. They use smart patterns — skipping known-safe build artifacts, not entire directories."
-6. "Same build speedup. Full real-time protection. No compensating scan. No security gap."
-7. "We ship **60+ profiles** — Xcode, .NET, Docker, Rust, Go, JetBrains, and more. One command to apply."
-8. "That's the difference: folder exclusions create a protection gap — the directory is unprotected regardless of what touches it. Performance profiles are process-scoped — only the compiler's events are reduced. Anything else in that directory is still protected."
+- **build time** — relative speedup vs baseline (`% faster`/`slower`).
+- **MDE scan CPU** — the MDE scanner's average CPU during the build, sampled live. The delta is the absolute change in that CPU percentage (e.g. `XX.X%` → `YY.Y%` is shown as `-ZZ.Z%`).
+- **EICAR** — whether real-time protection detected the test file. `not detected ⚠️` in the Exclusions column is the whole point: the customer-excluded build dir is a protection gap.
+
+The bottom line is the EICAR row: customer-configured exclusions cut scanning the most but stop real-time protection from seeing threats in those directories; profiles keep the build fast **and** keep protection effective.
+
+> **Tip:** Run a scenario on your target hardware at least once to get representative numbers for your environment.
 
 ## Other Repos to Try
 
@@ -266,6 +187,53 @@ These Microsoft first-party repos also work well with performance profiles:
 | [PowerShell/PowerShell](https://github.com/PowerShell/PowerShell) | `dotnet-build`, `git` | `dotnet build` | .NET build, 2–5 min |
 | [dotnet/maui](https://github.com/dotnet/maui) | `dotnet-build`, `xcode`, `git` | `dotnet build -f net8.0-maccatalyst` | Xcode + .NET combo |
 | [dotnet/runtime](https://github.com/dotnet/runtime) | `dotnet-build`, `git`, `make-tree` | `./build.sh` | Long build (15–30 min) |
+
+## Adding a scenario
+
+Each scenario is a single `tests/test_demo_<name>.py` file. The three-phase story
+(baseline → exclusions → profiles) lives in `demo_steps.three_way_demo`, so a new
+scenario only has to describe its build and call it.
+
+1. **Create `tests/test_demo_<name>.py`** and define a `Scenario`:
+
+   ```python
+   from demo_steps import Scenario, three_way_demo
+   import pytest
+
+   SCENARIO = Scenario(
+       name="myscenario",
+       build_cmd=["make", "build"],      # the command that compiles the project
+       eicar_subdir="build",             # build-output dir EICAR is dropped into
+       profiles=["git", "make-tree"],    # perf profiles to apply in phase 3
+       exclusion_subdirs=["build"],      # dirs AV-excluded in phase 2 (defaults to eicar_subdir)
+   )
+   ```
+
+   Other optional `Scenario` fields: `exclusion_abs_paths` (non-repo trees to also
+   exclude, e.g. a simulator data dir), `post_build` (a callback run *inside* the
+   timed window — e.g. install/launch the built app), and `clean_paths` /
+   `clean_globs` (artifacts to delete before each build so every phase is a full
+   rebuild). See `tests/demo_steps.py` for the full dataclass.
+
+2. **Provide the project.** Either point at an in-repo app under `apps/`, or add a
+   session-scoped fixture that clones a repo into `~/demo/` and `pytest.skip`s when
+   the required toolchain is missing (see `tests/test_demo_xcode.py` for the pattern).
+
+3. **Add the test function**, marked `integration`, taking the `report`,
+   `require_rtp`, and `clean_mde` fixtures from `conftest.py`:
+
+   ```python
+   @pytest.mark.integration
+   def test_myscenario_profiles_compared_to_exclusions(my_repo, report, require_rtp, clean_mde):
+       three_way_demo(my_repo, SCENARIO, report)
+   ```
+
+4. **Run it:** `sudo -v && python -m pytest -m integration -s -k myscenario`. The
+   results table and clean-state checks are handled automatically by `conftest.py`.
+
+> **Note:** `-k` matches on substrings, so pick a `name` that isn't a prefix of
+> another scenario (or select with `-k "name and not other"`, as the Xcode
+> SwiftPM scenario does to avoid also matching `xcode_simulator`).
 
 ## Contributing
 
