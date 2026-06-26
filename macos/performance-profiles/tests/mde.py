@@ -7,13 +7,16 @@ out to the same commands the manual experiment used.
 
 from __future__ import annotations
 
+import json
 import os
+import re
+import signal
 import subprocess
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 # Standard EICAR antivirus test string (harmless — used to verify AV scanning).
 EICAR_STRING = (
@@ -171,6 +174,171 @@ class _CpuMonitor:
         return sum(self._samples) / len(self._samples)
 
 
+def capture_hot_event_sources(
+    duration_seconds: float,
+    output_path: Path,
+    *,
+    interval_seconds: float = 2.0,
+    stop_event: Optional[threading.Event] = None,
+) -> int:
+    """Capture hot-event-sources telemetry for a fixed window and write JSON.
+
+    The mdatp command streams until interrupted, so this helper runs it once,
+    waits for ``duration_seconds`` (or ``stop_event``), interrupts it, parses
+    the text stream into structured snapshots, and writes a JSON report.
+
+    Returns the number of parsed snapshots.
+    """
+    if duration_seconds <= 0:
+        return 0
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    start_wall = time.time()
+    start_mono = time.perf_counter()
+    cmd = ["sudo", "mdatp", "diagnostic", "hot-event-sources", "--output", "json"]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    deadline = start_mono + duration_seconds
+    while time.perf_counter() < deadline:
+        if stop_event is not None and stop_event.is_set():
+            break
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            break
+        sleep_for = min(max(interval_seconds, 0.05), remaining)
+        if stop_event is not None and stop_event.wait(timeout=sleep_for):
+            break
+        if stop_event is None:
+            time.sleep(sleep_for)
+
+    if proc.poll() is None:
+        proc.send_signal(signal.SIGINT)
+
+    try:
+        stdout, stderr = proc.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+        try:
+            stdout, stderr = proc.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
+
+    elapsed = time.perf_counter() - start_mono
+    snapshots = parse_hot_event_sources_output(stdout or "")
+    report = {
+        "command": cmd,
+        "start_ts": start_wall,
+        "elapsed_seconds": elapsed,
+        "return_code": proc.returncode,
+        "snapshot_count": len(snapshots),
+        "top_hot_event_sources": top_hot_event_sources(snapshots, top_n=10),
+        "snapshots": snapshots,
+        "stderr": stderr or "",
+    }
+    output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return len(snapshots)
+
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+_SUMMARY_RE = re.compile(
+    r"Total Events:\s*(?P<total>\d+)\s+"
+    r"Total Processed Events:\s*(?P<processed>\d+)\s+"
+    r"Urgent Events:\s*(?P<urgent>\d+)\s+"
+    r"Time:\s*(?P<time>[0-9.]+)s",
+    re.IGNORECASE,
+)
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
+
+def parse_hot_event_sources_output(raw_output: str) -> List[Dict[str, Any]]:
+    """Parse mdatp hot-event-sources stream text into structured snapshots."""
+    if not raw_output:
+        return []
+
+    cleaned = _strip_ansi(raw_output)
+    lines = [line.rstrip("\n") for line in cleaned.splitlines()]
+    snapshots: List[Dict[str, Any]] = []
+    i = 0
+
+    while i < len(lines):
+        line = lines[i].strip()
+        match = _SUMMARY_RE.search(line)
+        if not match:
+            i += 1
+            continue
+
+        snapshot: Dict[str, Any] = {
+            "total_events": int(match.group("total")),
+            "processed_events": int(match.group("processed")),
+            "urgent_events": int(match.group("urgent")),
+            "time_seconds": float(match.group("time")),
+            "sources": [],
+        }
+
+        i += 1
+        while i < len(lines) and "Hot Event Sources" not in lines[i]:
+            i += 1
+
+        if i < len(lines):
+            i += 1  # consume the "Top ... Hot Event Sources" separator line
+            if i < len(lines) and lines[i].strip().lower().startswith("count"):
+                i += 1
+
+            while i < len(lines):
+                row = lines[i].strip()
+                if not row:
+                    i += 1
+                    continue
+                if row.startswith("===========") or row.startswith("Total Events:"):
+                    break
+
+                parts = re.split(r"\s{2,}", row)
+                if len(parts) >= 3:
+                    try:
+                        count = int(parts[0])
+                    except ValueError:
+                        i += 1
+                        continue
+
+                    if len(parts) == 3:
+                        signing_id = parts[1]
+                        team_id = ""
+                        path = parts[2]
+                    else:
+                        signing_id = parts[1]
+                        team_id = parts[2]
+                        path = parts[3]
+
+                    snapshot["sources"].append(
+                        {
+                            "count": count,
+                            "signing_id": signing_id,
+                            "team_id": team_id,
+                            "path": path,
+                        }
+                    )
+                i += 1
+
+        snapshots.append(snapshot)
+        i += 1
+
+    return snapshots
+
+
+def top_hot_event_sources(snapshots: List[Dict[str, Any]], top_n: int = 10) -> List[Dict[str, Any]]:
+    """Return top-N hot event sources from the latest parsed snapshot."""
+    if top_n <= 0 or not snapshots:
+        return []
+    latest_sources = snapshots[-1].get("sources", [])
+    sorted_sources = sorted(latest_sources, key=lambda row: row.get("count", 0), reverse=True)
+    return sorted_sources[:top_n]
+
+
 # ── EICAR detection (the proven signal) ──────────────────────────────────
 
 def eicar_detected(target_dir: Path, timeout: int = 30, poll: float = 1.0) -> bool:
@@ -277,12 +445,12 @@ def timed_build(
     so the raised error stays terse.
     """
     print(f"\n$ {' '.join(cmd)}   (in {cwd})", flush=True)
-    start = time.time()
+    start = time.perf_counter()
     with _CpuMonitor() as cpu:
         result = subprocess.run(cmd, cwd=cwd, check=False)
         if result.returncode == 0 and post_build is not None:
             post_build()
-    elapsed = time.time() - start
+    elapsed = time.perf_counter() - start
     cpu_avg = cpu.average
 
     cpu_txt = f"{cpu_avg:.1f}% MDE CPU" if cpu_avg is not None else "CPU n/a"

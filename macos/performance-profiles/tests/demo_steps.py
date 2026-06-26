@@ -15,7 +15,9 @@ mistaken for a real result. Every phase prints exactly what RTP did.
 
 from __future__ import annotations
 
+import json
 import shutil
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional
@@ -103,6 +105,34 @@ def _step(msg: str) -> None:
     print(f"\n--- {msg} ---", flush=True)
 
 
+def _print_hot_event_summary(label: str, report_path: Path) -> None:
+    """Print a concise summary of parsed hot-event telemetry for a phase."""
+    if not report_path.exists():
+        print(f"  [hot-events] {label}: no report generated", flush=True)
+        return
+
+    try:
+        data = json.loads(report_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"  [hot-events] {label}: failed to parse {report_path} ({exc})", flush=True)
+        return
+
+    snapshots = int(data.get("snapshot_count", 0) or 0)
+    top = data.get("top_hot_event_sources", []) or []
+    print(f"  [hot-events] {label}: {report_path}", flush=True)
+    print(f"  [hot-events] snapshots: {snapshots}", flush=True)
+    if not top:
+        print("  [hot-events] top sources: none", flush=True)
+        return
+    print("  [hot-events] top sources (latest snapshot):", flush=True)
+    for row in top[:5]:
+        print(
+            f"    {row.get('count', 0):>6} | {row.get('signing_id', '')} | "
+            f"{row.get('team_id', '')} | {row.get('path', '')}",
+            flush=True,
+        )
+
+
 def _report_state(repo: Path, scenario: Scenario) -> None:
     """Print exactly what MDE has enabled right now — the ground truth each phase
     runs against, so a surprising build number can be traced to real state."""
@@ -133,7 +163,10 @@ def assert_state(repo: Path, scenario: Scenario, *, excluded: bool, profiled: bo
     scenario_dirs = [str(p).rstrip("/") for p in scenario.exclusion_targets(repo)]
     missing = [d for d in scenario_dirs if d not in exclusions]
     present = [d for d in scenario_dirs if d in exclusions]
-    is_profiled = bool(set(applied) & set(scenario.profiles))
+    applied_set = set(applied)
+    scenario_profile_set = set(scenario.profiles)
+    missing_profiles = sorted(scenario_profile_set - applied_set)
+    present_profiles = sorted(scenario_profile_set & applied_set)
 
     if excluded and missing:
         raise AssertionError(
@@ -145,9 +178,15 @@ def assert_state(repo: Path, scenario: Scenario, *, excluded: bool, profiled: bo
             f"expected no scenario dirs excluded but these are: {present} "
             f"(live exclusions={sorted(exclusions)})"
         )
-    if is_profiled != profiled:
+    if profiled and missing_profiles:
         raise AssertionError(
-            f"expected profiles applied={profiled} but got {is_profiled} (applied={applied})"
+            f"expected all scenario profiles applied but missing: {missing_profiles} "
+            f"(live applied={applied})"
+        )
+    if not profiled and present_profiles:
+        raise AssertionError(
+            f"expected no scenario profiles applied but found: {present_profiles} "
+            f"(live applied={applied})"
         )
 
 
@@ -200,6 +239,9 @@ def three_way_demo(repo: Path, scenario: Scenario, report) -> None:
         pre()
     baseline_m = mde.timed_build(scenario.build_cmd, repo, post_build=post)
     baseline = measure(eicar_dir)
+    hot_event_window = max(5.0, float(baseline_m.elapsed))
+    hot_dir = repo / ".mde-telemetry" / scenario.name
+    hot_dir.mkdir(parents=True, exist_ok=True)
 
     # ── Phase 2: AV folder exclusions (the security gap) ────────────────
     _step(f"[{scenario.name}] AV exclusions build")
@@ -211,7 +253,23 @@ def three_way_demo(repo: Path, scenario: Scenario, report) -> None:
         _report_state(repo, scenario)
         if pre:
             pre()
+        excl_hot_report = hot_dir / "phase2_exclusions_hot_events.json"
+        excl_stop = threading.Event()
+        excl_hot_thread = threading.Thread(
+            target=mde.capture_hot_event_sources,
+            kwargs={
+                "duration_seconds": hot_event_window,
+                "output_path": excl_hot_report,
+                "interval_seconds": 0.5,
+                "stop_event": excl_stop,
+            },
+            daemon=True,
+        )
+        excl_hot_thread.start()
         exclusions_m = mde.timed_build(scenario.build_cmd, repo, post_build=post)
+        excl_stop.set()
+        excl_hot_thread.join(timeout=15)
+        _print_hot_event_summary("phase2 exclusions", excl_hot_report)
         exclusions = measure(eicar_dir)
     finally:
         for d in exclusion_dirs:
@@ -226,7 +284,23 @@ def three_way_demo(repo: Path, scenario: Scenario, report) -> None:
         _report_state(repo, scenario)
         if pre:
             pre()
+        prof_hot_report = hot_dir / "phase3_profiles_hot_events.json"
+        prof_stop = threading.Event()
+        prof_hot_thread = threading.Thread(
+            target=mde.capture_hot_event_sources,
+            kwargs={
+                "duration_seconds": hot_event_window,
+                "output_path": prof_hot_report,
+                "interval_seconds": 0.5,
+                "stop_event": prof_stop,
+            },
+            daemon=True,
+        )
+        prof_hot_thread.start()
         profiles_m = mde.timed_build(scenario.build_cmd, repo, post_build=post)
+        prof_stop.set()
+        prof_hot_thread.join(timeout=15)
+        _print_hot_event_summary("phase3 profiles", prof_hot_report)
         profiles = measure(eicar_dir)
     finally:
         mde.remove_profiles(scenario.profiles)

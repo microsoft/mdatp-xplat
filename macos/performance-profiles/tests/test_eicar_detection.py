@@ -23,6 +23,19 @@ import mde
 SCRATCH = Path.home() / "demo" / "eicar-pytest"
 
 
+def _report_state(label: str, paths: list[Path] | None = None) -> None:
+    rtp = mde.rtp_enabled()
+    exclusions = mde.list_exclusion_paths()
+    applied = mde.list_applied_profiles()
+    path_set = {str(p).rstrip("/") for p in (paths or [])}
+    relevant_exclusions = sorted(p for p in exclusions if p.rstrip("/") in path_set)
+    print(f"--- [{label}] state ---", flush=True)
+    print(f"  [state] RTP enabled        : {rtp}", flush=True)
+    print(f"  [state] scenario exclusions: {relevant_exclusions or 'none'}", flush=True)
+    print(f"  [state] all exclusions     : {exclusions or 'none'}", flush=True)
+    print(f"  [state] all profiles       : {applied or 'none'}", flush=True)
+
+
 def _diagnostics(result: mde.EicarResult) -> str:
     threats = subprocess.run(
         ["mdatp", "threat", "list"], capture_output=True, text=True, check=False
@@ -49,6 +62,7 @@ def scratch_dir():
 def test_eicar_detection_and_exclusion_gap(scratch_dir, require_rtp, clean_mde):
     # 1. RTP catches EICAR written to an ordinary (unexcluded) directory.
     watched = scratch_dir / "watched"
+    _report_state("eicar baseline", [watched])
     result = mde.eicar_probe(watched)
     if result.path.exists():
         result.path.unlink()
@@ -59,6 +73,7 @@ def test_eicar_detection_and_exclusion_gap(scratch_dir, require_rtp, clean_mde):
     excluded.mkdir()
     mde.add_exclusion(excluded)
     try:
+        _report_state("eicar exclusion", [excluded])
         assert not mde.eicar_detected(excluded, timeout=15), (
             "AV folder exclusion should create a detection gap"
         )
