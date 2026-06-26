@@ -77,7 +77,18 @@ def _boot_simulator():
     iphones = [d for d in all_devs if "iPhone" in (d.get("name") or "")]
     target = iphones[0] if iphones else (all_devs[0] if all_devs else None)
     if target is None:
-        pytest.skip("no iOS simulator available to boot")
+        pytest.fail(
+            "\n".join(
+                [
+                    "No iOS Simulator runtime/device is available to boot.",
+                    "Install an iOS simulator runtime in Xcode, then re-run:",
+                    "  1) Open Xcode > Settings > Platforms and install an iOS runtime",
+                    "  2) xcrun simctl list devices available",
+                    "  3) sudo -v && python -m pytest -m integration -s -k xcode_simulator",
+                ]
+            ),
+            pytrace=False,
+        )
 
     udid = target["udid"]
     subprocess.run(["xcrun", "simctl", "boot", udid], check=False, timeout=120)
@@ -105,9 +116,29 @@ SCENARIO = Scenario(
 @pytest.fixture(scope="session")
 def ios_app():
     if shutil.which("xcodebuild") is None or shutil.which("xcrun") is None:
-        pytest.skip("Xcode command line tools (xcodebuild/xcrun) not installed")
+        pytest.fail(
+            "\n".join(
+                [
+                    "Xcode command line tools (xcodebuild/xcrun) are required for the xcode_simulator demo.",
+                    "Install them, then re-run:",
+                    "  1) xcode-select --install",
+                    "  2) xcodebuild -version && xcrun --version",
+                    "  3) sudo -v && python -m pytest -m integration -s -k xcode_simulator",
+                ]
+            ),
+            pytrace=False,
+        )
     if not (APP_DIR / "HelloDefender.xcodeproj").exists():
-        pytest.skip(f"local iOS app not found at {APP_DIR}")
+        pytest.fail(
+            "\n".join(
+                [
+                    f"Required local iOS app not found: {APP_DIR}",
+                    "Ensure the repository is complete, then re-run:",
+                    "  sudo -v && python -m pytest -m integration -s -k xcode_simulator",
+                ]
+            ),
+            pytrace=False,
+        )
     return APP_DIR
 
 

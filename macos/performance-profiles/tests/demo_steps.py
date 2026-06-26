@@ -40,6 +40,10 @@ class Scenario:
     # successful build — e.g. install + launch the built app on a simulator, so
     # that workflow's scan-load is part of the same measurement every phase.
     post_build: Optional[Callable[[Path], None]] = None
+    # Optional callback run *outside* the timed build window before each phase's
+    # build, e.g. dependency restore/setup that must happen after cleaning but
+    # should not be counted in the build-time/CPU measurement.
+    pre_build: Optional[Callable[[Path], None]] = None
     # Dirs/files to remove before each timed build. Defaults to the excluded
     # dirs, but can be set explicitly when some excluded dir must NOT be deleted
     # between builds (e.g. node_modules: excluded from scanning, but installed once).
@@ -72,7 +76,12 @@ class Scenario:
 def _clean(repo: Path, scenario: Scenario) -> None:
     """Remove build artifacts so each timed build is a full rebuild."""
     for rel in scenario.clean_targets:
+        # Safety guard: never remove the scenario repository root.
+        if rel in {"", "."}:
+            continue
         target = repo / rel
+        if target.resolve() == repo.resolve():
+            continue
         if target.is_dir():
             shutil.rmtree(target, ignore_errors=True)
         elif target.exists():
@@ -152,6 +161,8 @@ def verify_clean_state(repo: Path, scenario: Scenario) -> None:
     # Defensively clear any leftover exclusions on this scenario's dirs.
     for target in scenario.exclusion_targets(repo):
         mde.remove_exclusion(target)
+    # Defensively clear any scenario profiles so baseline truly has none.
+    mde.remove_profiles(scenario.profiles)
 
     exclusions = mde.list_exclusion_paths()
     profiles = mde.list_applied_profiles()
@@ -162,7 +173,7 @@ def verify_clean_state(repo: Path, scenario: Scenario) -> None:
         raise AssertionError(f"could not clear leftover exclusions: {leftover}")
     if set(profiles) & set(scenario.profiles):
         raise AssertionError(
-            f"demo profiles already applied: {sorted(set(profiles) & set(scenario.profiles))}"
+            f"could not clear leftover demo profiles: {sorted(set(profiles) & set(scenario.profiles))}"
         )
 
 
@@ -170,6 +181,7 @@ def three_way_demo(repo: Path, scenario: Scenario, report) -> None:
     eicar_dir = repo / scenario.eicar_subdir
     exclusion_dirs = scenario.exclusion_targets(repo)
     post = (lambda: scenario.post_build(repo)) if scenario.post_build else None
+    pre = (lambda: scenario.pre_build(repo)) if scenario.pre_build else None
 
     verify_clean_state(repo, scenario)
 
@@ -184,6 +196,8 @@ def three_way_demo(repo: Path, scenario: Scenario, report) -> None:
     _clean(repo, scenario)
     assert_state(repo, scenario, excluded=False, profiled=False)
     _report_state(repo, scenario)
+    if pre:
+        pre()
     baseline_m = mde.timed_build(scenario.build_cmd, repo, post_build=post)
     baseline = measure(eicar_dir)
 
@@ -195,6 +209,8 @@ def three_way_demo(repo: Path, scenario: Scenario, report) -> None:
         _clean(repo, scenario)
         assert_state(repo, scenario, excluded=True, profiled=False)
         _report_state(repo, scenario)
+        if pre:
+            pre()
         exclusions_m = mde.timed_build(scenario.build_cmd, repo, post_build=post)
         exclusions = measure(eicar_dir)
     finally:
@@ -208,6 +224,8 @@ def three_way_demo(repo: Path, scenario: Scenario, report) -> None:
         _clean(repo, scenario)
         assert_state(repo, scenario, excluded=False, profiled=True)
         _report_state(repo, scenario)
+        if pre:
+            pre()
         profiles_m = mde.timed_build(scenario.build_cmd, repo, post_build=post)
         profiles = measure(eicar_dir)
     finally:

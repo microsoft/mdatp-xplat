@@ -66,8 +66,8 @@ def clean_mde(require_sudo):
     """Reset MDE to its pre-test state — for both setup and teardown.
 
     Snapshots the applied profiles and folder exclusions before the test, then
-    removes anything the test added afterwards. This guarantees each scenario
-    starts clean and leaves the endpoint exactly as it found it, even on failure.
+    restores that exact state afterwards. This guarantees each scenario starts
+    clean and leaves the endpoint exactly as it found it, even on failure.
     """
     from pathlib import Path
 
@@ -75,10 +75,20 @@ def clean_mde(require_sudo):
     exclusions_before = set(mde.list_exclusion_paths())
 
     def restore():
-        for name in sorted(set(mde.list_applied_profiles()) - profiles_before):
+        current_profiles = set(mde.list_applied_profiles())
+        current_exclusions = set(mde.list_exclusion_paths())
+
+        # Remove anything that should not be present.
+        for name in sorted(current_profiles - profiles_before):
             mde.remove_profiles([name])
-        for path in sorted(set(mde.list_exclusion_paths()) - exclusions_before):
+        for path in sorted(current_exclusions - exclusions_before):
             mde.remove_exclusion(Path(path))
+
+        # Restore anything that was present before the test.
+        for name in sorted(profiles_before - current_profiles):
+            mde.apply_profiles([name])
+        for path in sorted(exclusions_before - current_exclusions):
+            mde.add_exclusion(Path(path))
 
     restore()   # setup: clear any leftovers from an interrupted previous run
     yield

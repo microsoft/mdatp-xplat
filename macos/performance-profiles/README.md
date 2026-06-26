@@ -42,11 +42,17 @@ At the end, each run prints a 3-way table (build time, MDE scan CPU, EICAR resul
 | Scenario (`-k`) | Project | Build | Excluded in AV phase | Profiles applied |
 |---|---|---|---|---|
 | `vscode` | clones [microsoft/vscode](https://github.com/microsoft/vscode) (tag 1.122.1) | `npm run compile` | `node_modules/`, `out/`, `.build/` | `node`, `git`, `vscode`, `vscode-tree` |
-| `xcode and not simulator` | clones [microsoft/fluentui-apple](https://github.com/microsoft/fluentui-apple) | `swift build -c release` | `.build/`, `DerivedData/` | `xcode`, `xcode-ide-tree`, `git` |
+| `xcode and not simulator` | clones [microsoft/fluentui-apple](https://github.com/microsoft/fluentui-apple) | `swift build -c release` | `.build/`, `DerivedData/` | `xcode`, `codesign`, `git` |
 | `xcode_simulator` | in-repo `apps/hello-defender-ios` | `xcodebuild` → install + launch on iOS Simulator | `DerivedData/`, `~/Library/Developer/CoreSimulator` | `xcode`, `ios-simulator-tree`, `iphone-simulator-tree`, `git` |
-| `android` | in-repo `apps/hello-defender-android` | `./gradlew assembleDebug` → install + launch on emulator | `.gradle/`, `app/build/`, `~/.android/avd` | `android-studio`, `android-studio-tree`, `openjdk-javac`, `git` |
+| `dotnet` | clones [dotnet/samples](https://github.com/dotnet/samples) and builds example projects under `core/` | repo-scale timed build loop: `dotnet build -c Release -t:Rebuild --disable-build-servers -p:UseSharedCompilation=false` over `core/**/*.csproj` (with git status check in-window) | `core/` | `dotnet-build`, `git` |
+| `flutter` | in-repo `apps/hello-defender-flutter` | `flutter build macos --release` | `.dart_tool/`, `build/`, `~/.pub-cache` | `flutter-dart`, `git` |
+| `golang` | clones [golang/example](https://github.com/golang/example) | repo-scale timed build loop: `go build` over `go list ./...` (with git status check in-window, progress logs, per-package timeout, and minimum-success gate) | repo root (`.`), `~/Library/Caches/go-build`, `~/go/pkg` | `google-golang`, `git` |
 
-The two in-repo scenarios (`xcode_simulator`, `android`) install and launch the freshly built app **inside the timed window**, so the full build→install→launch scan-load is measured. The `vscode` and `xcode` scenarios clone large first-party repos into `~/demo/` (reused if already present).
+Only `xcode_simulator` installs and launches the freshly built app **inside the timed window**, so that scenario measures full build→install→launch scan-load. The `vscode`, `xcode`, `dotnet`, and `golang` scenarios clone first-party repos into `~/demo/` (reused if already present). The `flutter` scenario builds an in-repo sample app.
+
+For `dotnet`, each measured phase runs a repo-scale build loop that compiles many projects from `dotnet/samples` under `core/`. This gives a materially longer timed window than a single-project demo and includes git activity in-window so `git` profile effects are represented in the same measurement.
+
+For `golang`, each measured phase runs a repo-scale build loop that compiles many packages from `golang/example`. It logs periodic progress, applies a per-package timeout, and enforces a minimum success count so timing remains meaningful even if a few packages fail in some environments.
 
 ## Prerequisites
 
@@ -55,10 +61,20 @@ The two in-repo scenarios (`xcode_simulator`, `android`) install and launch the 
 - **`sudo`** — applying/removing profiles and exclusions requires elevated `mdatp`
 - **Python 3.9+**
 - Build tools for the scenario(s) you run:
-  - **`vscode`** — Node.js 22.x, `npm`, `git`, Xcode Command Line Tools (for `node-gyp`)
-  - **`xcode`** — `swift`, `git`
-  - **`xcode_simulator`** — Xcode with command line tools, `xcrun`/`simctl`, and at least one iOS Simulator runtime
-  - **`android`** — Android SDK (`adb` + `emulator`) with at least one AVD, and a JDK (Android Studio's bundled JBR is used as a fallback)
+   - **`vscode`** — Node.js 22.x, `npm`, `git`, Xcode Command Line Tools (for `node-gyp`)
+   - **`xcode`** — `swift`, `git`
+   - **`xcode_simulator`** — Xcode with command line tools, `xcrun`/`simctl`, and at least one iOS Simulator runtime
+   - **`dotnet`** — .NET SDK (`dotnet` CLI), `git`
+   - **`flutter`** — Flutter SDK (`flutter` CLI) with macOS desktop toolchain enabled
+   - **`golang`** — Go toolchain (`go`), `git`
+
+For the `dotnet` scenario, the test targets a public, repo-scale `dotnet/samples` workload so results are more realistic and less dependent on private feeds or repo-specific build quirks.
+
+You can check your local SDKs with:
+
+```bash
+dotnet --list-sdks
+```
 
 ## Running the demo
 
@@ -73,12 +89,16 @@ sudo -v && python -m pytest -m integration -s
 
 # run a single scenario
 sudo -v && python -m pytest -m integration -s -k xcode_simulator
-sudo -v && python -m pytest -m integration -s -k android
 sudo -v && python -m pytest -m integration -s -k vscode
 sudo -v && python -m pytest -m integration -s -k "xcode and not simulator"
+sudo -v && python -m pytest -m integration -s -k dotnet
+sudo -v && python -m pytest -m integration -s -k flutter
+sudo -v && python -m pytest -m integration -s -k golang
 ```
 
 The scenarios are marked `integration` because they drive real `mdatp` commands and run real builds; the default `pytest` invocation skips them. The suite verifies the endpoint is in a known-clean state before each run (RTP on, no leftover demo exclusions or profiles) and restores it afterward, so a stray leftover can never be mistaken for a result.
+
+If a scenario prerequisite is missing (for example, `go`, `dotnet`, `flutter`, Xcode CLIs, `npm`, or `git`), the scenario intentionally **fails during setup** with install/check/rerun instructions. This is deliberate: prerequisites are required for meaningful benchmark output, so a skip could hide environment drift.
 
 ## What each phase proves
 
@@ -141,7 +161,9 @@ The demo applies profiles relevant to the build being exercised. Here are some o
 |---|---|
 | `xcode` | Xcode.app, DerivedData, build intermediates, simulator runtimes |
 | `xcode-ide-tree` | Xcode IDE workspace caches and index files |
+| `codesign` | Apple code-signing toolchain activity during build/sign steps |
 | `dotnet-build` | `bin/`, `obj/`, NuGet caches, MSBuild temp files |
+| `flutter-dart` | Flutter and Dart toolchain writes (including pub/build artifacts) |
 | `node` | `node_modules/`, npm caches, V8 compilation cache |
 | `git` | `.git/` objects, pack files, index operations |
 | `make-tree` | Make build output trees |

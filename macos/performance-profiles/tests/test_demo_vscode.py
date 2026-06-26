@@ -64,16 +64,35 @@ def _ensure_required_node() -> None:
     if bindir and (bindir / "node").exists():
         os.environ["PATH"] = f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}"
     if _node_major() != REQUIRED_NODE_MAJOR:
-        pytest.skip(
-            f"vscode {REPO_TAG} requires Node {REQUIRED_NODE_MAJOR}.x — "
-            f"install it (e.g. `brew install node@{REQUIRED_NODE_MAJOR}`)"
+        pytest.fail(
+            "\n".join(
+                [
+                    f"VS Code scenario requires Node {REQUIRED_NODE_MAJOR}.x.",
+                    "Install Node, then re-run:",
+                    f"  1) brew install node@{REQUIRED_NODE_MAJOR}",
+                    "  2) node -v",
+                    "  3) sudo -v && python -m pytest -m integration -s -k vscode",
+                ]
+            ),
+            pytrace=False,
         )
 
 
 @pytest.fixture(scope="session")
 def vscode_repo():
     if shutil.which("npm") is None:
-        pytest.skip("npm not installed")
+        pytest.fail(
+            "\n".join(
+                [
+                    "npm is required for the vscode performance-profile demo.",
+                    "Install Node.js (includes npm), then re-run:",
+                    "  1) brew install node@22",
+                    "  2) npm -v",
+                    "  3) sudo -v && python -m pytest -m integration -s -k vscode",
+                ]
+            ),
+            pytrace=False,
+        )
     _ensure_required_node()
     if not (REPO_DIR / "package.json").exists():
         REPO_DIR.parent.mkdir(parents=True, exist_ok=True)

@@ -24,7 +24,7 @@ SCENARIO = Scenario(
     name="xcode",
     build_cmd=["swift", "build", "-c", "release"],
     eicar_subdir=".build",
-    profiles=["xcode", "xcode-ide-tree", "git"],
+    profiles=["xcode", "codesign", "git"],
     exclusion_subdirs=[".build", "DerivedData"],
 )
 
@@ -32,7 +32,18 @@ SCENARIO = Scenario(
 @pytest.fixture(scope="session")
 def xcode_repo():
     if shutil.which("swift") is None:
-        pytest.skip("swift not installed")
+        pytest.fail(
+            "\n".join(
+                [
+                    "Swift/Xcode command line tools are required for the xcode performance-profile demo.",
+                    "Install Xcode Command Line Tools, then re-run:",
+                    "  1) xcode-select --install",
+                    "  2) swift --version",
+                    "  3) sudo -v && python -m pytest -m integration -s -k \"xcode and not simulator\"",
+                ]
+            ),
+            pytrace=False,
+        )
     if not (REPO_DIR / "Package.swift").exists():
         REPO_DIR.parent.mkdir(parents=True, exist_ok=True)
         if REPO_DIR.exists():
