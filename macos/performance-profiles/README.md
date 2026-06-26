@@ -13,7 +13,7 @@ mdatp performance-profiles apply xcode
 mdatp performance-profiles apply xcode dotnet-build node
 
 # See what's currently active
-mdatp performance-profiles list-active
+mdatp performance-profiles list-applied
 
 # Remove a profile
 mdatp performance-profiles remove xcode
