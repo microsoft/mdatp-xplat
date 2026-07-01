@@ -130,6 +130,15 @@ function main() {
     fs.rmSync(OUT_DIR, { recursive: true, force: true });
     fs.mkdirSync(OUT_DIR, { recursive: true });
 
+    // Tell Spotlight not to index the generated tree. Without this, mdworker_shared
+    // and mds_stores index the thousands of output files and MDE scans those
+    // Spotlight-initiated accesses. That scan load is NOT muted by developer
+    // performance profiles (node/vscode), so it masks the profile benefit and makes
+    // Phase 3 look identical to the baseline. The marker keeps the demo measuring the
+    // build's own process tree, which the profiles actually mute.
+    fs.writeFileSync(path.join(OUT_DIR, '.metadata_never_index'), '');
+    fs.writeFileSync(path.join(PROJECT_DIR, '.metadata_never_index'), '');
+
     for (let i = 0; i < moduleCount; i++) {
         fs.writeFileSync(path.join(OUT_DIR, `${moduleName(i)}.ts`), renderModule(i));
     }
@@ -137,6 +146,7 @@ function main() {
 
     console.log(`Generated ${moduleCount} TypeScript modules in ${path.relative(PROJECT_DIR, OUT_DIR)}/`);
     console.log('These will be compiled by `npm run compile` along with src/extension.ts.');
+    console.log('Spotlight indexing suppressed via .metadata_never_index markers.');
 }
 
 main();

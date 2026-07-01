@@ -340,6 +340,14 @@ check_prerequisites() {
         npm install
     fi
 
+    # Suppress Spotlight indexing of the demo tree. If Spotlight (mdworker_shared /
+    # mds_stores) indexes the generated output files, MDE scans those accesses and
+    # that load is not muted by developer performance profiles — making Phase 3 look
+    # like the baseline. These markers keep the measurement focused on the build's
+    # own process tree, which the profiles actually mute. No sudo required.
+    touch "$PROJECT_DIR/.metadata_never_index"
+    [ -d "$PROJECT_DIR/src/generated" ] && touch "$PROJECT_DIR/src/generated/.metadata_never_index"
+
     # Generate the compile workload if missing. A single hand-written source file
     # compiles in well under a second, which is too small for MDE scan overhead to
     # be measurable. The generated modules make each build take ~20-40s and produce

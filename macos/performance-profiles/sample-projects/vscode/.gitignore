@@ -8,3 +8,4 @@ DerivedData/
 .vscode-test/
 run-logs/
 src/generated/
+.metadata_never_index

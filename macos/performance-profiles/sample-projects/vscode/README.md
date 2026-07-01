@@ -113,6 +113,11 @@ code mde-demo.code-workspace
   per-phase delta. Wall-clock time is kept only as a secondary signal.
 - **Tamper Protection** in block mode can make scan statistics return null — use
   troubleshooting mode if scan counts come back as 0. The demo warns when TP is in block mode.
+- **Spotlight suppression:** the demo drops `.metadata_never_index` markers in the project
+  root and `src/generated/` so Spotlight (`mdworker_shared`/`mds_stores`) doesn't index the
+  thousands of generated files. Otherwise that indexing dominates MDE scan load and — because
+  it isn't muted by developer profiles — masks the Phase 3 profile benefit. No profile mutes
+  Spotlight (by design: it would blind protection like an exclusion does).
 - With the default workload, each build takes ~20-40s; the first (warm-up) build is discarded.
 - This is a realistic developer scenario: Node/TypeScript build with a language server active.
 
