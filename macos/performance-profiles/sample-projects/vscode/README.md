@@ -17,20 +17,25 @@ Or run directly:
 
 ## What to Observe
 
-The demo reports two numbers per phase:
+The demo reports these per-phase metrics automatically (no manual Activity Monitor needed):
 
-- **MDE files scanned during builds** — the *accurate* signal. This is the delta of
-  `Total files scanned` from `mdatp diagnostic real-time-protection-statistics`
-  across the build loop. Baseline scans the most; exclusions and profiles scan far fewer.
+- **MDE files scanned during builds** — the *accurate* scan-overhead signal. Delta of
+  `Total files scanned` from `mdatp diagnostic real-time-protection-statistics`.
+  Baseline scans the most; exclusions and profiles scan far fewer.
+- **MDE CPU** — average %CPU consumed by `wdavdaemon_unprivileged` (the AV scanner
+  users complain about) and by all Defender daemons combined, over the build window.
+  Computed from the delta of cumulative CPU time / wall time.
+- **MDE memory** — peak RSS (MB) of `wdavdaemon_unprivileged`, sampled once per second
+  during the builds.
 - **Wall-clock build time** (median / avg / min / max) — a *secondary*, noisier signal.
   A warm-up build is always discarded first to avoid cold-cache skew.
 
 Also watch:
 
-- **MDE CPU usage** (open Activity Monitor → search `wdavdaemon_unprivileged` to watch CPU %)
 - **EICAR detection** (shown at end of each phase):
   - ✅ Detected = Real-time protection is active
   - ❌ NOT Detected = Protection gap (only happens with exclusions)
+- Optionally, **Activity Monitor** → search `wdavdaemon_unprivileged` to watch CPU % live.
 
 ## The Story
 

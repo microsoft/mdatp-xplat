@@ -67,6 +67,45 @@ median() {
     printf '%s\n' "$@" | sort -n | awk '{a[NR]=$1} END{ if(NR==0){print 0; exit} m=int((NR+1)/2); if(NR%2){print a[m]} else {printf "%.2f\n",(a[m]+a[m+1])/2} }'
 }
 
+# Total cumulative CPU seconds consumed by MDE daemons. Pass a process-name
+# filter: "wdavdaemon" for all three daemons, or "wdavdaemon_unpri" for just the
+# unprivileged antivirus scanner (the one users watch spike in Activity Monitor).
+# Matches on ucomm (truncated command name) because the executable path contains
+# a space ("Microsoft Defender.app") that would break path-based parsing.
+mde_cpu_seconds() {
+    local filter=${1:-wdavdaemon}
+    ps -Ao time=,ucomm= 2>/dev/null | awk -v f="$filter" '
+        index($2, f) {
+            t=$1; days=0
+            if (t ~ /-/) { split(t, dd, "-"); days=dd[1]; t=dd[2] }
+            n=split(t, a, ":")
+            if (n==3) sec=a[1]*3600 + a[2]*60 + a[3]
+            else if (n==2) sec=a[1]*60 + a[2]
+            else sec=a[1]
+            total += sec + days*86400
+        } END { printf "%.2f", total+0 }'
+}
+
+# Start a background sampler that records the peak RSS (MB) of the unprivileged
+# antivirus daemon into $1, sampling once per second. Prints the sampler PID so
+# the caller can stop it with a targeted kill.
+start_mem_sampler() {
+    local out=$1
+    echo "0" > "$out"
+    (
+        peak=0
+        while :; do
+            r=$(ps -Ao rss=,ucomm= 2>/dev/null | awk '/wdavdaemon_unpri/{print $1; exit}')
+            if [ -n "$r" ] && [ "$r" -gt "$peak" ] 2>/dev/null; then
+                peak=$r
+                awk -v k="$peak" 'BEGIN{printf "%.1f", k/1024}' > "$out"
+            fi
+            sleep 1
+        done
+    ) >/dev/null 2>&1 &
+    echo $!
+}
+
 cleanup_build() {
     rm -rf "$PROJECT_DIR/out"
 }
@@ -149,6 +188,15 @@ run_builds() {
     local scans_before=$(scan_total_files)
     local scan_ns_before=$(scan_total_time_ns)
 
+    # Snapshot MDE CPU time and start sampling peak memory. These capture the
+    # resource cost users actually complain about (wdavdaemon_unprivileged CPU
+    # spikes and memory growth) over the exact same window as the builds.
+    local cpu_all_before=$(mde_cpu_seconds wdavdaemon)
+    local cpu_unpr_before=$(mde_cpu_seconds wdavdaemon_unpri)
+    local wall_start=$(date +%s.%N)
+    local mem_file=$(mktemp)
+    local mem_sampler_pid=$(start_mem_sampler "$mem_file")
+
     local build_times=()
 
     for i in $(seq 1 $num_builds); do
@@ -175,6 +223,20 @@ run_builds() {
     local scans_delta=$(( scans_after - scans_before ))
     local scan_ms_delta=$(echo "scale=1; ($scan_ns_after - $scan_ns_before) / 1000000" | bc 2>/dev/null)
 
+    # Snapshot MDE CPU time after the loop and stop the memory sampler.
+    local cpu_all_after=$(mde_cpu_seconds wdavdaemon)
+    local cpu_unpr_after=$(mde_cpu_seconds wdavdaemon_unpri)
+    local wall_end=$(date +%s.%N)
+    kill "$mem_sampler_pid" 2>/dev/null || true
+    local peak_mem_mb=$(cat "$mem_file" 2>/dev/null)
+    rm -f "$mem_file" 2>/dev/null || true
+
+    # Average %CPU over the window = CPU-seconds consumed / wall-seconds * 100.
+    # This is the honest "how hard did MDE work during the builds" number.
+    local window=$(echo "$wall_end - $wall_start" | bc 2>/dev/null)
+    local cpu_all_pct=$(echo "scale=1; ($cpu_all_after - $cpu_all_before) / $window * 100" | bc 2>/dev/null)
+    local cpu_unpr_pct=$(echo "scale=1; ($cpu_unpr_after - $cpu_unpr_before) / $window * 100" | bc 2>/dev/null)
+
     # Capture after builds
     capture_performance_snapshot "$snapshot_after" "$phase (After)"
 
@@ -193,7 +255,9 @@ run_builds() {
         print_info "Build Performance ($phase):"
         print_info "  Wall clock  -> median: ${med}s | avg: ${avg}s | min: ${min}s | max: ${max}s"
         print_info "  MDE scans   -> files scanned during builds: ${scans_delta} | scan time: ${scan_ms_delta}ms"
-        print_info "  (MDE scan counts are the accurate signal; wall clock is secondary and noisier.)"
+        print_info "  MDE CPU     -> unprivileged AV: ${cpu_unpr_pct}% avg | all daemons: ${cpu_all_pct}% avg (over ${window}s window)"
+        print_info "  MDE memory  -> unprivileged AV peak RSS: ${peak_mem_mb} MB"
+        print_info "  (MDE scan counts + CPU are the accurate signals; wall clock is secondary and noisier.)"
         echo ""
 
         # Save timing metrics to snapshot file
@@ -208,6 +272,10 @@ run_builds() {
             echo "All build times: ${build_times[*]}"
             echo "MDE files scanned during builds: ${scans_delta}"
             echo "MDE scan time during builds (ms): ${scan_ms_delta}"
+            echo "MDE unprivileged AV avg CPU (%): ${cpu_unpr_pct}"
+            echo "MDE all daemons avg CPU (%): ${cpu_all_pct}"
+            echo "MDE unprivileged AV peak RSS (MB): ${peak_mem_mb}"
+            echo "Measurement window (s): ${window}"
         } >> "$snapshot_after"
     fi
     
