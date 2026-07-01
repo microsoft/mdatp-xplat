@@ -20,3 +20,6 @@ apps/**/*.xcuserstate
 # IDE/system files
 apps/**/.idea/
 apps/**/.DS_Store
+
+# Hot event source captures
+hot_event_source_*.json
