@@ -164,6 +164,76 @@ capture_performance_snapshot() {
     } > "$snapshot_file"
 }
 
+# Classify the node install that will run the build. Performance profiles match
+# processes by their on-disk install location, and package managers can install the
+# same runtime under differently-named directories (e.g. a canonical "node" install
+# vs. a version-pinned formula). A version-pinned install may sit outside the layout
+# a profile targets, so we prefer the canonical install. This only inspects the local
+# path layout — it does not describe any profile's internal definition.
+node_install_kind() {
+    local real="$1"
+    case "$real" in
+        */node@*/*)
+            echo "version-pinned install (may fall outside the profile's target layout; prefer the canonical node install)"; return 1;;
+        */Cellar/node/*|*/opt/node/*)
+            echo "canonical install (recommended for profile coverage)"; return 0;;
+    esac
+    echo "non-standard install location (verify your profile covers this path)"
+    return 1
+}
+
+# Capture machine-specific facts needed to interpret a report that was produced on
+# a DIFFERENT machine. The per-phase snapshots show what MDE scanned, but not WHY a
+# phase behaved the way it did (which node ran the build, its install layout,
+# engine/version, tamper state, installed formulas). Without this, diagnosing a
+# lab-machine report is guesswork.
+capture_environment_diagnostics() {
+    local out="$RUN_DIR/diagnostics.txt"
+    local node_bin node_real npm_bin
+    node_bin=$(command -v node 2>/dev/null)
+    node_real=$(readlink -f "$node_bin" 2>/dev/null || echo "$node_bin")
+    npm_bin=$(command -v npm 2>/dev/null)
+    {
+        echo "=== Environment Diagnostics ==="
+        echo "Captured: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo ""
+
+        echo "Host:"
+        echo "  Hostname: $(hostname 2>/dev/null)"
+        echo "  macOS: $(sw_vers -productVersion 2>/dev/null) (build $(sw_vers -buildVersion 2>/dev/null))"
+        echo "  Arch: $(uname -m 2>/dev/null)"
+        echo "  Model/CPU: $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
+        echo ""
+
+        echo "MDE:"
+        echo "  Version: $(mdatp version 2>/dev/null | tr -d '\n')"
+        echo "  Engine: $(mdatp health --field engine_version 2>/dev/null | tr -d '\"')"
+        echo "  App version: $(mdatp health --field app_version 2>/dev/null | tr -d '\"')"
+        echo "  Real-time protection: $(mdatp health --field real_time_protection_enabled 2>/dev/null | tr -d '\"')"
+        echo "  Tamper protection: $(mdatp health --field tamper_protection 2>/dev/null | tr -d '\"')"
+        echo ""
+
+        echo "Node (this is what runs the build; the profile must cover its install location):"
+        echo "  node on PATH: ${node_bin:-not found}"
+        echo "  node real path: ${node_real:-n/a}"
+        echo "  node version: $(node --version 2>/dev/null)"
+        echo "  npm: ${npm_bin:-not found} ($(npm --version 2>/dev/null))"
+        if [ -n "$node_real" ]; then
+            echo "  node install: $(node_install_kind "$node_real")"
+        fi
+        echo "  Installed Homebrew node formulas:"
+        brew list --versions 2>/dev/null | grep -iE '^node( |@)' | sed 's/^/    /' || echo "    (brew not available)"
+        echo ""
+
+        echo "Performance profiles:"
+        echo "  Applied:"
+        mdatp performance-profiles list-applied 2>/dev/null | sed 's/^/    /' || echo "    (unable to capture)"
+        echo "  'node' available: $(mdatp performance-profiles list-available 2>/dev/null | grep -qx node && echo yes || echo no)"
+        echo ""
+    } > "$out"
+    print_success "Environment diagnostics captured: $out"
+}
+
 run_builds() {
     local phase=$1
     local num_builds=${2:-3}
@@ -314,6 +384,37 @@ test_eicar() {
     fi
 }
 
+# Resolve a canonical (unversioned) Homebrew node install and echo its bin dir.
+#
+# WHY THIS MATTERS: performance profiles match a process by its on-disk install
+# location. Homebrew's *version-pinned* formulas (node@22, node@24) install under a
+# differently-named directory than the canonical "node" formula, so a profile that
+# targets the canonical node install may not cover a version-pinned one. If `node` on
+# PATH resolves to a version-pinned build, the node profile can end up a no-op and
+# Phase 3 (profiles) looks IDENTICAL to the baseline. Pin the build to the canonical
+# node install so the demo actually exercises the profile it is demonstrating.
+resolve_profiled_node_bin() {
+    local candidates=(
+        /opt/homebrew/opt/node/bin/node
+        /usr/local/opt/node/bin/node
+    )
+    local c real
+    for c in "${candidates[@]}"; do
+        [ -x "$c" ] || continue
+        real=$(readlink -f "$c" 2>/dev/null || echo "$c")
+        case "$real" in
+            */node@*/*) continue;;                       # skip version-pinned formulas
+            */Cellar/node/*|*/opt/node/*) dirname "$c"; return 0;;
+        esac
+    done
+    # Fall back to scanning for a canonical (unversioned) "node" formula.
+    local d
+    for d in /opt/homebrew/Cellar/node/*/bin /usr/local/Cellar/node/*/bin; do
+        [ -x "$d/node" ] && { echo "$d"; return 0; }
+    done
+    return 1
+}
+
 # Check prerequisites
 check_prerequisites() {
     print_phase "Checking prerequisites"
@@ -338,6 +439,20 @@ check_prerequisites() {
     if [ ! -d "$PROJECT_DIR/node_modules" ]; then
         print_info "Installing npm dependencies..."
         npm install
+    fi
+
+    # Pin the build to a canonical node install the profile can cover (see
+    # resolve_profiled_node_bin). Without this, a version-pinned node on PATH can make
+    # the profile a no-op and Phase 3 looks identical to the baseline.
+    local node_bin_dir
+    if node_bin_dir=$(resolve_profiled_node_bin); then
+        export PATH="$node_bin_dir:$PATH"
+        print_success "Using canonical node install: $node_bin_dir/node"
+    else
+        print_info "No canonical node install found on this machine."
+        print_info "  Performance profiles match node by its install location. A version-pinned"
+        print_info "  formula (node@22 / node@24) may sit outside the profile's target layout, so"
+        print_info "  Phase 3 could look identical to the baseline. Fix with: brew install node"
     fi
 
     # Generate the compile workload fresh on every run. A single hand-written source
@@ -373,6 +488,11 @@ check_prerequisites() {
     fi
     
     print_success "All prerequisites met"
+
+    # Capture machine-specific facts so a report produced on a lab machine is
+    # self-explaining (which node ran the build, its install layout, engine/tamper
+    # state, installed formulas).
+    capture_environment_diagnostics
 }
 
 # Phase 1: Baseline

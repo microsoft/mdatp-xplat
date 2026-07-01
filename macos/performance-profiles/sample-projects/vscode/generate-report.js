@@ -383,6 +383,22 @@ ${fs.readdirSync(runDir)
     .map(f => `- \`${f}\``)
     .join('\n')}
 
+### Environment Diagnostics
+
+Machine-specific facts captured at run time (useful when this report was produced on
+a different machine — e.g. to confirm which node ran the build and whether the \`node\`
+performance profile could actually match it):
+
+\`\`\`
+${(() => {
+    try {
+        return stripAnsiCodes(fs.readFileSync(path.join(runDir, 'diagnostics.txt'), 'utf-8')).trim();
+    } catch (e) {
+        return '(diagnostics.txt not found — re-run with the latest run-demo.sh)';
+    }
+})()}
+\`\`\`
+
 ---
 
 ## Conclusion

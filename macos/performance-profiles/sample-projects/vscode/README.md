@@ -121,6 +121,14 @@ code mde-demo.code-workspace
   Spotlight by design: it would blind protection like an exclusion does. A
   `.metadata_never_index` marker was tried first but is only honored at a volume root, not
   in nested folders — the `.noindex` folder name is the reliable no-sudo equivalent.)
+- **Canonical node install (important):** performance profiles match a process by its
+  on-disk install location. Homebrew's **version-pinned** formulas (`node@22`, `node@24`)
+  install under a differently-named directory than the canonical `node` formula, so a
+  profile that targets the canonical node install may not cover a version-pinned one. If
+  your `node` on PATH is a version-pinned build, the node profile can end up a silent
+  no-op and Phase 3 looks identical to the baseline. The demo detects this and pins the
+  build to the canonical node install (`/opt/homebrew/opt/node/bin/node`) when available;
+  if none is found it prints how to fix it (`brew install node`).
 - With the default workload, each build takes ~20-40s; the first (warm-up) build is discarded.
 - This is a realistic developer scenario: Node/TypeScript build with a language server active.
 
