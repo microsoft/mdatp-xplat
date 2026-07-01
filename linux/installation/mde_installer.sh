@@ -1507,7 +1507,25 @@ install_on_azurelinux()
         ### Configure the repository ###
         log_info "[>] configuring the repository"
 
-        if [ "$CHANNEL" = "prod" ]; then
+        if [ "$VERSION" = "4.0" ]; then
+            # Azure Linux 4.0 packages are currently published only to the
+            # insiders-slow beta repository on packages.microsoft.com. The repo
+            # is configured manually here (gpgkey is auto-imported by dnf on
+            # first use, consistent with how the azurelinux-repos-* packages
+            # provide trusted keys on Azure Linux 3).
+
+            if [ "$CHANNEL" != "insiders-slow" ]; then
+                script_exit "Invalid channel: $CHANNEL. Available channel for $DISTRO_FAMILY $VERSION is insiders-slow only." $ERR_INVALID_CHANNEL
+            fi
+
+            # Repo name/baseurl are architecture specific (x86_64 or aarch64).
+            local al4_repo_name="azurelinux-4.0-beta-microsoft-${ARCHITECTURE}"
+            local al4_repo_file="/etc/yum.repos.d/${al4_repo_name}.repo"
+            local al4_base_url="https://packages.microsoft.com/yumrepos/${al4_repo_name}/"
+            local ms_gpg_key="https://packages.microsoft.com/keys/microsoft.asc"
+
+            run_quietly "printf '[%s]\nname=Azure Linux 4.0 Beta Microsoft (insiders-slow)\nbaseurl=%s\nenabled=1\ngpgcheck=1\ngpgkey=%s\n' '$al4_repo_name' '$al4_base_url' '$ms_gpg_key' > '$al4_repo_file'" "unable to configure the Azure Linux 4.0 beta repository" $ERR_FAILED_REPO_SETUP
+        elif [ "$CHANNEL" = "prod" ]; then
             run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss" "unable to install azurelinux-repos-ms-non-oss"
             run_quietly "$PKG_MGR_INVOKER config-manager --enable azurelinux-official-ms-non-oss" "unable to enable ms-non-oss repo"
             # Disable preview repo only if it exists
@@ -1781,6 +1799,20 @@ remove_repo()
     elif [ "$DISTRO_FAMILY" = "mariner" ]; then # in case of mariner, do not remove the repo
         log_info "[i] nothing to clean up"
         return
+    elif [ "$DISTRO_FAMILY" = "azurelinux" ]; then
+        # Azure Linux 3 uses the azurelinux-repos-* packages and the repo is
+        # left in place; only the manually configured Azure Linux 4.0 beta repo
+        # file is removed here.
+        local al4_repo_file="/etc/yum.repos.d/azurelinux-4.0-beta-microsoft-${ARCHITECTURE}.repo"
+        if [ -f "$al4_repo_file" ]; then
+            run_quietly "rm -f '$al4_repo_file'" "unable to remove the Azure Linux 4.0 beta repository" $ERR_FAILED_REPO_CLEANUP
+            log_info "[v] Repo removed for $CHANNEL"
+        else
+            # Azure Linux 3 has no manually configured beta repo; this is a no-op,
+            # so do not claim a removal (matches the mariner no-op path).
+            log_info "[i] nothing to clean up"
+        fi
+        return
     else
         script_exit "unsupported distro for remove repo $DISTRO" $ERR_UNSUPPORTED_DISTRO
     fi
@@ -1881,7 +1913,7 @@ scale_version_id()
             else
                 SCALED_VERSION=9.0
             fi
-        elif [[ "$VERSION" == 10* ]] && [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" ]]; then
+        elif [[ "$VERSION" == 10* ]] && [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" || "$DISTRO" == "ol" ]]; then
             SCALED_VERSION=10
         elif [[ $DISTRO == "amzn" ]] &&  [[ $VERSION == "2" || $VERSION == "2023" ]]; then # For Amazon Linux the scaled version is 2023 or 2
             SCALED_VERSION=$VERSION
@@ -1897,6 +1929,8 @@ scale_version_id()
     elif [ "$DISTRO_FAMILY" = "azurelinux" ]; then
         if [[ $VERSION == 3* ]]; then
             SCALED_VERSION=3
+        elif [[ $VERSION == 4* ]]; then
+            SCALED_VERSION=4
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
