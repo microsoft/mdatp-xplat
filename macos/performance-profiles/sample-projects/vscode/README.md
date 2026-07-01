@@ -17,7 +17,16 @@ Or run directly:
 
 ## What to Observe
 
-- **Build time** for each phase (shown in terminal output)
+The demo reports two numbers per phase:
+
+- **MDE files scanned during builds** — the *accurate* signal. This is the delta of
+  `Total files scanned` from `mdatp diagnostic real-time-protection-statistics`
+  across the build loop. Baseline scans the most; exclusions and profiles scan far fewer.
+- **Wall-clock build time** (median / avg / min / max) — a *secondary*, noisier signal.
+  A warm-up build is always discarded first to avoid cold-cache skew.
+
+Also watch:
+
 - **MDE CPU usage** (open Activity Monitor → search `wdavdaemon_unprivileged` to watch CPU %)
 - **EICAR detection** (shown at end of each phase):
   - ✅ Detected = Real-time protection is active
@@ -82,6 +91,10 @@ code mde-demo.code-workspace
 
 - **Build command**: `npm run compile` (TypeScript compilation)
 - **Watch command**: `npm run watch` (continuous compilation while editing)
+- **Compile workload**: `generate-workload.js` creates ~4000 interdependent `.ts`
+  modules under `src/generated/` so each build takes ~20-40s and produces real
+  file I/O for MDE to scan. A single source file compiles in <1s, which is too
+  small to measure. Adjust size with `MDE_DEMO_MODULES` (e.g. `MDE_DEMO_MODULES=2000`).
 - **Build output**: `out/` directory
 - **Cache/temp files**: `node_modules/`, `.build/`
 - **AV exclusion paths**: `out/`, `node_modules/`, `.build/`
@@ -89,10 +102,14 @@ code mde-demo.code-workspace
 
 ## Notes
 
-- The project compiles ~145 seconds on first build (full npm install + TypeScript compilation)
-- Incremental rebuilds are faster (~30-40s)
-- This is a realistic developer scenario: Node/TypeScript build with language server active
-- Each phase takes ~150 seconds (mostly from initial node_modules install)
+- **Accurate measurement** relies on `mdatp diagnostic real-time-protection-statistics`
+  (per-process `Total files scanned`). The demo enables it automatically
+  (`mdatp config real-time-protection-statistics --value enabled`) and reports the
+  per-phase delta. Wall-clock time is kept only as a secondary signal.
+- **Tamper Protection** in block mode can make scan statistics return null — use
+  troubleshooting mode if scan counts come back as 0. The demo warns when TP is in block mode.
+- With the default workload, each build takes ~20-40s; the first (warm-up) build is discarded.
+- This is a realistic developer scenario: Node/TypeScript build with a language server active.
 
 ## What vscode-tree Does
 

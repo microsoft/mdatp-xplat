@@ -35,6 +35,38 @@ print_info() {
     echo -e "${YELLOW}ℹ $1${NC}"
 }
 
+# --- Accurate measurement helpers -------------------------------------------
+
+# Sum of "totalFilesScanned" across every process, from MDE real-time protection
+# statistics. This is the accurate, documented signal for MDE scan overhead
+# (see the macOS performance TSG). Counts are cumulative since RTP started, so we
+# snapshot before/after each phase and report the delta.
+scan_total_files() {
+    mdatp diagnostic real-time-protection-statistics --output json 2>/dev/null \
+      | python3 -c 'import json,sys
+try:
+    d=json.load(sys.stdin)
+    print(sum(int(c.get("totalFilesScanned",0) or 0) for c in d.get("counters",[])))
+except Exception:
+    print(0)' 2>/dev/null || echo 0
+}
+
+# Sum of "totalScanTime" (nanoseconds) across every process.
+scan_total_time_ns() {
+    mdatp diagnostic real-time-protection-statistics --output json 2>/dev/null \
+      | python3 -c 'import json,sys
+try:
+    d=json.load(sys.stdin)
+    print(sum(int(c.get("totalScanTime",0) or 0) for c in d.get("counters",[])))
+except Exception:
+    print(0)' 2>/dev/null || echo 0
+}
+
+# Median of a list of numbers passed as arguments.
+median() {
+    printf '%s\n' "$@" | sort -n | awk '{a[NR]=$1} END{ if(NR==0){print 0; exit} m=int((NR+1)/2); if(NR%2){print a[m]} else {printf "%.2f\n",(a[m]+a[m+1])/2} }'
+}
+
 cleanup_build() {
     rm -rf "$PROJECT_DIR/out"
 }
@@ -102,58 +134,80 @@ run_builds() {
     
     print_info "Running $num_builds builds to measure performance..."
     print_info "Logs: $RUN_DIR"
-    
+
     # Capture baseline before builds
     capture_performance_snapshot "$snapshot_before" "$phase (Before)"
-    
+
+    # Warm-up build (discarded): the first build pays cold-cache / JIT costs that
+    # would otherwise skew the numbers. It is not counted in any statistic.
+    print_info "Warm-up build (discarded)..."
+    rm -rf "$PROJECT_DIR/out" 2>/dev/null || true
+    npm run compile > /dev/null 2>&1 || true
+
+    # Snapshot MDE scan totals immediately before the measured loop so the delta
+    # reflects only the work done by these builds.
+    local scans_before=$(scan_total_files)
+    local scan_ns_before=$(scan_total_time_ns)
+
     local build_times=()
-    
+
     for i in $(seq 1 $num_builds); do
         rm -rf "$PROJECT_DIR/out" 2>/dev/null || true
-        
+
         # Run build and capture timing - time outputs to stderr
         local output=$( { time npm run compile > /dev/null 2>&1; } 2>&1 )
         local real_time=$(echo "$output" | grep "^real" | head -1 | awk '{print $2}')
-        
+
         if [ -n "$real_time" ]; then
             # Convert time format (e.g., 0m0.682s) to seconds
             local seconds=$(echo "$real_time" | sed 's/m/:/' | sed 's/s$//' | awk -F: '{print $1*60+$2}')
             build_times+=("$seconds")
         fi
-        
+
         echo -n "."
     done
-    
+
     echo ""
-    
+
+    # Snapshot MDE scan totals after the measured loop.
+    local scans_after=$(scan_total_files)
+    local scan_ns_after=$(scan_total_time_ns)
+    local scans_delta=$(( scans_after - scans_before ))
+    local scan_ms_delta=$(echo "scale=1; ($scan_ns_after - $scan_ns_before) / 1000000" | bc 2>/dev/null)
+
     # Capture after builds
     capture_performance_snapshot "$snapshot_after" "$phase (After)"
-    
+
     # Calculate stats
     if [ ${#build_times[@]} -gt 0 ]; then
         local total=0
         for t in "${build_times[@]}"; do
             total=$(echo "$total + $t" | bc 2>/dev/null)
         done
-        
+
         local avg=$(echo "scale=2; $total / ${#build_times[@]}" | bc 2>/dev/null)
+        local med=$(median "${build_times[@]}")
         local min=$(printf '%s\n' "${build_times[@]}" | sort -n | head -1)
         local max=$(printf '%s\n' "${build_times[@]}" | sort -n | tail -1)
-        
+
         print_info "Build Performance ($phase):"
-        print_info "  Average: ${avg}s"
-        print_info "  Min: ${min}s  |  Max: ${max}s"
+        print_info "  Wall clock  -> median: ${med}s | avg: ${avg}s | min: ${min}s | max: ${max}s"
+        print_info "  MDE scans   -> files scanned during builds: ${scans_delta} | scan time: ${scan_ms_delta}ms"
+        print_info "  (MDE scan counts are the accurate signal; wall clock is secondary and noisier.)"
         echo ""
-        
+
         # Save timing metrics to snapshot file
         {
             echo ""
             echo "=== Build Performance Metrics ==="
             echo "Number of builds: ${#build_times[@]}"
+            echo "Median build time: ${med}s"
             echo "Average build time: ${avg}s"
             echo "Min build time: ${min}s"
             echo "Max build time: ${max}s"
             echo "All build times: ${build_times[*]}"
+            echo "MDE files scanned during builds: ${scans_delta}"
+            echo "MDE scan time during builds (ms): ${scan_ms_delta}"
         } >> "$snapshot_after"
     fi
     
@@ -216,6 +270,33 @@ check_prerequisites() {
     if [ ! -d "$PROJECT_DIR/node_modules" ]; then
         print_info "Installing npm dependencies..."
         npm install
+    fi
+
+    # Generate the compile workload if missing. A single hand-written source file
+    # compiles in well under a second, which is too small for MDE scan overhead to
+    # be measurable. The generated modules make each build take ~20-40s and produce
+    # real file I/O for Defender to scan. Override the size with MDE_DEMO_MODULES.
+    if [ ! -d "$PROJECT_DIR/src/generated" ]; then
+        print_info "Generating compile workload (this makes build times measurable)..."
+        node "$PROJECT_DIR/generate-workload.js"
+    else
+        print_info "Compile workload already generated ($(find "$PROJECT_DIR/src/generated" -name '*.ts' | wc -l | tr -d ' ') modules)"
+    fi
+
+    # Enable real-time protection statistics. This is the documented, accurate way
+    # to measure MDE scan overhead (per-process "Total files scanned"). Without it,
+    # the diagnostic snapshots are empty and only noisy wall-clock time remains.
+    print_info "Enabling real-time protection statistics..."
+    sudo mdatp config real-time-protection-statistics --value enabled &>/dev/null || \
+        print_error "Could not enable real-time-protection-statistics (scan counts may be unavailable)."
+
+    # Tamper Protection in block mode causes real-time-protection-statistics to
+    # return null. Warn the user so they can use troubleshooting mode if needed.
+    local tp_status=$(mdatp health --field tamper_protection 2>/dev/null | tr -d '"')
+    if [ "$tp_status" = "block" ]; then
+        print_info "Tamper Protection is in 'block' mode."
+        print_info "  If MDE scan counts come back as 0, enable troubleshooting mode so"
+        print_info "  real-time-protection-statistics can be captured (see the macOS perf TSG)."
     fi
     
     print_success "All prerequisites met"
@@ -311,9 +392,12 @@ print_summary() {
     print_phase "Demo Complete"
     echo ""
     echo "Key Findings:"
-    echo "  • Baseline: Full MDE scanning on all files"
-    echo "  • Exclusions: Faster builds, but EICAR undetected (⚠️ protection gap)"  
-    echo "  • Profiles: Comparable build times, EICAR still detected (✅ protected)"
+    echo "  • Baseline: Full MDE scanning on all files (highest scan count)"
+    echo "  • Exclusions: Fewer files scanned + EICAR undetected (⚠️ protection gap)"
+    echo "  • Profiles: Fewer files scanned, EICAR still detected (✅ protected)"
+    echo ""
+    echo "Compare the 'MDE files scanned during builds' number across phases —"
+    echo "that scan-count delta is the accurate signal. Wall-clock time is secondary."
     echo ""
     echo "Insight: Performance profiles maintain security while improving build speed."
     echo ""
@@ -365,6 +449,9 @@ main() {
     cleanup_build
     cleanup_exclusions
     cleanup_profiles
+
+    # Restore real-time protection statistics to its default (disabled) state.
+    sudo mdatp config real-time-protection-statistics --value disabled &>/dev/null || true
 }
 
 # Run

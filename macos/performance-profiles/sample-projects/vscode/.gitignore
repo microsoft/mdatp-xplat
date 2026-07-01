@@ -7,3 +7,4 @@ DerivedData/
 .DS_Store
 .vscode-test/
 run-logs/
+src/generated/

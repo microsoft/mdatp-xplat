@@ -46,17 +46,22 @@ Or double-click `mde-demo.code-workspace` to open in VSCode directly.
 - Compilation with folder exclusions (faster, but protection gap)
 - Compilation with `vscode`, `vscode-tree`, and `node` profiles (fast AND protected)
 
-Each phase takes ~145 seconds on first build, showing realistic developer workload.
+Each phase runs several ~20-40s builds (a generated multi-file TypeScript workload),
+showing realistic developer workload. The first build in each phase is a discarded warm-up.
 
 ---
 
 ## What the Demo Proves
 
-| Phase | Build Time | MDE CPU % | EICAR Detected? | Story |
+| Phase | MDE Files Scanned | MDE CPU % | EICAR Detected? | Story |
 |---|---|---|---|---|
-| **Baseline** | Reference | High | ✅ Yes | Full scanning, full protection |
-| **Exclusions** | Faster | Lower | ❌ No | Protection gap - malware slips through |
-| **Profiles** | Fast | Lower | ✅ Yes | Fast build, real protection maintained |
+| **Baseline** | Reference (highest) | High | ✅ Yes | Full scanning, full protection |
+| **Exclusions** | Fewer | Lower | ❌ No | Protection gap - malware slips through |
+| **Profiles** | Fewer | Lower | ✅ Yes | Fast build, real protection maintained |
+
+The primary metric is **MDE files scanned** (from real-time protection statistics),
+which the VSCode demo reports as a per-phase delta. Wall-clock build time is a
+secondary, noisier signal.
 
 **Key insight:** Performance profiles mute specific developer process trees (VSCode, Xcode, Node), reducing scanning overhead **without creating a protection gap**. Folder exclusions achieve speed but blind protection everywhere in those directories.
 
@@ -131,7 +136,7 @@ During the demo, open **Activity Monitor** on another desktop:
 ### VSCode Sample
 - **Language:** TypeScript
 - **Build command:** `npm run compile`
-- **Build output:** `out/` directory (~145s first build, ~30-40s incremental)
+- **Build output:** `out/` directory (~20-40s per build with the generated workload; first build discarded as warm-up)
 - **Profiles:** `vscode`, `vscode-tree`, `node`, `git`
 - **Exclusions:** `out/`, `node_modules/`, `.build/`
 
