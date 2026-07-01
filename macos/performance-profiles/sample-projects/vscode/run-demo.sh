@@ -127,7 +127,7 @@ capture_performance_snapshot() {
 
 run_builds() {
     local phase=$1
-    local num_builds=${2:-5}
+    local num_builds=${2:-3}
     local phase_name=$(echo "$phase" | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
     local snapshot_before="$RUN_DIR/${phase_name}_before.txt"
     local snapshot_after="$RUN_DIR/${phase_name}_after.txt"
