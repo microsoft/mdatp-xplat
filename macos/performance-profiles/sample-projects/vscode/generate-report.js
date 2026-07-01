@@ -166,6 +166,25 @@ function formatHotEventsTable(topEvents) {
     return table;
 }
 
+// Format the DURING-build hot-event capture for a phase. Unlike the post-build
+// snapshot (idle noise), this shows the cumulative top scan sources measured WHILE
+// the build ran, which is what reveals whether a profile actually suppressed a
+// process's scan load.
+function formatLiveHotEvents(fileName) {
+    const p = path.join(runDir, fileName);
+    if (!fs.existsSync(p)) {
+        return '_(no during-build capture — re-run with the latest run-demo.sh)_';
+    }
+    const lines = stripAnsiCodes(fs.readFileSync(p, 'utf-8')).trim().split('\n');
+    if (lines.length === 0 || lines[0].startsWith('(no hot-event')) {
+        return '_(no hot-event sources captured during the build window)_';
+    }
+    // Keep the summary line plus the header and top 10 source rows.
+    const summary = lines.find(l => l.startsWith('Total Events:')) || '';
+    const rows = lines.filter(l => /^\s*\d+\s/.test(l)).slice(0, 10);
+    return `\n\`\`\`\n${summary ? summary + '\n' : ''}${rows.join('\n')}\n\`\`\``;
+}
+
 // Function to extract build timing metrics from a snapshot
 function extractBuildTimings(filePath) {
     try {
@@ -301,6 +320,9 @@ This demo evaluated three strategies for optimizing Microsoft Defender for Endpo
 **Top 5 Processes Being Scanned:**
 ${formatHotEventsTable(baselineMetrics.topEvents)}
 
+**Top scan sources DURING the build (live capture):**
+${formatLiveHotEvents('baseline_(full_scanning)_hot_events.txt')}
+
 ### Phase 2: AV Exclusions (Protection Gap)
 - **Configuration:** Excluded folders: \`out\`, \`node_modules\`, \`.build\`
 - **Build Time:** Average: ${exclusionsTimings.avgTime ? exclusionsTimings.avgTime + 's' : 'N/A'} (Min: ${exclusionsTimings.minTime ? exclusionsTimings.minTime + 's' : 'N/A'}, Max: ${exclusionsTimings.maxTime ? exclusionsTimings.maxTime + 's' : 'N/A'})
@@ -312,6 +334,9 @@ ${formatHotEventsTable(baselineMetrics.topEvents)}
 
 **Top 5 Processes Being Scanned:**
 ${formatHotEventsTable(exclusionsMetrics.topEvents)}
+
+**Top scan sources DURING the build (live capture):**
+${formatLiveHotEvents('with_exclusions_hot_events.txt')}
 
 ### Phase 3: Performance Profiles (Recommended)
 - **Configuration:** Profiles applied:
@@ -328,6 +353,9 @@ ${formatHotEventsTable(exclusionsMetrics.topEvents)}
 
 **Top 5 Processes Being Scanned:**
 ${formatHotEventsTable(profilesMetrics.topEvents)}
+
+**Top scan sources DURING the build (live capture):**
+${formatLiveHotEvents('with_performance_profiles_hot_events.txt')}
 
 ---
 

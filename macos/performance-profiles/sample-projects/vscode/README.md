@@ -111,6 +111,12 @@ code mde-demo.code-workspace
   (per-process `Total files scanned`). The demo enables it automatically
   (`mdatp config real-time-protection-statistics --value enabled`) and reports the
   per-phase delta. Wall-clock time is kept only as a secondary signal.
+- **Live hot-event capture:** during each phase's measured build window the demo streams
+  `mdatp diagnostic hot-event-sources` concurrently and keeps the final cumulative
+  top-sources table (per-phase `*_hot_events.txt`, also embedded in `REPORT.md`). Unlike
+  the post-build snapshot — which only samples ~1s of idle activity after the build exits —
+  this shows the processes actually driving scan load *while* the build runs, and whether an
+  applied profile suppresses them.
 - **Tamper Protection** in block mode can make scan statistics return null — use
   troubleshooting mode if scan counts come back as 0. The demo warns when TP is in block mode.
 - **Spotlight suppression:** the generated modules and build output live in folders whose

@@ -110,6 +110,56 @@ cleanup_build() {
     rm -rf "$PROJECT_DIR/out.noindex"
 }
 
+# --- Hot-event-source capture DURING the build window -----------------------
+#
+# The per-phase _after.txt snapshot samples hot-event-sources for ~1s AFTER the
+# builds finish, which only shows idle noise (node/tsc has already exited). To see
+# which processes actually drive scan load WHILE the build runs — and whether an
+# applied profile suppresses them — stream the source concurrently with the build.
+#
+# mdatp diagnostic hot-event-sources streams cumulative "Top N Hot Event Sources"
+# tables until interrupted, so we run it in the background for the whole measured
+# window, interrupt it with SIGINT, and keep the final (cumulative) table.
+
+# Start the stream writing raw output to $1; echo the PID so the caller can stop it.
+start_hot_event_capture() {
+    local raw=$1
+    mdatp diagnostic hot-event-sources --output json >"$raw" 2>&1 &
+    echo $!
+}
+
+# Stop the stream (SIGINT lets mdatp flush a final table before exiting), then wait
+# for it to exit.
+stop_hot_event_capture() {
+    local pid=$1
+    [ -n "$pid" ] || return 0
+    kill -INT "$pid" 2>/dev/null || true
+    for _ in 1 2 3 4 5; do
+        kill -0 "$pid" 2>/dev/null || return 0
+        sleep 0.3
+    done
+    kill "$pid" 2>/dev/null || true
+}
+
+# Extract the final cumulative "Top N Hot Event Sources" table (plus its summary
+# line) from a raw capture into a compact, readable per-phase file. Each streamed
+# snapshot is cumulative since capture start, so the last complete Sources block
+# reflects the entire window.
+summarize_hot_events() {
+    local raw=$1 out=$2
+    sed 's/\x1b\[[0-9;]*m//g' "$raw" 2>/dev/null | awk '
+        /^Total Events:/ { summary=$0 }
+        /Top .* Hot Event Sources ===/ { cap=1; buf=""; hdr=summary; next }
+        cap && /Hot Event Targets ===/ { cap=0; last_hdr=hdr; last=buf; next }
+        cap { buf=buf $0 "\n" }
+        END {
+            if (last == "") { print "(no hot-event sources captured during window)"; exit }
+            print last_hdr
+            printf "%s", last
+        }
+    ' > "$out"
+}
+
 cleanup_exclusions() {
     # Remove any existing exclusions completely silently
     sudo mdatp exclusion folder remove --path "$PROJECT_DIR/out.noindex" &>/dev/null || true
@@ -267,6 +317,13 @@ run_builds() {
     local mem_file=$(mktemp)
     local mem_sampler_pid=$(start_mem_sampler "$mem_file")
 
+    # Stream hot-event-sources for the whole measured window so we can see which
+    # processes actually drive scan load DURING the build (and whether the applied
+    # profile suppresses them), not just idle noise after it finishes.
+    local hot_raw=$(mktemp)
+    local hot_events_file="$RUN_DIR/${phase_name}_hot_events.txt"
+    local hot_events_pid=$(start_hot_event_capture "$hot_raw")
+
     local build_times=()
 
     for i in $(seq 1 $num_builds); do
@@ -300,6 +357,13 @@ run_builds() {
     kill "$mem_sampler_pid" 2>/dev/null || true
     local peak_mem_mb=$(cat "$mem_file" 2>/dev/null)
     rm -f "$mem_file" 2>/dev/null || true
+
+    # Stop the hot-event stream and keep the final cumulative top-sources table.
+    stop_hot_event_capture "$hot_events_pid"
+    summarize_hot_events "$hot_raw" "$hot_events_file"
+    rm -f "$hot_raw" 2>/dev/null || true
+    print_info "Top scan sources during build:"
+    sed 's/^/    /' "$hot_events_file" 2>/dev/null | head -8
 
     # Average %CPU over the window = CPU-seconds consumed / wall-seconds * 100.
     # This is the honest "how hard did MDE work during the builds" number.
