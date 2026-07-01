@@ -3,7 +3,7 @@
 //
 // The single hand-written extension.ts compiles in well under a second, which is
 // far too small for MDE scanning overhead to be measurable above noise. This
-// script generates many interdependent .ts modules under src/generated/ so that
+// script generates many interdependent .ts modules under src/generated.noindex/ so that
 // `npm run compile` does real work (typically 20-40s) and produces enough file
 // I/O for Microsoft Defender to scan. That is what makes the per-phase numbers
 // (both wall-clock and MDE scan counts) meaningful.
@@ -12,14 +12,16 @@
 //   node generate-workload.js [moduleCount]
 //   MDE_DEMO_MODULES=600 node generate-workload.js
 //
-// Output files live in src/generated/ (gitignored) and are picked up by tsconfig
-// automatically because it already includes "src".
+// Output files live in src/generated.noindex/ (gitignored). The ".noindex" suffix
+// tells Spotlight not to index them (so mdworker_shared/mds_stores don't generate
+// scan load that developer profiles can't mute). tsconfig still compiles them
+// because they live under "src".
 
 const fs = require('fs');
 const path = require('path');
 
 const PROJECT_DIR = __dirname;
-const OUT_DIR = path.join(PROJECT_DIR, 'src', 'generated');
+const OUT_DIR = path.join(PROJECT_DIR, 'src', 'generated.noindex');
 
 const moduleCount = parseInt(
     process.argv[2] || process.env.MDE_DEMO_MODULES || '4000',
@@ -130,15 +132,6 @@ function main() {
     fs.rmSync(OUT_DIR, { recursive: true, force: true });
     fs.mkdirSync(OUT_DIR, { recursive: true });
 
-    // Tell Spotlight not to index the generated tree. Without this, mdworker_shared
-    // and mds_stores index the thousands of output files and MDE scans those
-    // Spotlight-initiated accesses. That scan load is NOT muted by developer
-    // performance profiles (node/vscode), so it masks the profile benefit and makes
-    // Phase 3 look identical to the baseline. The marker keeps the demo measuring the
-    // build's own process tree, which the profiles actually mute.
-    fs.writeFileSync(path.join(OUT_DIR, '.metadata_never_index'), '');
-    fs.writeFileSync(path.join(PROJECT_DIR, '.metadata_never_index'), '');
-
     for (let i = 0; i < moduleCount; i++) {
         fs.writeFileSync(path.join(OUT_DIR, `${moduleName(i)}.ts`), renderModule(i));
     }
@@ -146,7 +139,7 @@ function main() {
 
     console.log(`Generated ${moduleCount} TypeScript modules in ${path.relative(PROJECT_DIR, OUT_DIR)}/`);
     console.log('These will be compiled by `npm run compile` along with src/extension.ts.');
-    console.log('Spotlight indexing suppressed via .metadata_never_index markers.');
+    console.log('The ".noindex" folder name keeps Spotlight from indexing the generated files.');
 }
 
 main();

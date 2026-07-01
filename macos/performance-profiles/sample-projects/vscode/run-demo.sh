@@ -107,12 +107,12 @@ start_mem_sampler() {
 }
 
 cleanup_build() {
-    rm -rf "$PROJECT_DIR/out"
+    rm -rf "$PROJECT_DIR/out.noindex"
 }
 
 cleanup_exclusions() {
     # Remove any existing exclusions completely silently
-    sudo mdatp exclusion folder remove --path "$PROJECT_DIR/out" &>/dev/null || true
+    sudo mdatp exclusion folder remove --path "$PROJECT_DIR/out.noindex" &>/dev/null || true
     sudo mdatp exclusion folder remove --path "$PROJECT_DIR/node_modules" &>/dev/null || true
     sudo mdatp exclusion folder remove --path "$PROJECT_DIR/.build" &>/dev/null || true
 }
@@ -180,7 +180,7 @@ run_builds() {
     # Warm-up build (discarded): the first build pays cold-cache / JIT costs that
     # would otherwise skew the numbers. It is not counted in any statistic.
     print_info "Warm-up build (discarded)..."
-    rm -rf "$PROJECT_DIR/out" 2>/dev/null || true
+    rm -rf "$PROJECT_DIR/out.noindex" 2>/dev/null || true
     npm run compile > /dev/null 2>&1 || true
 
     # Snapshot MDE scan totals immediately before the measured loop so the delta
@@ -200,7 +200,7 @@ run_builds() {
     local build_times=()
 
     for i in $(seq 1 $num_builds); do
-        rm -rf "$PROJECT_DIR/out" 2>/dev/null || true
+        rm -rf "$PROJECT_DIR/out.noindex" 2>/dev/null || true
 
         # Run build and capture timing - time outputs to stderr
         local output=$( { time npm run compile > /dev/null 2>&1; } 2>&1 )
@@ -295,8 +295,8 @@ test_eicar() {
     print_info "Testing EICAR detection in $phase..."
     
     # Create EICAR test file in build directory
-    local eicar_path="$PROJECT_DIR/out/eicar.txt"
-    mkdir -p "$PROJECT_DIR/out"
+    local eicar_path="$PROJECT_DIR/out.noindex/eicar.txt"
+    mkdir -p "$PROJECT_DIR/out.noindex"
     
     # EICAR test string (safe - recognized by AV engines as a test)
     echo "X5O!P%@AP[4\PZX54(P^)7CC)7}\$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!\$H+H*" > "$eicar_path"
@@ -339,14 +339,6 @@ check_prerequisites() {
         print_info "Installing npm dependencies..."
         npm install
     fi
-
-    # Suppress Spotlight indexing of the demo tree. If Spotlight (mdworker_shared /
-    # mds_stores) indexes the generated output files, MDE scans those accesses and
-    # that load is not muted by developer performance profiles — making Phase 3 look
-    # like the baseline. These markers keep the measurement focused on the build's
-    # own process tree, which the profiles actually mute. No sudo required.
-    touch "$PROJECT_DIR/.metadata_never_index"
-    [ -d "$PROJECT_DIR/src/generated" ] && touch "$PROJECT_DIR/src/generated/.metadata_never_index"
 
     # Generate the compile workload fresh on every run. A single hand-written source
     # file compiles in <1s, which is too small for MDE scan overhead to be
@@ -417,7 +409,7 @@ phase_exclusions() {
     cleanup_build
     
     # Add exclusions (one per command)
-    sudo mdatp exclusion folder add --path "$PROJECT_DIR/out"
+    sudo mdatp exclusion folder add --path "$PROJECT_DIR/out.noindex"
     sudo mdatp exclusion folder add --path "$PROJECT_DIR/node_modules"
     sudo mdatp exclusion folder add --path "$PROJECT_DIR/.build"
     print_success "Exclusions added"
@@ -430,7 +422,7 @@ phase_exclusions() {
     
     # Remove exclusions
     print_info "Removing exclusion paths..."
-    sudo mdatp exclusion folder remove --path "$PROJECT_DIR/out"
+    sudo mdatp exclusion folder remove --path "$PROJECT_DIR/out.noindex"
     sudo mdatp exclusion folder remove --path "$PROJECT_DIR/node_modules"
     sudo mdatp exclusion folder remove --path "$PROJECT_DIR/.build"
     print_success "Exclusions removed"

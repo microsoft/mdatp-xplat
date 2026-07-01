@@ -22,7 +22,7 @@
       "command": "bash",
       "args": [
         "-c",
-        "echo \"=== Phase 2: AV Exclusions ===\" && sudo mdatp exclusion folder add --path out && sudo mdatp exclusion folder add --path node_modules && sudo mdatp exclusion folder add --path .build && npm run compile && sudo mdatp exclusion folder remove --path out && sudo mdatp exclusion folder remove --path node_modules && sudo mdatp exclusion folder remove --path .build"
+        "echo \"=== Phase 2: AV Exclusions ===\" && sudo mdatp exclusion folder add --path out.noindex && sudo mdatp exclusion folder add --path node_modules && sudo mdatp exclusion folder add --path .build && npm run compile && sudo mdatp exclusion folder remove --path out.noindex && sudo mdatp exclusion folder remove --path node_modules && sudo mdatp exclusion folder remove --path .build"
       ],
       "presentation": {
         "reveal": "always",
