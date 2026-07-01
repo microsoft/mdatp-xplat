@@ -348,16 +348,14 @@ check_prerequisites() {
     touch "$PROJECT_DIR/.metadata_never_index"
     [ -d "$PROJECT_DIR/src/generated" ] && touch "$PROJECT_DIR/src/generated/.metadata_never_index"
 
-    # Generate the compile workload if missing. A single hand-written source file
-    # compiles in well under a second, which is too small for MDE scan overhead to
-    # be measurable. The generated modules make each build take ~20-40s and produce
-    # real file I/O for Defender to scan. Override the size with MDE_DEMO_MODULES.
-    if [ ! -d "$PROJECT_DIR/src/generated" ]; then
-        print_info "Generating compile workload (this makes build times measurable)..."
-        node "$PROJECT_DIR/generate-workload.js"
-    else
-        print_info "Compile workload already generated ($(find "$PROJECT_DIR/src/generated" -name '*.ts' | wc -l | tr -d ' ') modules)"
-    fi
+    # Generate the compile workload fresh on every run. A single hand-written source
+    # file compiles in <1s, which is too small for MDE scan overhead to be
+    # measurable. The generated modules make each build take ~20-40s and produce real
+    # file I/O for Defender to scan. Regenerating each run clears any stale files (and
+    # their Spotlight index residue) from a previous run. Override the size with
+    # MDE_DEMO_MODULES.
+    print_info "Generating fresh compile workload (clears previous run's files)..."
+    node "$PROJECT_DIR/generate-workload.js"
 
     # Enable real-time protection statistics. This is the documented, accurate way
     # to measure MDE scan overhead (per-process "Total files scanned"). Without it,
