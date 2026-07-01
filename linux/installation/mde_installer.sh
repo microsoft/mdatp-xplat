@@ -1509,10 +1509,18 @@ install_on_azurelinux()
 
         if [ "$VERSION" = "4.0" ]; then
             # Azure Linux 4.0 packages are currently published only to the
-            # insiders-slow beta repository on packages.microsoft.com. The repo
-            # is configured manually here (gpgkey is auto-imported by dnf on
-            # first use, consistent with how the azurelinux-repos-* packages
-            # provide trusted keys on Azure Linux 3).
+            # insiders-slow beta repository on packages.microsoft.com, so the
+            # repo is configured manually here. The match is strict ("4.0", not
+            # "4*") on purpose: this is single-version beta gating, and the repo
+            # name/baseurl below are 4.0-specific, so a future 4.x release must
+            # not be pointed at the 4.0 repo.
+            #
+            # Package and metadata signatures are verified with the Azure Linux
+            # distribution GPG key that is preinstalled on AL4 images (it is not
+            # published under packages.microsoft.com/keys, unlike the RHEL-style
+            # microsoft.asc key). gpgkey= is therefore intentionally omitted and
+            # repo_gpgcheck=1 relies on that preinstalled key; sslverify=1 keeps
+            # transport verification explicit, matching the PMC-shipped configs.
 
             if [ "$CHANNEL" != "insiders-slow" ]; then
                 script_exit "Invalid channel: $CHANNEL. Available channel for $DISTRO_FAMILY $VERSION is insiders-slow only." $ERR_INVALID_CHANNEL
@@ -1522,9 +1530,8 @@ install_on_azurelinux()
             local al4_repo_name="azurelinux-4.0-beta-microsoft-${ARCHITECTURE}"
             local al4_repo_file="/etc/yum.repos.d/${al4_repo_name}.repo"
             local al4_base_url="https://packages.microsoft.com/yumrepos/${al4_repo_name}/"
-            local ms_gpg_key="https://packages.microsoft.com/keys/microsoft.asc"
 
-            run_quietly "printf '[%s]\nname=Azure Linux 4.0 Beta Microsoft (insiders-slow)\nbaseurl=%s\nenabled=1\ngpgcheck=1\ngpgkey=%s\n' '$al4_repo_name' '$al4_base_url' '$ms_gpg_key' > '$al4_repo_file'" "unable to configure the Azure Linux 4.0 beta repository" $ERR_FAILED_REPO_SETUP
+            run_quietly "printf '[%s]\nname=Azure Linux 4.0 Beta Microsoft (insiders-slow)\nbaseurl=%s\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\nsslverify=1\n' '$al4_repo_name' '$al4_base_url' > '$al4_repo_file'" "unable to configure the Azure Linux 4.0 beta repository" $ERR_FAILED_REPO_SETUP
         elif [ "$CHANNEL" = "prod" ]; then
             run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss" "unable to install azurelinux-repos-ms-non-oss"
             run_quietly "$PKG_MGR_INVOKER config-manager --enable azurelinux-official-ms-non-oss" "unable to enable ms-non-oss repo"
@@ -1799,17 +1806,17 @@ remove_repo()
     elif [ "$DISTRO_FAMILY" = "mariner" ]; then # in case of mariner, do not remove the repo
         log_info "[i] nothing to clean up"
         return
-    elif [ "$DISTRO_FAMILY" = "azurelinux" ]; then
-        # Azure Linux 3 uses the azurelinux-repos-* packages and the repo is
-        # left in place; only the manually configured Azure Linux 4.0 beta repo
-        # file is removed here.
+    elif [ "$DISTRO_FAMILY" = "azurelinux" ] && [[ $VERSION == 4* ]]; then
+        # Scoped to Azure Linux 4.x only: remove the manually configured 4.0
+        # beta repo file. Azure Linux 3 is intentionally excluded so it retains
+        # its prior behaviour (falls through to the unsupported-distro exit
+        # below) rather than being silently changed by this branch.
         local al4_repo_file="/etc/yum.repos.d/azurelinux-4.0-beta-microsoft-${ARCHITECTURE}.repo"
         if [ -f "$al4_repo_file" ]; then
             run_quietly "rm -f '$al4_repo_file'" "unable to remove the Azure Linux 4.0 beta repository" $ERR_FAILED_REPO_CLEANUP
             log_info "[v] Repo removed for $CHANNEL"
         else
-            # Azure Linux 3 has no manually configured beta repo; this is a no-op,
-            # so do not claim a removal (matches the mariner no-op path).
+            # Beta repo file already absent; treat as a no-op (matches mariner).
             log_info "[i] nothing to clean up"
         fi
         return
