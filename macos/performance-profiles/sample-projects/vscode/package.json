@@ -1,0 +1,24 @@
+{
+  "name": "mde-vscode-demo",
+  "version": "1.0.0",
+  "description": "MDE Performance Profile Demo - VSCode Build",
+  "main": "out/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js"
+  },
+  "keywords": [
+    "mde",
+    "defender",
+    "performance",
+    "profiles"
+  ],
+  "author": "Microsoft",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^18.11.0",
+    "typescript": "^4.8.0"
+  }
+}

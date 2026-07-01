@@ -1,0 +1,75 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "MDE Demo: Phase 1 - Baseline Build",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "echo \"=== Phase 1: Baseline Build (no optimizations) ===\" && npm run compile"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "MDE Demo: Phase 2 - AV Exclusions",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "echo \"=== Phase 2: AV Exclusions ===\" && sudo mdatp exclusion folder add --path out && sudo mdatp exclusion folder add --path node_modules && sudo mdatp exclusion folder add --path .build && npm run compile && sudo mdatp exclusion folder remove --path out && sudo mdatp exclusion folder remove --path node_modules && sudo mdatp exclusion folder remove --path .build"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "MDE Demo: Phase 3 - Performance Profiles",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "echo \"=== Phase 3: Performance Profiles ===\" && sudo mdatp performance-profiles apply --name node && sudo mdatp performance-profiles apply --name vscode && sudo mdatp performance-profiles apply --name vscode-tree && sudo mdatp performance-profiles apply --name git && npm run compile && sudo mdatp performance-profiles remove --name node && sudo mdatp performance-profiles remove --name vscode && sudo mdatp performance-profiles remove --name vscode-tree && sudo mdatp performance-profiles remove --name git"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "MDE Demo: Run All Phases",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "./run-demo.sh"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "MDE Demo: Cache sudo & Start",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "sudo -v && echo \"sudo cached\" && npm install && npm run compile"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

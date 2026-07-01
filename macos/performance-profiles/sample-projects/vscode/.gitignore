@@ -1,0 +1,9 @@
+node_modules/
+out/
+.build/
+*.log
+build/
+DerivedData/
+.DS_Store
+.vscode-test/
+run-logs/
