@@ -286,9 +286,16 @@ check_prerequisites() {
     # Enable real-time protection statistics. This is the documented, accurate way
     # to measure MDE scan overhead (per-process "Total files scanned"). Without it,
     # the diagnostic snapshots are empty and only noisy wall-clock time remains.
+    # Note: this config toggle does NOT require sudo, and returns a non-zero exit
+    # code when the value is already set to the requested value ("same as current").
     print_info "Enabling real-time protection statistics..."
-    sudo mdatp config real-time-protection-statistics --value enabled &>/dev/null || \
-        print_error "Could not enable real-time-protection-statistics (scan counts may be unavailable)."
+    local rtp_stats_out=$(mdatp config real-time-protection-statistics --value enabled 2>&1)
+    if echo "$rtp_stats_out" | grep -qiE "updated|same as the current value"; then
+        print_success "Real-time protection statistics enabled"
+    else
+        print_error "Could not enable real-time-protection-statistics: $rtp_stats_out"
+        print_info "  Scan counts may be unavailable. If Tamper Protection is on, use troubleshooting mode."
+    fi
 
     # Tamper Protection in block mode causes real-time-protection-statistics to
     # return null. Warn the user so they can use troubleshooting mode if needed.
@@ -451,7 +458,8 @@ main() {
     cleanup_profiles
 
     # Restore real-time protection statistics to its default (disabled) state.
-    sudo mdatp config real-time-protection-statistics --value disabled &>/dev/null || true
+    # This config toggle does not require sudo.
+    mdatp config real-time-protection-statistics --value disabled &>/dev/null || true
 }
 
 # Run
