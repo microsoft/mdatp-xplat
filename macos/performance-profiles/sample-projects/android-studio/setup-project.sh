@@ -53,32 +53,53 @@ fi
 if [ ! -d "$ANDROID_HOME" ]; then
     err "Android SDK not found at ANDROID_HOME=$ANDROID_HOME"
     err "  Install it: brew install --cask android-commandlinetools"
-    err "  then: sdkmanager \"platform-tools\" \"platforms;android-34\" \"build-tools;31.0.0\""
-    err "  and:  yes | sdkmanager --licenses"; exit 1
+    err "  then re-run this script (it will install the required SDK packages)."; exit 1
 fi
 
 info "JDK: $("$JAVA_HOME/bin/java" -version 2>&1 | head -1)"
 info "Android SDK: $ANDROID_HOME"
 
+# Resolve sdkmanager. The brew cask puts it under cmdline-tools/latest/bin (NOT
+# $ANDROID_HOME/bin), and it needs JAVA_HOME (exported above) to run.
+SDKMANAGER=""
+for cand in "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" \
+            "$(command -v sdkmanager 2>/dev/null)"; do
+    [ -n "$cand" ] && [ -x "$cand" ] && { SDKMANAGER="$cand"; break; }
+done
+
 # The workload pins compileSdk 34 + build-tools 31.0.0. If those SDK packages are
-# missing, Gradle fails deep in the build with an opaque error — check up front and
-# give an actionable message instead.
+# missing, Gradle fails deep in the build with an opaque error — install them up
+# front (no sudo) so a fresh/lab machine works with one command.
 missing_pkgs=()
 [ -d "$ANDROID_HOME/platforms/android-34" ] || missing_pkgs+=("platforms;android-34")
 ls "$ANDROID_HOME"/build-tools/31.* >/dev/null 2>&1 || missing_pkgs+=("build-tools;31.0.0")
 [ -d "$ANDROID_HOME/platform-tools" ] || missing_pkgs+=("platform-tools")
 if [ ${#missing_pkgs[@]} -gt 0 ]; then
-    err "Required Android SDK packages are missing: ${missing_pkgs[*]}"
-    err "  Install them (no sudo):"
-    err "    \"$ANDROID_HOME/bin/sdkmanager\" ${missing_pkgs[*]}"
-    err "    yes | \"$ANDROID_HOME/bin/sdkmanager\" --licenses"
-    exit 1
+    if [ -z "$SDKMANAGER" ]; then
+        err "Required Android SDK packages are missing: ${missing_pkgs[*]}"
+        err "  ...and sdkmanager could not be located under $ANDROID_HOME/cmdline-tools/."
+        err "  Reinstall the command-line tools: brew install --cask android-commandlinetools"; exit 1
+    fi
+    info "Installing missing Android SDK packages: ${missing_pkgs[*]}"
+    # Note: package specs contain ';' — keep them quoted so the shell doesn't split them.
+    if ! "$SDKMANAGER" "${missing_pkgs[@]}"; then
+        err "sdkmanager failed to install: ${missing_pkgs[*]}"
+        err "  Run manually: JAVA_HOME=$JAVA_HOME \"$SDKMANAGER\" \"${missing_pkgs[0]}\" ..."; exit 1
+    fi
+    ok "Android SDK packages installed"
 fi
 # Licenses must be accepted or Gradle's SDK auto-provisioning aborts.
 if [ ! -d "$ANDROID_HOME/licenses" ] || [ -z "$(ls -A "$ANDROID_HOME/licenses" 2>/dev/null)" ]; then
-    err "Android SDK licenses have not been accepted."
-    err "  Run: yes | \"$ANDROID_HOME/bin/sdkmanager\" --licenses"
-    exit 1
+    if [ -n "$SDKMANAGER" ]; then
+        info "Accepting Android SDK licenses..."
+        yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+    fi
+    if [ ! -d "$ANDROID_HOME/licenses" ] || [ -z "$(ls -A "$ANDROID_HOME/licenses" 2>/dev/null)" ]; then
+        err "Android SDK licenses have not been accepted."
+        err "  Run: yes | \"${SDKMANAGER:-$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager}\" --licenses"; exit 1
+    fi
+    ok "Android SDK licenses accepted"
 fi
 
 # --- Fetch the pinned workload ---------------------------------------------

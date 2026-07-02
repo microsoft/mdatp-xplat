@@ -30,10 +30,18 @@ A one-time, no-sudo toolchain install (Homebrew, Apple Silicon or Intel):
 ```bash
 brew install openjdk@17
 brew install --cask android-commandlinetools
-# Point sdkmanager at the SDK and install the packages the workload pins:
+```
+
+That's the only manual step — `setup-project.sh` then installs the pinned SDK
+packages (`platform-tools`, `platforms;android-34`, `build-tools;31.0.0`) and accepts
+the licenses for you (no sudo). To do it by hand instead:
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
-"$ANDROID_HOME/bin/sdkmanager" "platform-tools" "platforms;android-34" "build-tools;31.0.0"
-yes | "$ANDROID_HOME/bin/sdkmanager" --licenses
+SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+"$SDKM" "platform-tools" "platforms;android-34" "build-tools;31.0.0"
+yes | "$SDKM" --licenses
 ```
 
 Plus:
