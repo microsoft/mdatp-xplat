@@ -90,14 +90,47 @@ There are two related profiles, and they cover different things:
 - **`android-studio` / `android-studio-tree`** — `android-studio-tree` only mutes builds
   launched from **inside the Android Studio IDE process tree**. A terminal `./gradlew`
   build is *not* covered by it. To exercise this profile, open the workload in Android
-  Studio and build from there:
+  Studio and build from there.
 
-  ```bash
-  ./open-demo.sh   # fetches the workload and opens it in Android Studio
-  ```
+### Running the build from inside Android Studio
 
-  `open-demo.sh` prints the exact `mdatp performance-profiles apply --name android-studio`
-  steps to run while building from the IDE.
+This is the interactive "watch CPU drop" demonstration for the IDE-tree profile. It is
+**not** the automated measured demo — `run-demo.sh` (terminal) is the one that generates
+`REPORT.md`; there is no scripted 3-phase measurement around an in-IDE build because we
+can't drive Android Studio's internal build engine from a script.
+
+1. **Open the project.** The `fluentui-android` workload is a standard Gradle project —
+   the `workload.noindex/` directory *is* the Android Studio project (there is no separate
+   project file like Xcode's `.xcodeproj`):
+
+   ```bash
+   ./open-demo.sh   # runs setup if needed, then opens workload.noindex/ in Android Studio
+   ```
+
+   Wait for the Gradle sync to finish (progress in the bottom status bar).
+
+2. **Build from within the IDE** (either triggers a build inside Android Studio's process
+   tree):
+   - **Build → Make Module 'fluentui_core'**, or
+   - Gradle tool window (right edge) → `fluentui_core` → `Tasks` → `build` → double-click
+     **assembleDebug**.
+
+3. **Apply the IDE profiles** in a terminal (needs sudo):
+
+   ```bash
+   sudo mdatp performance-profiles apply --name android-studio
+   sudo mdatp performance-profiles apply --name android-studio-tree
+   ```
+
+4. **Rebuild** (⌘F9 / Make again) and watch `wdavdaemon_unprivileged` CPU in Activity
+   Monitor drop for the in-IDE build. Then clean up:
+
+   ```bash
+   sudo mdatp performance-profiles remove --name android-studio-tree
+   sudo mdatp performance-profiles remove --name android-studio
+   ```
+
+`open-demo.sh` also echoes these steps after launching the IDE.
 
 > Note: there is no Android emulator/AVD performance profile, so this demo is scoped to
 > the **build**, not to installing/launching the app on an emulator.
