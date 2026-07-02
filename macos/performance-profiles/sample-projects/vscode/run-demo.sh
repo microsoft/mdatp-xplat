@@ -19,8 +19,8 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # --- Demo configuration (override via environment) --------------------------
-# Profiles applied in Phase 3, space-separated. Narrow it to run a subset,
-# e.g. MDE_DEMO_PROFILES="node".
+# Profiles applied in Phase 3, space-separated. Defaults to the full scenario set.
+# Narrow it to run a subset, e.g. MDE_DEMO_PROFILES="node".
 DEMO_PROFILES=${MDE_DEMO_PROFILES:-"node vscode vscode-tree git"}
 # Force the build onto a specific node install. Accepts a node binary OR the bin
 # dir containing it. Example: MDE_FORCE_NODE=/opt/homebrew/opt/node/bin

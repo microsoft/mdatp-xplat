@@ -269,6 +269,26 @@ function extractPhaseMetrics(filePath) {
     return out;
 }
 
+// Read the "Applied Profiles:" block from a snapshot (the authoritative record of
+// which profiles were actually active in that phase). Skips the "Merge policy" line.
+function extractAppliedProfiles(filePath) {
+    try {
+        const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
+        const start = lines.findIndex(l => l.trim() === 'Applied Profiles:');
+        if (start === -1) return [];
+        const profiles = [];
+        for (let i = start + 1; i < lines.length; i++) {
+            const t = lines[i].trim();
+            if (t === '') break;
+            if (t.startsWith('Merge policy')) continue;
+            profiles.push(t);
+        }
+        return profiles;
+    } catch (e) {
+        return [];
+    }
+}
+
 // Format an integer with thousands separators, or 'N/A'.
 function num(v) {
     if (v === null || v === undefined) return 'N/A';
@@ -355,6 +375,9 @@ const baselinePhase = extractPhaseMetrics(baselineAfterPath);
 const exclusionsPhase = extractPhaseMetrics(exclusionsAfterPath);
 const profilesPhase = extractPhaseMetrics(profilesAfterPath);
 
+// Which profiles were actually active in Phase 3 (authoritative, from the snapshot).
+const appliedProfiles = extractAppliedProfiles(profilesAfterPath);
+
 // Generate markdown report
 const report = `# MDE Performance Profile Demo Report
 
@@ -377,6 +400,8 @@ const report = `# MDE Performance Profile Demo Report
 | EICAR | ${eicarBadge('baseline_eicar.txt')} | ${eicarBadge('exclusions_eicar.txt')} | ${eicarBadge('profiles_eicar.txt')} |
 
 Exclusions phase excluded folders: \`out\`, \`node_modules\`, \`.build\`. Negative "files scanned"/"scan time" in the exclusions phase is a per-PID counter artifact — trust AV CPU as the signal.
+
+Profiles applied in Phase 3: ${appliedProfiles.length ? appliedProfiles.map(p => '\`' + p + '\`').join(', ') : '_N/A_'}
 
 ---
 
