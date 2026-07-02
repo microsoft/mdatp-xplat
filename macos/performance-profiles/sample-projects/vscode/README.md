@@ -118,6 +118,17 @@ code mde-demo.code-workspace
 - **AV exclusion paths**: `out.noindex/`, `node_modules/`, `.build/`
 - **Profiles applied**: `node`, `vscode`, `vscode-tree`, `git`
 
+### Environment overrides
+
+- `MDE_DEMO_PROFILES` — space-separated list of profiles to apply in Phase 3.
+  Defaults to `"node vscode vscode-tree git"`. Narrow it to isolate a single profile's
+  effect, e.g. `MDE_DEMO_PROFILES="node" ./run-demo.sh`.
+- `MDE_FORCE_NODE` — force the build onto a specific node install (a node binary or the
+  bin dir containing it), e.g. `MDE_FORCE_NODE=/opt/homebrew/opt/node/bin`. Useful to
+  ensure the build runs a node install the profile targets.
+- `MDE_DEMO_MODULES` — number of generated `.ts` modules in the workload.
+- `MDE_ALLOW_NON_VSCODE=1` — allow running outside VSCode's process tree.
+
 ## Notes
 
 - **Accurate measurement** relies on `mdatp diagnostic real-time-protection-statistics`

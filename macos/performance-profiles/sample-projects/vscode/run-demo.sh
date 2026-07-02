@@ -18,6 +18,14 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# --- Demo configuration (override via environment) --------------------------
+# Profiles applied in Phase 3, space-separated. Narrow it to run a subset,
+# e.g. MDE_DEMO_PROFILES="node".
+DEMO_PROFILES=${MDE_DEMO_PROFILES:-"node vscode vscode-tree git"}
+# Force the build onto a specific node install. Accepts a node binary OR the bin
+# dir containing it. Example: MDE_FORCE_NODE=/opt/homebrew/opt/node/bin
+FORCE_NODE=${MDE_FORCE_NODE:-}
+
 # Helper functions
 print_phase() {
     echo -e "${BLUE}=== $1 ===${NC}"
@@ -172,11 +180,11 @@ cleanup_exclusions() {
 }
 
 cleanup_profiles() {
-    # Remove any existing profiles completely silently
-    sudo mdatp performance-profiles remove --name node &>/dev/null || true
-    sudo mdatp performance-profiles remove --name vscode &>/dev/null || true
-    sudo mdatp performance-profiles remove --name vscode-tree &>/dev/null || true
-    sudo mdatp performance-profiles remove --name git &>/dev/null || true
+    # Remove any profiles this demo may have applied, silently.
+    local p
+    for p in node vscode vscode-tree git $DEMO_PROFILES; do
+        sudo mdatp performance-profiles remove --name "$p" &>/dev/null || true
+    done
 }
 
 capture_performance_snapshot() {
@@ -310,6 +318,10 @@ capture_environment_diagnostics() {
         echo "  npm: ${npm_bin:-not found} ($(npm --version 2>/dev/null))"
         if [ -n "$node_real" ]; then
             echo "  node install: $(node_install_kind "$node_real")"
+            echo "  node code signature (determines executable-signature match):"
+            codesign -dv --verbose=4 "$node_real" 2>&1 \
+                | grep -iE '^Identifier=|^TeamIdentifier=|^Signature=' \
+                | sed 's/^/    /' || echo "    (unable to read signature)"
         fi
         echo "  Installed Homebrew node formulas:"
         brew list --versions 2>/dev/null | grep -iE '^node( |@)' | sed 's/^/    /' || echo "    (brew not available)"
@@ -512,6 +524,12 @@ test_eicar() {
 # Phase 3 (profiles) looks IDENTICAL to the baseline. Pin the build to the canonical
 # node install so the demo actually exercises the profile it is demonstrating.
 resolve_profiled_node_bin() {
+    # Explicit override wins: accept either a node binary or the bin dir holding it.
+    if [ -n "$FORCE_NODE" ]; then
+        if [ -d "$FORCE_NODE" ] && [ -x "$FORCE_NODE/node" ]; then echo "$FORCE_NODE"; return 0; fi
+        if [ -x "$FORCE_NODE" ]; then dirname "$FORCE_NODE"; return 0; fi
+        return 1
+    fi
     local candidates=(
         /opt/homebrew/opt/node/bin/node
         /usr/local/opt/node/bin/node
@@ -691,16 +709,15 @@ phase_profiles() {
     print_phase "Phase 3: Performance Profiles (protected build)"
     
     cleanup_profiles
-    print_info "Applying node, vscode, and vscode-tree profiles..."
+    print_info "Applying profiles: $DEMO_PROFILES"
     
     cleanup_build
     
-    # Apply profiles (one per command)
-    sudo mdatp performance-profiles apply --name node
-    sudo mdatp performance-profiles apply --name vscode
-    sudo mdatp performance-profiles apply --name vscode-tree
-    sudo mdatp performance-profiles apply --name git
-    print_success "Profiles applied"
+    local p
+    for p in $DEMO_PROFILES; do
+        sudo mdatp performance-profiles apply --name "$p"
+    done
+    print_success "Profiles applied: $DEMO_PROFILES"
     
     # Run multiple builds to capture performance metrics
     echo ""
@@ -710,10 +727,9 @@ phase_profiles() {
     
     # Remove profiles
     print_info "Removing profiles..."
-    sudo mdatp performance-profiles remove --name node
-    sudo mdatp performance-profiles remove --name vscode
-    sudo mdatp performance-profiles remove --name vscode-tree
-    sudo mdatp performance-profiles remove --name git
+    for p in $DEMO_PROFILES; do
+        sudo mdatp performance-profiles remove --name "$p"
+    done
     print_success "Profiles removed"
 }
 
