@@ -92,6 +92,19 @@ code mde-demo.code-workspace
 ./run-demo.sh
 ```
 
+> **Important: run the demo from VSCode, not a plain terminal.**
+> The `vscode-tree` profile only mutes `node` when the build runs **inside VSCode's
+> process tree**. If you launch `run-demo.sh` from Terminal.app, the build's `node` is a
+> child of your shell (not VSCode), so `vscode-tree` won't cover it and Phase 3 (profiles)
+> will look identical to the baseline. To match a real dev workflow, run the
+> **"MDE Demo: Run All Phases"** task from VSCode (Terminal → Run Task) or launch
+> `./run-demo.sh` from VSCode's integrated terminal.
+>
+> The script detects its launch context: it walks the parent-process chain and refuses to
+> run outside VSCode. The `diagnostics.txt` in each run records the full process ancestry
+> and a "Build process tree under VSCode: yes/no" verdict. To run from a terminal anyway
+> (results then reflect terminal builds only), set `MDE_ALLOW_NON_VSCODE=1`.
+
 ## Project Details
 
 - **Build command**: `npm run compile` (TypeScript compilation)

@@ -31,6 +31,10 @@ print_error() {
     echo -e "${RED}✗ $1${NC}"
 }
 
+print_warning() {
+    echo -e "${RED}⚠ $1${NC}"
+}
+
 print_info() {
     echo -e "${YELLOW}ℹ $1${NC}"
 }
@@ -237,6 +241,42 @@ node_install_kind() {
 # phase behaved the way it did (which node ran the build, its install layout,
 # engine/version, tamper state, installed formulas). Without this, diagnosing a
 # lab-machine report is guesswork.
+# Walk the parent-process chain from a PID up to launchd, echoing "pid  command"
+# for each ancestor. Used to show HOW the demo (and therefore the build's node) was
+# launched — which determines whether the build sits inside a process tree that a
+# profile mutes.
+process_ancestry() {
+    local pid=$1
+    while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null; do
+        local line
+        line=$(ps -o ppid=,comm= -p "$pid" 2>/dev/null)
+        [ -n "$line" ] || break
+        local ppid=$(echo "$line" | awk '{print $1}')
+        local comm=$(echo "$line" | sed -E 's/^[[:space:]]*[0-9]+[[:space:]]+//')
+        echo "    $pid  $comm"
+        pid=$ppid
+    done
+}
+
+# Return 0 if any ancestor of $1 is a VSCode process. The build's file scans are only
+# suppressed by the vscode-tree profile when the build runs inside VSCode's subtree
+# (e.g. launched from VSCode's integrated terminal or task runner).
+under_vscode() {
+    local pid=$1
+    while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null; do
+        local line
+        line=$(ps -o ppid=,comm= -p "$pid" 2>/dev/null)
+        [ -n "$line" ] || break
+        local ppid=$(echo "$line" | awk '{print $1}')
+        local comm=$(echo "$line" | sed -E 's/^[[:space:]]*[0-9]+[[:space:]]+//')
+        case "$comm" in
+            *Visual\ Studio\ Code.app*|*/Code\ Helper*|*/Electron*) return 0;;
+        esac
+        pid=$ppid
+    done
+    return 1
+}
+
 capture_environment_diagnostics() {
     local out="$RUN_DIR/diagnostics.txt"
     local node_bin node_real npm_bin
@@ -279,6 +319,20 @@ capture_environment_diagnostics() {
         echo "  Applied:"
         mdatp performance-profiles list-applied 2>/dev/null | sed 's/^/    /' || echo "    (unable to capture)"
         echo "  'node' available: $(mdatp performance-profiles list-available 2>/dev/null | grep -qx node && echo yes || echo no)"
+        echo ""
+
+        echo "Launch context (does the build run inside VSCode's process tree?):"
+        if under_vscode "$$"; then
+            echo "  Build process tree under VSCode: yes"
+            echo "  -> node runs inside VSCode's subtree, so the vscode-tree profile can mute its scans."
+        else
+            echo "  Build process tree under VSCode: no"
+            echo "  -> node runs OUTSIDE VSCode's subtree. The vscode-tree profile (which mutes VSCode's"
+            echo "     children) will NOT cover this build's node. Run the demo from VSCode's integrated"
+            echo "     terminal so node becomes a child of VSCode, matching a real dev workflow."
+        fi
+        echo "  Process ancestry (this script -> ... -> launchd):"
+        process_ancestry "$$"
         echo ""
     } > "$out"
     print_success "Environment diagnostics captured: $out"
@@ -552,6 +606,26 @@ check_prerequisites() {
     fi
     
     print_success "All prerequisites met"
+
+    # The whole point of the demo is to show performance profiles reducing scan load
+    # during a build. The vscode-tree profile only mutes node when node runs inside
+    # VSCode's process tree. If the demo is launched from a plain terminal, node is a
+    # child of bash (not VSCode) and profiles won't appear to help. Warn loudly.
+    if ! under_vscode "$$"; then
+        echo ""
+        print_warning "This demo is NOT running inside VSCode's process tree."
+        print_info "  The build's node will run as a child of this shell, outside VSCode."
+        print_info "  The vscode-tree profile mutes VSCode's children, so it will NOT cover"
+        print_info "  this build and Phase 3 (profiles) may look identical to the baseline."
+        print_info "  For a representative result, run the demo from VSCode: open this folder"
+        print_info "  in VSCode and run the \"MDE Demo: Run All Phases\" task (Terminal > Run Task),"
+        print_info "  or launch ./run-demo.sh from VSCode's integrated terminal."
+        if [ "${MDE_ALLOW_NON_VSCODE:-0}" != "1" ]; then
+            print_info "  Set MDE_ALLOW_NON_VSCODE=1 to run anyway (results reflect terminal builds only)."
+            exit 1
+        fi
+        print_warning "  MDE_ALLOW_NON_VSCODE=1 set — continuing outside VSCode."
+    fi
 
     # Capture machine-specific facts so a report produced on a lab machine is
     # self-explaining (which node ran the build, its install layout, engine/tamper
