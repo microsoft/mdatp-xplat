@@ -251,7 +251,8 @@ function extractBuildTimings(filePath) {
 function extractPhaseMetrics(filePath) {
     const out = {
         median: null, avg: null, min: null, max: null,
-        filesScanned: null, scanTimeMs: null, avCpu: null, allCpu: null, peakRss: null,
+        filesScanned: null, scanTimeMs: null, avCpu: null, entCpu: null, allCpu: null,
+        peakRss: null, entPeakRss: null, allPeakRss: null,
     };
     try {
         const txt = fs.readFileSync(filePath, 'utf-8');
@@ -262,9 +263,12 @@ function extractPhaseMetrics(filePath) {
         out.max = grab(/Max build time:\s*([\d.]+)s/);
         out.filesScanned = grab(/MDE files scanned during builds:\s*(-?[\d]+)/);
         out.scanTimeMs = grab(/MDE scan time during builds \(ms\):\s*(-?[\d.]+)/);
-        out.avCpu = grab(/MDE unprivileged AV avg CPU \(%\):\s*([\d.]+)/);
-        out.allCpu = grab(/MDE all daemons avg CPU \(%\):\s*([\d.]+)/);
+        out.avCpu = grab(/MDE unprivileged AV avg CPU \(%\):\s*(-?[\d.]+)/);
+        out.entCpu = grab(/MDE enterprise EDR avg CPU \(%\):\s*(-?[\d.]+)/);
+        out.allCpu = grab(/MDE all daemons avg CPU \(%\):\s*(-?[\d.]+)/);
         out.peakRss = grab(/MDE unprivileged AV peak RSS \(MB\):\s*([\d.]+)/);
+        out.entPeakRss = grab(/MDE enterprise EDR peak RSS \(MB\):\s*([\d.]+)/);
+        out.allPeakRss = grab(/MDE all daemons peak RSS \(MB\):\s*([\d.]+)/);
     } catch (e) { /* leave nulls */ }
     return out;
 }
@@ -394,9 +398,12 @@ const report = `# MDE Performance Profile Demo Report
 | Average build time (s) | ${baselinePhase.avg || 'N/A'} | ${exclusionsPhase.avg || 'N/A'} | ${profilesPhase.avg || 'N/A'} |
 | MDE files scanned | ${num(baselinePhase.filesScanned)} | ${num(exclusionsPhase.filesScanned)} | ${num(profilesPhase.filesScanned)} |
 | MDE scan time (ms) | ${num(baselinePhase.scanTimeMs)} | ${num(exclusionsPhase.scanTimeMs)} | ${num(profilesPhase.scanTimeMs)} |
-| AV avg CPU (%) | ${baselinePhase.avCpu || 'N/A'} | ${exclusionsPhase.avCpu || 'N/A'} | ${profilesPhase.avCpu || 'N/A'} |
+| AV (unpriv) avg CPU (%) | ${baselinePhase.avCpu || 'N/A'} | ${exclusionsPhase.avCpu || 'N/A'} | ${profilesPhase.avCpu || 'N/A'} |
+| Enterprise EDR avg CPU (%) | ${baselinePhase.entCpu || 'N/A'} | ${exclusionsPhase.entCpu || 'N/A'} | ${profilesPhase.entCpu || 'N/A'} |
 | All-daemons avg CPU (%) | ${baselinePhase.allCpu || 'N/A'} | ${exclusionsPhase.allCpu || 'N/A'} | ${profilesPhase.allCpu || 'N/A'} |
-| AV peak RSS (MB) | ${baselinePhase.peakRss || 'N/A'} | ${exclusionsPhase.peakRss || 'N/A'} | ${profilesPhase.peakRss || 'N/A'} |
+| AV (unpriv) peak RSS (MB) | ${baselinePhase.peakRss || 'N/A'} | ${exclusionsPhase.peakRss || 'N/A'} | ${profilesPhase.peakRss || 'N/A'} |
+| Enterprise EDR peak RSS (MB) | ${baselinePhase.entPeakRss || 'N/A'} | ${exclusionsPhase.entPeakRss || 'N/A'} | ${profilesPhase.entPeakRss || 'N/A'} |
+| All-daemons peak RSS (MB) | ${baselinePhase.allPeakRss || 'N/A'} | ${exclusionsPhase.allPeakRss || 'N/A'} | ${profilesPhase.allPeakRss || 'N/A'} |
 | EICAR | ${eicarBadge('baseline_eicar.txt')} | ${eicarBadge('exclusions_eicar.txt')} | ${eicarBadge('profiles_eicar.txt')} |
 
 Exclusions phase excluded folders: \`out\`, \`node_modules\`, \`.build\`. Negative "files scanned"/"scan time" in the exclusions phase is a per-PID counter artifact — trust AV CPU as the signal.
