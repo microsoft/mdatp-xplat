@@ -79,11 +79,17 @@ median() {
     printf '%s\n' "$@" | sort -n | awk '{a[NR]=$1} END{ if(NR==0){print 0; exit} m=int((NR+1)/2); if(NR%2){print a[m]} else {printf "%.2f\n",(a[m]+a[m+1])/2} }'
 }
 
-# Total cumulative CPU seconds consumed by MDE daemons. Pass a process-name
-# filter: "wdavdaemon" for all three daemons, or "wdavdaemon_unpri" for just the
-# unprivileged antivirus scanner (the one users watch spike in Activity Monitor).
-# Matches on ucomm (truncated command name) because the executable path contains
-# a space ("Microsoft Defender.app") that would break path-based parsing.
+# Total cumulative CPU seconds consumed by MDE daemons, summed over every process
+# whose truncated command name (ucomm) contains the given filter.
+# MDE on macOS runs three cooperating daemons (per the internal macOS Performance
+# TSG): "wdavdaemon" is the PRIVILEGED core daemon that receives EndpointSecurity
+# events from epsext and routes them via IPC to the two backends;
+# "wdavdaemon_enterprise" is the EDR backend; "wdavdaemon_unprivileged" is the
+# AV / real-time-protection (RTP) backend that does file scanning (the one users
+# watch spike in Activity Monitor). Filter "wdavdaemon" is a substring, so it sums
+# all three; "wdavdaemon_unpri" / "wdavdaemon_enter" isolate a single backend.
+# Matches on ucomm because the executable path contains a space
+# ("Microsoft Defender.app") that would break path-based parsing.
 mde_cpu_seconds() {
     local filter=${1:-wdavdaemon}
     ps -Ao time=,ucomm= 2>/dev/null | awk -v f="$filter" '
