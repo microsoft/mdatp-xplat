@@ -31,13 +31,19 @@ fi
 
 echo ""
 echo "🚀 Opening the workload in Xcode..."
-open "$WORKLOAD_DIR/Package.swift"
+XCODEPROJ="$WORKLOAD_DIR/Demos/FluentUIDemo_iOS/FluentUI.Demo.xcodeproj"
+if [ -d "$XCODEPROJ" ]; then
+    open "$XCODEPROJ"
+else
+    echo "⚠ FluentUI.Demo.xcodeproj not found — opening the Swift package instead."
+    open "$WORKLOAD_DIR/Package.swift"
+fi
 
 cat <<'EOF'
 
-Demo ready. Once Xcode finishes resolving the Swift package:
+Demo ready. Once Xcode finishes resolving packages:
 
-  1. Select the "FluentUI" scheme (top toolbar).
+  1. Select the "Demo.Dogfood" scheme (top toolbar) and an iOS Simulator destination.
   2. Build with Cmd+B — this build runs *inside* Xcode's process tree.
   3. In a terminal, apply the IDE profile so this in-IDE build is muted:
 
@@ -47,6 +53,11 @@ Demo ready. Once Xcode finishes resolving the Swift package:
   5. Clean up:
 
        sudo mdatp performance-profiles remove --name xcode-ide-tree
+
+Want an MDE "report card" printed in Xcode's build log after each build (applied
+profiles + files scanned during the build)? Enable the scheme pre/post-actions:
+
+    ./xcode-report.sh on      # then build in Xcode; ./xcode-report.sh off when done
 
 For the automated, measured three-phase comparison (Baseline / AV Exclusions /
 Performance Profiles) with a generated REPORT.md, run the terminal demo instead:

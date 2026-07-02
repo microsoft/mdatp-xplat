@@ -56,14 +56,48 @@ There are two related profiles, and they cover different things:
   open the workload in Xcode and build with Cmd+B:
 
   ```bash
-  ./open-demo.sh   # fetches the workload and opens Package.swift in Xcode
+  ./open-demo.sh   # fetches the workload and opens FluentUI.Demo.xcodeproj in Xcode
   ```
 
-  `open-demo.sh` prints the exact `mdatp performance-profiles apply --name xcode-ide-tree`
-  steps to run while building from the IDE.
+  `open-demo.sh` opens the iOS demo project, then prints the exact
+  `mdatp performance-profiles apply --name xcode-ide-tree` steps to run while building
+  the `Demo.Dogfood` scheme from the IDE.
 
 > Note: the earlier version of this demo referenced a profile named `xcode-tree`. That
 > profile does not exist — the real names are `xcode` and `xcode-ide-tree`.
+
+## In-build report card (verify the profile live, in Xcode's build log)
+
+The Xcode analog of the Android sample's Gradle report card. `mde-profile-report.sh`
+reads (never changes) MDE state — `mdatp performance-profiles list-applied` and
+`mdatp diagnostic real-time-protection-statistics` — and reports, for a single build:
+which profiles are applied, whether one covers the build, and **MDE files scanned /
+scan time during the build** (the empirical proof — drops toward ≈0 when covered).
+
+Xcode has no global init directory like Gradle's `~/.gradle/init.d`, so the report is
+wired in as Scheme **Build pre/post-actions** (Edit Scheme → Build → Pre-actions /
+Post-actions). `xcode-report.sh` injects/removes them on the `Demo.Dogfood` scheme:
+
+```bash
+./xcode-report.sh on       # inject pre/post-actions into the scheme
+# open FluentUI.Demo.xcodeproj, select Demo.Dogfood, Build (Cmd+B)
+./xcode-report.sh off      # remove them when done
+```
+
+The pre-action snapshots MDE scan counters; the post-action snapshots again and prints
+the report card. Because Xcode buries pre/post-action output in the build log (Report
+navigator), the post-action also fires a desktop notification and writes the report to
+`$TMPDIR/mde-xcode-report.txt`.
+
+**Demo flow that proves the profile is correct:** build once (report shows scanning
+active) → `sudo mdatp performance-profiles apply --name xcode-ide-tree` → build again
+(files scanned during the build collapse toward ≈0). The before/after report card *is*
+the proof.
+
+> The toolchain profile (`xcode`) is a definitive coverage signal — it matches by
+> install location. `xcode-ide-tree` only covers processes inside the IDE tree, and the
+> "inside Xcode tree" line is a heuristic (it can read "can't tell"), so trust the scan
+> delta as the ground truth.
 
 ## Prerequisites
 
@@ -99,8 +133,10 @@ Environment variables honored by the scripts:
 
 - `setup-project.sh` — clones the pinned workload into `workload.noindex/`
 - `run-demo.sh` — the measured three-phase terminal demo (generates `REPORT.md`)
-- `open-demo.sh` — opens the workload in Xcode for the `xcode-ide-tree` path
-- `generate-report.js` — renders `REPORT.md` from the captured snapshots
+- `open-demo.sh` — opens FluentUI.Demo.xcodeproj in Xcode for the `xcode-ide-tree` path
+- `mde-profile-report.sh` — MDE report card printed by the scheme Build pre/post-actions
+- `xcode-report.sh` — installs/removes the report-card pre/post-actions on the `Demo.Dogfood` scheme
+- The report is rendered by the shared `../lib/generate-report.js`
 
 ## Cleanup
 
