@@ -247,6 +247,36 @@ function extractBuildTimings(filePath) {
     }
 }
 
+// Extract the "Build Performance Metrics" block (values run-demo.sh writes directly).
+function extractPhaseMetrics(filePath) {
+    const out = {
+        median: null, avg: null, min: null, max: null,
+        filesScanned: null, scanTimeMs: null, avCpu: null, allCpu: null, peakRss: null,
+    };
+    try {
+        const txt = fs.readFileSync(filePath, 'utf-8');
+        const grab = (re) => { const m = txt.match(re); return m ? m[1] : null; };
+        out.median = grab(/Median build time:\s*([\d.]+)s/);
+        out.avg = grab(/Average build time:\s*([\d.]+)s?/);
+        out.min = grab(/Min build time:\s*([\d.]+)s/);
+        out.max = grab(/Max build time:\s*([\d.]+)s/);
+        out.filesScanned = grab(/MDE files scanned during builds:\s*(-?[\d]+)/);
+        out.scanTimeMs = grab(/MDE scan time during builds \(ms\):\s*(-?[\d.]+)/);
+        out.avCpu = grab(/MDE unprivileged AV avg CPU \(%\):\s*([\d.]+)/);
+        out.allCpu = grab(/MDE all daemons avg CPU \(%\):\s*([\d.]+)/);
+        out.peakRss = grab(/MDE unprivileged AV peak RSS \(MB\):\s*([\d.]+)/);
+    } catch (e) { /* leave nulls */ }
+    return out;
+}
+
+// Format an integer with thousands separators, or 'N/A'.
+function num(v) {
+    if (v === null || v === undefined) return 'N/A';
+    const n = Number(v);
+    if (Number.isNaN(n)) return 'N/A';
+    return n.toLocaleString('en-US');
+}
+
 // Function to extract total files scanned from a snapshot
 function extractTotalFilesScanned(filePath) {
     try {
@@ -320,6 +350,11 @@ const profilesBeforeScanned = extractTotalFilesScanned(profilesBeforePath);
 const profilesAfterScanned = extractTotalFilesScanned(profilesAfterPath);
 const profilesFilesScanned = profilesAfterScanned.total - profilesBeforeScanned.total;
 
+// Per-phase MDE metrics (as written by run-demo.sh in the "Build Performance Metrics" block)
+const baselinePhase = extractPhaseMetrics(baselineAfterPath);
+const exclusionsPhase = extractPhaseMetrics(exclusionsAfterPath);
+const profilesPhase = extractPhaseMetrics(profilesAfterPath);
+
 // Generate markdown report
 const report = `# MDE Performance Profile Demo Report
 
@@ -328,111 +363,48 @@ const report = `# MDE Performance Profile Demo Report
 
 ---
 
-## Executive Summary
+## Results
 
-This demo evaluated three strategies for optimizing Microsoft Defender for Endpoint (MDE) performance during development builds:
+| Metric | Baseline | AV Exclusions | Perf Profiles |
+|---|---:|---:|---:|
+| Median build time (s) | ${baselinePhase.median || 'N/A'} | ${exclusionsPhase.median || 'N/A'} | ${profilesPhase.median || 'N/A'} |
+| Average build time (s) | ${baselinePhase.avg || 'N/A'} | ${exclusionsPhase.avg || 'N/A'} | ${profilesPhase.avg || 'N/A'} |
+| MDE files scanned | ${num(baselinePhase.filesScanned)} | ${num(exclusionsPhase.filesScanned)} | ${num(profilesPhase.filesScanned)} |
+| MDE scan time (ms) | ${num(baselinePhase.scanTimeMs)} | ${num(exclusionsPhase.scanTimeMs)} | ${num(profilesPhase.scanTimeMs)} |
+| AV avg CPU (%) | ${baselinePhase.avCpu || 'N/A'} | ${exclusionsPhase.avCpu || 'N/A'} | ${profilesPhase.avCpu || 'N/A'} |
+| All-daemons avg CPU (%) | ${baselinePhase.allCpu || 'N/A'} | ${exclusionsPhase.allCpu || 'N/A'} | ${profilesPhase.allCpu || 'N/A'} |
+| AV peak RSS (MB) | ${baselinePhase.peakRss || 'N/A'} | ${exclusionsPhase.peakRss || 'N/A'} | ${profilesPhase.peakRss || 'N/A'} |
+| EICAR | ${eicarBadge('baseline_eicar.txt')} | ${eicarBadge('exclusions_eicar.txt')} | ${eicarBadge('profiles_eicar.txt')} |
 
-| Strategy | Protection | Performance | EICAR | Recommendation |
-|----------|-----------|-------------|-------|-----------------|
-| **Baseline** | ✅ Full | Baseline | ${eicarBadge('baseline_eicar.txt')} | Secure baseline |
-| **Exclusions** | ⚠️ Gap | Faster | ${eicarBadge('exclusions_eicar.txt')} | Not recommended |
-| **Profiles** | ✅ Full | Optimized | ${eicarBadge('profiles_eicar.txt')} | ✅ **Recommended** |
+Exclusions phase excluded folders: \`out\`, \`node_modules\`, \`.build\`. Negative "files scanned"/"scan time" in the exclusions phase is a per-PID counter artifact — trust AV CPU as the signal.
 
 ---
 
-## Detailed Results
+## Scan Sources by Phase
 
-### Phase 1: Baseline (Full Scanning)
-- **Configuration:** No exclusions, no profiles
-- **Build Time:** Average: ${baselineTimings.avgTime ? baselineTimings.avgTime + 's' : 'N/A'} (Min: ${baselineTimings.minTime ? baselineTimings.minTime + 's' : 'N/A'}, Max: ${baselineTimings.maxTime ? baselineTimings.maxTime + 's' : 'N/A'})
-- **Scanning Activity:** ${baselineMetrics.events || 'N/A'} hot events
-- **Top Process:** ${baselineMetrics.topEvents && baselineMetrics.topEvents[0] ? baselineMetrics.topEvents[0].process + ' (' + baselineMetrics.topEvents[0].count + ' events)' : 'N/A'}
-- **Protection Status:** ✅ Full real-time protection
-- **EICAR Test:** ${readEicarResult('baseline_eicar.txt')}
-- **Verdict:** Secure baseline with full MDE overhead (slowest builds)
+### Baseline
 
-**Top 5 Processes Being Scanned:**
+Top processes scanned:
 ${formatHotEventsTable(baselineMetrics.topEvents)}
 
-**Top scan sources DURING the build (live capture):**
+During the build (live capture):
 ${formatLiveHotEvents('baseline_(full_scanning)_hot_events.txt')}
 
-### Phase 2: AV Exclusions (Protection Gap)
-- **Configuration:** Excluded folders: \`out\`, \`node_modules\`, \`.build\`
-- **Build Time:** Average: ${exclusionsTimings.avgTime ? exclusionsTimings.avgTime + 's' : 'N/A'} (Min: ${exclusionsTimings.minTime ? exclusionsTimings.minTime + 's' : 'N/A'}, Max: ${exclusionsTimings.maxTime ? exclusionsTimings.maxTime + 's' : 'N/A'})
-- **Scanning Activity:** ${exclusionsMetrics.events || 'N/A'} hot events (compensating for gaps)
-- **Top Process:** ${exclusionsMetrics.topEvents && exclusionsMetrics.topEvents[0] ? exclusionsMetrics.topEvents[0].process + ' (' + exclusionsMetrics.topEvents[0].count + ' events)' : 'N/A'}
-- **Protection Status:** ⚠️ **Protection Gap** - excluded paths NOT scanned
-- **EICAR Test:** ${readEicarResult('exclusions_eicar.txt')}
-- **Verdict:** Faster builds but creates security blind spot
+### Exclusions
 
-**Top 5 Processes Being Scanned:**
+Top processes scanned:
 ${formatHotEventsTable(exclusionsMetrics.topEvents)}
 
-**Top scan sources DURING the build (live capture):**
+During the build (live capture):
 ${formatLiveHotEvents('with_exclusions_hot_events.txt')}
 
-### Phase 3: Performance Profiles (Recommended)
-- **Configuration:** Profiles applied:
-  - \`git\` - Optimizes git operations
-  - \`node\` - Optimizes Node.js runtime
-  - \`vscode\` - Optimizes VS Code editor
-  - \`vscode-tree\` - Optimizes VS Code file tree
-- **Build Time:** Average: ${profilesTimings.avgTime ? profilesTimings.avgTime + 's' : 'N/A'} (Min: ${profilesTimings.minTime ? profilesTimings.minTime + 's' : 'N/A'}, Max: ${profilesTimings.maxTime ? profilesTimings.maxTime + 's' : 'N/A'})
-- **Scanning Activity:** ${profilesMetrics.events || 'N/A'} hot events
-- **Top Process:** ${profilesMetrics.topEvents && profilesMetrics.topEvents[0] ? profilesMetrics.topEvents[0].process + ' (' + profilesMetrics.topEvents[0].count + ' events)' : 'N/A'}
-- **Protection Status:** ✅ Full real-time protection maintained
-- **EICAR Test:** ${readEicarResult('profiles_eicar.txt')}
-- **Verdict:** Fast builds AND full threat detection - optimal for development
+### Profiles
 
-**Top 5 Processes Being Scanned:**
+Top processes scanned:
 ${formatHotEventsTable(profilesMetrics.topEvents)}
 
-**Top scan sources DURING the build (live capture):**
+During the build (live capture):
 ${formatLiveHotEvents('with_performance_profiles_hot_events.txt')}
-
----
-
-## Key Findings
-
-### ✅ Performance Profiles Are Superior
-
-**Why profiles win:**
-- ✅ Maintains 100% threat detection capability
-- ✅ Reduces MDE scanning overhead on dev tools (git, node, vscode)
-- ✅ No protection gaps or blind spots
-- ✅ Comparable performance to exclusions without security trade-off
-- ✅ Recommended for all development environments
-
-**Evidence:**
-- EICAR threat was detected in Phase 3 (profiles) but not Phase 2 (exclusions)
-- Scanning throughput is optimized without bypassing protection
-
-### ⚠️ Exclusions Create Unacceptable Risk
-
-**Why exclusions fail:**
-- ❌ Creates complete blind spot for excluded folders
-- ❌ Files in excluded paths are NOT scanned
-- ❌ EICAR test file went completely undetected
-- ❌ Performance gain comes at cost of security
-- ❌ Not suitable for modern security requirements
-
----
-
-## Recommendation
-
-### Use MDE Performance Profiles for Development Workflows
-
-Apply the following profiles to balance developer productivity with security:
-
-\`\`\`bash
-mdatp performance-profiles apply --name git
-mdatp performance-profiles apply --name node
-mdatp performance-profiles apply --name vscode
-mdatp performance-profiles apply --name vscode-tree
-\`\`\`
-
-**Result:** Optimal build speed with maintained threat detection and real-time protection.
 
 ---
 
