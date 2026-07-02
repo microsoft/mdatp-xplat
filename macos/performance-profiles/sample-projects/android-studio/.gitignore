@@ -8,3 +8,5 @@ build/
 *.log
 .DS_Store
 local.properties
+# Setup warm-build log (only kept on failure)
+setup-build.log

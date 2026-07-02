@@ -60,6 +60,27 @@ fi
 info "JDK: $("$JAVA_HOME/bin/java" -version 2>&1 | head -1)"
 info "Android SDK: $ANDROID_HOME"
 
+# The workload pins compileSdk 34 + build-tools 31.0.0. If those SDK packages are
+# missing, Gradle fails deep in the build with an opaque error — check up front and
+# give an actionable message instead.
+missing_pkgs=()
+[ -d "$ANDROID_HOME/platforms/android-34" ] || missing_pkgs+=("platforms;android-34")
+ls "$ANDROID_HOME"/build-tools/31.* >/dev/null 2>&1 || missing_pkgs+=("build-tools;31.0.0")
+[ -d "$ANDROID_HOME/platform-tools" ] || missing_pkgs+=("platform-tools")
+if [ ${#missing_pkgs[@]} -gt 0 ]; then
+    err "Required Android SDK packages are missing: ${missing_pkgs[*]}"
+    err "  Install them (no sudo):"
+    err "    \"$ANDROID_HOME/bin/sdkmanager\" ${missing_pkgs[*]}"
+    err "    yes | \"$ANDROID_HOME/bin/sdkmanager\" --licenses"
+    exit 1
+fi
+# Licenses must be accepted or Gradle's SDK auto-provisioning aborts.
+if [ ! -d "$ANDROID_HOME/licenses" ] || [ -z "$(ls -A "$ANDROID_HOME/licenses" 2>/dev/null)" ]; then
+    err "Android SDK licenses have not been accepted."
+    err "  Run: yes | \"$ANDROID_HOME/bin/sdkmanager\" --licenses"
+    exit 1
+fi
+
 # --- Fetch the pinned workload ---------------------------------------------
 if [ -d "$WORKLOAD_DIR/.git" ] && git -C "$WORKLOAD_DIR" rev-parse --verify --quiet "$WORKLOAD_REF^{commit}" >/dev/null 2>&1; then
     ok "Workload already present at pinned commit ($WORKLOAD_DIR)"
@@ -93,11 +114,21 @@ ok "Wrote local.properties (sdk.dir=$ANDROID_HOME)"
 # download every dependency ONCE here. This also verifies the workload builds on
 # this machine before the measured run.
 info "Warming Gradle caches with an initial build ($GRADLE_TASK) — first run downloads dependencies, may take a few minutes..."
-if ( cd "$WORKLOAD_DIR" && ./gradlew "$GRADLE_TASK" --no-daemon ) >/dev/null 2>&1; then
+BUILD_LOG="$PROJECT_DIR/setup-build.log"
+if ( cd "$WORKLOAD_DIR" && ./gradlew "$GRADLE_TASK" --no-daemon --stacktrace ) >"$BUILD_LOG" 2>&1; then
     ok "Initial build succeeded — caches warm, workload verified buildable"
+    rm -f "$BUILD_LOG"
 else
-    err "Initial Gradle build failed. Re-run without redirection to see the error:"
-    err "  ( cd $WORKLOAD_DIR && JAVA_HOME=$JAVA_HOME ANDROID_HOME=$ANDROID_HOME ./gradlew $GRADLE_TASK --no-daemon )"
+    err "Initial Gradle build failed. Last 40 lines of the build log:"
+    echo "----------------------------------------------------------------------"
+    tail -40 "$BUILD_LOG"
+    echo "----------------------------------------------------------------------"
+    err "Full log saved to: $BUILD_LOG"
+    err "Reproduce manually with:"
+    err "  ( cd $WORKLOAD_DIR && JAVA_HOME=$JAVA_HOME ANDROID_HOME=$ANDROID_HOME ./gradlew $GRADLE_TASK --no-daemon --stacktrace )"
+    err "Common causes on a fresh/lab machine:"
+    err "  • Network/proxy blocks dependency download — set HTTP(S)_PROXY or use a machine with access."
+    err "  • Missing SDK packages or unaccepted licenses (see checks above)."
     exit 1
 fi
 
