@@ -1,42 +1,66 @@
 #!/usr/bin/env node
+//
+// lib/generate-report.js - Shared REPORT.md generator for the MDE performance-
+// profile demos. Reads the diagnostic snapshots written by lib/measure.sh from a
+// run directory and renders a Markdown report.
+//
+// Per-sample text (title, excluded-folders note, environment intro) is read from
+// an optional report-config.json in the run directory (written by generate_report
+// in measure.sh):
+//   { "title": "...", "excludedNote": "...", "envIntro": "..." }
+// All fields are optional; sensible defaults are used when absent.
 
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// Function to strip ANSI color codes
 function stripAnsiCodes(str) {
     return str.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
-// Get run directory from command line argument
 const runDir = process.argv[2];
-
 if (!runDir) {
     console.error('Usage: node generate-report.js <run-directory>');
     process.exit(1);
 }
-
-// Check if run directory exists
 if (!fs.existsSync(runDir)) {
     console.error(`Run directory not found: ${runDir}`);
     process.exit(1);
 }
+
+// Load per-sample report configuration (optional).
+const cfg = (() => {
+    const defaults = {
+        title: 'MDE Performance Profile Demo Report',
+        excludedNote: '',
+        envIntro: 'Machine-specific facts captured at run time (useful when this report was ' +
+            'produced on a different machine — e.g. to confirm which toolchain ran the build ' +
+            'and whether the performance profile could actually match it):',
+    };
+    try {
+        const raw = JSON.parse(fs.readFileSync(path.join(runDir, 'report-config.json'), 'utf-8'));
+        return {
+            title: raw.title || defaults.title,
+            excludedNote: raw.excludedNote || defaults.excludedNote,
+            envIntro: raw.envIntro || defaults.envIntro,
+        };
+    } catch (e) {
+        return defaults;
+    }
+})();
 
 // Function to extract metrics from log file
 function extractMetrics(filePath) {
     try {
         const content = fs.readFileSync(filePath, 'utf-8');
         const lines = content.split('\n');
-        
+
         let events = 'N/A';
         let throughput = 'N/A';
-        let filesScanned = 'N/A';
         let exclusions = [];
         let profiles = [];
         let topEvents = [];
-        
-        // Find the final Total Events line (with non-zero count)
+
         let finalEventCount = null;
         let finalEventIdx = -1;
         for (let i = 0; i < lines.length; i++) {
@@ -48,32 +72,27 @@ function extractMetrics(filePath) {
                 }
             }
         }
-        
+
         if (finalEventCount) {
             events = finalEventCount;
-            // Also get throughput from same line
             if (finalEventIdx >= 0) {
                 const match = lines[finalEventIdx].match(/Throughput:\s*([\d.]+) events\/sec/);
                 if (match) throughput = match[1];
             }
         }
-        
-        // Extract total files scanned (cumulative metric from real-time protection)
-        // Note: This is system-wide cumulative data, useful for showing scan time
+
         let scanTime = 'N/A';
         for (const line of lines) {
             if (line.includes('Scan time (ns):')) {
                 const match = line.match(/Scan time \(ns\): (\d+)ns/);
                 if (match) {
                     const ns = parseInt(match[1]);
-                    const seconds = (ns / 1000000000).toFixed(2);
-                    scanTime = seconds;
+                    scanTime = (ns / 1000000000).toFixed(2);
                     break;
                 }
             }
         }
-        
-        // Extract top hot event sources - look for the LAST occurrence (has actual data)
+
         let lastHotEventIdx = -1;
         for (let i = lines.length - 1; i >= 0; i--) {
             if (lines[i].includes('=========== Top') && lines[i].includes('Hot Event Sources')) {
@@ -81,41 +100,27 @@ function extractMetrics(filePath) {
                 break;
             }
         }
-        
+
         if (lastHotEventIdx >= 0) {
-            let eventIdx = lastHotEventIdx + 2; // Skip header line
-            
-            // Collect up to 5 events
+            let eventIdx = lastHotEventIdx + 2;
             while (eventIdx < lines.length && topEvents.length < 5) {
                 const line = lines[eventIdx];
-                
-                // Stop at the next section header
                 if (line.includes('===========')) break;
-                
-                // Skip empty lines and header lines
                 if (!line.trim() || line.includes('count') && line.includes('signing')) {
                     eventIdx++;
                     continue;
                 }
-                
-                // Parse the event line - format: count  signing_id  team_id  path
                 const startsWithNumber = /^\d+\s+/.test(line.trim());
-                
                 if (startsWithNumber) {
-                    // Split on multiple spaces to separate columns
                     const parts = line.trim().split(/\s{2,}/);
-                    
                     if (parts.length >= 3) {
                         const count = parts[0];
                         const process = parts[1];
                         let path = parts[2];
-                        
-                        // If path seems incomplete (very short), try to get it from next line
                         if (path && path.length < 5 && eventIdx + 1 < lines.length) {
                             path = path + lines[eventIdx + 1].trim();
-                            eventIdx++; // Skip the next line since we consumed it
+                            eventIdx++;
                         }
-                        
                         topEvents.push({
                             count: count,
                             process: stripAnsiCodes(process),
@@ -123,56 +128,30 @@ function extractMetrics(filePath) {
                         });
                     }
                 }
-                
                 eventIdx++;
             }
         }
-        
-        // Extract exclusions
-        for (const line of lines) {
-            if (line.includes('Excluded folder')) {
-                const nextIdx = lines.indexOf(line) + 2;
-                if (nextIdx < lines.length && lines[nextIdx].includes('Path:')) {
-                    const pathMatch = lines[nextIdx].match(/Path: "(.+)"/);
-                    if (pathMatch) exclusions.push(pathMatch[1]);
-                }
-            }
-            if (line.match(/^[a-z-]+$/) && !line.includes('=')) {
-                // Simple profile names
-                const profiles_list = ['git', 'xcode', 'xcode-ide-tree', 'make-tree', 'codesign'];
-                if (profiles_list.includes(line.trim())) {
-                    profiles.push(line.trim());
-                }
-            }
-        }
-        
+
         return { events, throughput, exclusions, profiles, topEvents, scanTime };
     } catch (e) {
         return { events: 'N/A', throughput: 'N/A', exclusions: [], profiles: [], topEvents: [] };
     }
 }
 
-// Function to format hot events for display
 function formatHotEventsTable(topEvents) {
     if (!topEvents || topEvents.length === 0) {
         return 'No hot events captured';
     }
-    
     let table = '\n| Count | Process | Location |\n|-------|---------|----------|\n';
     for (const event of topEvents) {
-        const path = event.path.length > 60 ? event.path.substring(0, 57) + '...' : event.path;
-        table += `| ${event.count} | ${event.process} | ${path} |\n`;
+        const p = event.path.length > 60 ? event.path.substring(0, 57) + '...' : event.path;
+        table += `| ${event.count} | ${event.process} | ${p} |\n`;
     }
     return table;
 }
 
-// Format the DURING-build hot-event capture for a phase. Unlike the post-build
-// snapshot (idle noise), this shows the cumulative top scan sources measured WHILE
-// the build ran, which is what reveals whether a profile actually suppressed a
-// process's scan load.
-// Read the persisted EICAR probe result for a phase (written by run-demo.sh's
-// test_eicar) and render the ACTUAL detection outcome. Falls back gracefully for
-// older runs that predate real EICAR persistence.
+// Read the persisted EICAR probe result for a phase (written by measure.sh's
+// test_eicar) and render the ACTUAL detection outcome.
 function readEicarResult(fileName) {
     const p = path.join(runDir, fileName);
     if (!fs.existsSync(p)) {
@@ -216,12 +195,8 @@ function formatLiveHotEvents(fileName) {
     }
 
     const summary = lines.find(l => l.startsWith('Total Events:')) || '';
-
-    // Split the capture into its Sources (processes) and Targets (files/paths)
-    // sections using the delimiters emitted by summarize_hot_events().
     const srcIdx = lines.findIndex(l => l.includes('Hot Event Sources'));
     const tgtIdx = lines.findIndex(l => l.includes('Hot Event Targets'));
-
     const dataRows = (arr) => arr.filter(l => /^\s*\d+\s/.test(l)).slice(0, 10);
 
     let sourceRows = [];
@@ -233,9 +208,6 @@ function formatLiveHotEvents(fileName) {
     if (tgtIdx >= 0) {
         targetRows = dataRows(lines.slice(tgtIdx + 1));
     }
-
-    // Backward compatibility: older captures had no delimiters — treat all
-    // numeric rows as sources.
     if (srcIdx < 0 && tgtIdx < 0) {
         sourceRows = dataRows(lines);
     }
@@ -252,16 +224,11 @@ function formatLiveHotEvents(fileName) {
     return '\n' + parts.join('\n\n');
 }
 
-// Function to extract build timing metrics from a snapshot
 function extractBuildTimings(filePath) {
     try {
         const content = fs.readFileSync(filePath, 'utf-8');
         const lines = content.split('\n');
-        
-        let avgTime = null;
-        let minTime = null;
-        let maxTime = null;
-        
+        let avgTime = null, minTime = null, maxTime = null;
         for (const line of lines) {
             if (line.includes('Average build time:')) {
                 avgTime = line.match(/Average build time:\s*([\d.]+)s/)?.[1];
@@ -273,14 +240,13 @@ function extractBuildTimings(filePath) {
                 maxTime = line.match(/Max build time:\s*([\d.]+)s/)?.[1];
             }
         }
-        
         return { avgTime, minTime, maxTime };
     } catch (e) {
         return { avgTime: null, minTime: null, maxTime: null };
     }
 }
 
-// Extract the "Build Performance Metrics" block (values run-demo.sh writes directly).
+// Extract the "Build Performance Metrics" block (values measure.sh writes directly).
 function extractPhaseMetrics(filePath) {
     const out = {
         median: null, avg: null, min: null, max: null,
@@ -306,8 +272,8 @@ function extractPhaseMetrics(filePath) {
     return out;
 }
 
-// Read the "Applied Profiles:" block from a snapshot (the authoritative record of
-// which profiles were actually active in that phase). Skips the "Merge policy" line.
+// Read the "Applied Profiles:" block from a snapshot (authoritative record of which
+// profiles were active in that phase). Skips the "Merge policy" line.
 function extractAppliedProfiles(filePath) {
     try {
         const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
@@ -326,66 +292,16 @@ function extractAppliedProfiles(filePath) {
     }
 }
 
-// Format an integer with thousands separators, or 'N/A'.
-function num(v) {
-    if (v === null || v === undefined) return 'N/A';
-    const n = Number(v);
-    if (Number.isNaN(n)) return 'N/A';
-    return n.toLocaleString('en-US');
-}
-
-// Format a scan-count delta (files scanned / scan time). These are aggregate
-// deltas of per-process cumulative counters; when a process with a large counter
-// exits between the before/after snapshots its counter drops out of the sum, so a
-// heavily-suppressed phase can produce a meaningless negative delta. Render those
-// as "≈0" with a footnote marker rather than a confusing negative number.
+// Format a scan-count delta. These are aggregate deltas of per-process cumulative
+// counters; when a process with a large counter exits between the before/after
+// snapshots its counter drops out of the sum, so a heavily-suppressed phase can
+// produce a meaningless negative delta. Render those as "≈0" with a footnote marker.
 function scanNum(v) {
     if (v === null || v === undefined) return 'N/A';
     const n = Number(v);
     if (Number.isNaN(n)) return 'N/A';
     if (n < 0) return '≈0 \\*';
     return n.toLocaleString('en-US');
-}
-
-// Function to extract total files scanned from a snapshot
-function extractTotalFilesScanned(filePath) {
-    try {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const lines = content.split('\n');
-        
-        let totalScanned = 0;
-        let processCount = 0;
-        
-        // Find all processes and their "Total files scanned" lines
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes('Process id:')) {
-                // Read the process block
-                let procScanned = 0;
-                let procName = 'Unknown';
-                
-                // Look ahead for process name and files scanned in next 10 lines
-                for (let j = i; j < Math.min(i + 10, lines.length); j++) {
-                    if (lines[j].includes('Name:')) {
-                        procName = lines[j].match(/Name:\s*(.+)/)?.[1] || 'Unknown';
-                    }
-                    if (lines[j].includes('Total files scanned:')) {
-                        procScanned = parseInt(lines[j].match(/Total files scanned:\s*(\d+)/)?.[1] || '0', 10);
-                        
-                        // Exclude system process launchd since its counter is global
-                        if (procName !== 'launchd') {
-                            totalScanned += procScanned;
-                            processCount++;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-        
-        return { total: totalScanned, count: processCount };
-    } catch (e) {
-        return { total: 0, count: 0 };
-    }
 }
 
 // Read log files
@@ -398,29 +314,9 @@ const profilesAfterPath = path.join(runDir, 'with_performance_profiles_after.txt
 
 const exclusionsMetrics = fs.existsSync(exclusionsAfterPath) ? extractMetrics(exclusionsAfterPath) : {};
 const profilesMetrics = fs.existsSync(profilesAfterPath) ? extractMetrics(profilesAfterPath) : {};
-
-// Extract metrics from BEFORE snapshot for baseline (true unoptimized state)
 const baselineMetrics = fs.existsSync(baselineBeforePath) ? extractMetrics(baselineBeforePath) : {};
 
-// Extract build timing metrics
-const baselineTimings = fs.existsSync(baselineAfterPath) ? extractBuildTimings(baselineAfterPath) : {};
-const exclusionsTimings = fs.existsSync(exclusionsAfterPath) ? extractBuildTimings(exclusionsAfterPath) : {};
-const profilesTimings = fs.existsSync(profilesAfterPath) ? extractBuildTimings(profilesAfterPath) : {};
-
-// Calculate files scanned during each phase (delta between before and after, excluding launchd)
-const baselineBeforeScanned = extractTotalFilesScanned(baselineBeforePath);
-const baselineAfterScanned = extractTotalFilesScanned(baselineAfterPath);
-const baselineFilesScanned = baselineAfterScanned.total - baselineBeforeScanned.total;
-
-const exclusionsBeforeScanned = extractTotalFilesScanned(exclusionsBeforePath);
-const exclusionsAfterScanned = extractTotalFilesScanned(exclusionsAfterPath);
-const exclusionsFilesScanned = exclusionsAfterScanned.total - exclusionsBeforeScanned.total;
-
-const profilesBeforeScanned = extractTotalFilesScanned(profilesBeforePath);
-const profilesAfterScanned = extractTotalFilesScanned(profilesAfterPath);
-const profilesFilesScanned = profilesAfterScanned.total - profilesBeforeScanned.total;
-
-// Per-phase MDE metrics (as written by run-demo.sh in the "Build Performance Metrics" block)
+// Per-phase MDE metrics (as written by measure.sh in the "Build Performance Metrics" block)
 const baselinePhase = extractPhaseMetrics(baselineAfterPath);
 const exclusionsPhase = extractPhaseMetrics(exclusionsAfterPath);
 const profilesPhase = extractPhaseMetrics(profilesAfterPath);
@@ -428,8 +324,12 @@ const profilesPhase = extractPhaseMetrics(profilesAfterPath);
 // Which profiles were actually active in Phase 3 (authoritative, from the snapshot).
 const appliedProfiles = extractAppliedProfiles(profilesAfterPath);
 
+const excludedNoteLine = cfg.excludedNote
+    ? `\n${cfg.excludedNote}\n`
+    : '';
+
 // Generate markdown report
-const report = `# MDE Performance Profile Demo Report
+const report = `# ${cfg.title}
 
 **Generated:** ${new Date().toLocaleString()}  
 **Run Location:** \`${runDir}\`
@@ -451,9 +351,7 @@ const report = `# MDE Performance Profile Demo Report
 | Enterprise EDR peak RSS (MB) | ${baselinePhase.entPeakRss || 'N/A'} | ${exclusionsPhase.entPeakRss || 'N/A'} | ${profilesPhase.entPeakRss || 'N/A'} |
 | All-daemons peak RSS (MB) | ${baselinePhase.allPeakRss || 'N/A'} | ${exclusionsPhase.allPeakRss || 'N/A'} | ${profilesPhase.allPeakRss || 'N/A'} |
 | EICAR | ${eicarBadge('baseline_eicar.txt')} | ${eicarBadge('exclusions_eicar.txt')} | ${eicarBadge('profiles_eicar.txt')} |
-
-Exclusions phase excluded folders: \`.build\`, \`DerivedData\`.
-
+${excludedNoteLine}
 \\* **"≈0" / negative scan deltas:** *MDE files scanned* and *scan time* are aggregate
 deltas of per-process cumulative counters. When a process with a large counter (e.g. a
 compiler or helper) exits between the before/after snapshots, its counter drops out of
@@ -508,9 +406,7 @@ ${fs.readdirSync(runDir)
 
 ### Environment Diagnostics
 
-Machine-specific facts captured at run time (useful when this report was produced on
-a different machine — e.g. to confirm which Xcode/Swift toolchain ran the build and
-whether the \`xcode\` performance profile could actually match it):
+${cfg.envIntro}
 
 \`\`\`
 ${(() => {
@@ -531,12 +427,10 @@ Performance profiles are the recommended approach for optimizing MDE in developm
 **Key Metric:** Profiles achieved threat detection (EICAR found) while maintaining optimized scanning, proving they don't create the protection gaps that exclusions do.
 `;
 
-// Write report
 const reportPath = path.join(runDir, 'REPORT.md');
 fs.writeFileSync(reportPath, report);
 console.log(`✓ Report generated: ${reportPath}`);
 
-// Try to open the report in the user's default editor for markdown.
 try {
     execSync(`open "${reportPath}"`, { stdio: 'ignore' });
     console.log('✓ Opened report');
