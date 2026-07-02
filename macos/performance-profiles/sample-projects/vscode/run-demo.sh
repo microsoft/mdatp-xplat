@@ -490,28 +490,67 @@ run_builds() {
     fi
 }
 
+# Number of entries in the MDE threat list. Each detection adds exactly one
+# "Id:" line, so this is a monotonic signal the EICAR probe can watch.
+threat_count() {
+    mdatp threat list 2>/dev/null | grep -c '^[[:space:]]*Id:' || true
+}
+
+# Drop a real EICAR test file and determine whether real-time protection catches it,
+# using the threat-count signal (rises on detection) or quarantine (file removed),
+# polling up to a timeout. The ACTUAL result is written to <phase>_eicar.txt so the
+# report reflects what happened instead of an assumed outcome. Ported from the pytest
+# EICAR probe (mde.eicar_probe) on the perf-profiles-demo branch.
 test_eicar() {
     local phase=$1
+    local out="$RUN_DIR/${phase}_eicar.txt"
+    local target_dir="$PROJECT_DIR/out.noindex"
+    local timeout=${MDE_EICAR_TIMEOUT:-30} poll=1 elapsed=0
     print_info "Testing EICAR detection in $phase..."
-    
-    # Create EICAR test file in build directory
-    local eicar_path="$PROJECT_DIR/out.noindex/eicar.txt"
-    mkdir -p "$PROJECT_DIR/out.noindex"
-    
-    # EICAR test string (safe - recognized by AV engines as a test)
-    echo "X5O!P%@AP[4\PZX54(P^)7CC)7}\$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!\$H+H*" > "$eicar_path"
-    
-    # Give MDE time to scan
-    sleep 2
-    
-    # Check if file still exists (if detected, MDE will quarantine it)
-    if [ -f "$eicar_path" ]; then
-        print_success "EICAR NOT detected (file still exists) - ⚠️ Protection gap with exclusions"
-        return 0  # Return success to allow demo to continue
+    mkdir -p "$target_dir"
+
+    local eicar_path="$target_dir/eicar_$(date +%s).txt"
+    local before after detected=0 file_removed=0
+
+    before=$(threat_count)
+
+    # Write the EICAR string from a CHILD process. RTP reliably scans a file written
+    # by a separate process; an in-process write can be missed in some build dirs.
+    # Content is passed via the environment to avoid any quoting pitfalls.
+    EICAR_CONTENT='X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' \
+        /bin/sh -c 'printf "%s" "$EICAR_CONTENT" > "$1"' sh "$eicar_path" 2>/dev/null || true
+
+    # Poll: detection = threat count rises, or MDE quarantines (removes) the file.
+    while [ "$elapsed" -lt "$timeout" ]; do
+        after=$(threat_count)
+        if [ "${after:-0}" -gt "${before:-0}" ]; then detected=1; break; fi
+        if [ ! -f "$eicar_path" ]; then detected=1; file_removed=1; break; fi
+        sleep "$poll"; elapsed=$((elapsed + poll))
+    done
+    after=$(threat_count)
+    [ -f "$eicar_path" ] || file_removed=1
+
+    # Clean up (quarantine may already have removed it).
+    rm -f "$eicar_path" 2>/dev/null || true
+
+    {
+        echo "=== EICAR Detection ==="
+        echo "Phase: $phase"
+        echo "Target dir: $target_dir"
+        echo "Result: $([ "$detected" -eq 1 ] && echo DETECTED || echo NOT_DETECTED)"
+        echo "Threat count before: ${before:-0}"
+        echo "Threat count after: ${after:-0}"
+        echo "File removed by MDE: $([ "$file_removed" -eq 1 ] && echo yes || echo no)"
+        echo "Waited (s): $elapsed"
+        echo "RTP enabled: $(mdatp health --field real_time_protection_enabled 2>/dev/null | tr -d '\"')"
+    } > "$out"
+
+    if [ "$detected" -eq 1 ]; then
+        print_success "EICAR detected in $phase (threat count ${before:-0}→${after:-0}) - ✅ RTP active"
     else
-        print_success "EICAR detected and quarantined - ✅ Real-time protection active"
-        return 0
+        print_info "EICAR NOT detected in $phase (still on disk after ${elapsed}s) - ⚠️ scanning gap"
     fi
+    return 0
 }
 
 # Resolve a canonical (unversioned) Homebrew node install and echo its bin dir.

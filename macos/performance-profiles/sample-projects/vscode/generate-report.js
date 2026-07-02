@@ -170,6 +170,40 @@ function formatHotEventsTable(topEvents) {
 // snapshot (idle noise), this shows the cumulative top scan sources measured WHILE
 // the build ran, which is what reveals whether a profile actually suppressed a
 // process's scan load.
+// Read the persisted EICAR probe result for a phase (written by run-demo.sh's
+// test_eicar) and render the ACTUAL detection outcome. Falls back gracefully for
+// older runs that predate real EICAR persistence.
+function readEicarResult(fileName) {
+    const p = path.join(runDir, fileName);
+    if (!fs.existsSync(p)) {
+        return '_N/A (no EICAR result captured — re-run with the latest run-demo.sh)_';
+    }
+    const txt = stripAnsiCodes(fs.readFileSync(p, 'utf-8'));
+    const grab = (re) => { const m = txt.match(re); return m ? m[1] : null; };
+    const result = grab(/Result:\s*(\w+)/);
+    const before = grab(/Threat count before:\s*(\d+)/);
+    const after = grab(/Threat count after:\s*(\d+)/);
+    const removed = grab(/File removed by MDE:\s*(\w+)/);
+    if (result === 'DETECTED') {
+        const how = removed === 'yes' ? 'file quarantined' : `threat count ${before}→${after}`;
+        return `✅ **Detected** (${how})`;
+    }
+    if (result === 'NOT_DETECTED') {
+        return `❌ **NOT detected** (file remained on disk, threat count unchanged at ${before})`;
+    }
+    return '_N/A (no EICAR result captured)_';
+}
+
+// Compact EICAR badge for table cells.
+function eicarBadge(fileName) {
+    const p = path.join(runDir, fileName);
+    if (!fs.existsSync(p)) return 'N/A';
+    const txt = stripAnsiCodes(fs.readFileSync(p, 'utf-8'));
+    const m = txt.match(/Result:\s*(\w+)/);
+    if (!m) return 'N/A';
+    return m[1] === 'DETECTED' ? '✅ Detected' : '❌ Missed';
+}
+
 function formatLiveHotEvents(fileName) {
     const p = path.join(runDir, fileName);
     if (!fs.existsSync(p)) {
@@ -298,11 +332,11 @@ const report = `# MDE Performance Profile Demo Report
 
 This demo evaluated three strategies for optimizing Microsoft Defender for Endpoint (MDE) performance during development builds:
 
-| Strategy | Protection | Performance | Recommendation |
-|----------|-----------|-------------|-----------------|
-| **Baseline** | ✅ Full | Baseline | Secure baseline |
-| **Exclusions** | ⚠️ Gap | Faster | Not recommended |
-| **Profiles** | ✅ Full | Optimized | ✅ **Recommended** |
+| Strategy | Protection | Performance | EICAR | Recommendation |
+|----------|-----------|-------------|-------|-----------------|
+| **Baseline** | ✅ Full | Baseline | ${eicarBadge('baseline_eicar.txt')} | Secure baseline |
+| **Exclusions** | ⚠️ Gap | Faster | ${eicarBadge('exclusions_eicar.txt')} | Not recommended |
+| **Profiles** | ✅ Full | Optimized | ${eicarBadge('profiles_eicar.txt')} | ✅ **Recommended** |
 
 ---
 
@@ -314,7 +348,7 @@ This demo evaluated three strategies for optimizing Microsoft Defender for Endpo
 - **Scanning Activity:** ${baselineMetrics.events || 'N/A'} hot events
 - **Top Process:** ${baselineMetrics.topEvents && baselineMetrics.topEvents[0] ? baselineMetrics.topEvents[0].process + ' (' + baselineMetrics.topEvents[0].count + ' events)' : 'N/A'}
 - **Protection Status:** ✅ Full real-time protection
-- **EICAR Test:** ✅ **Detected and quarantined**
+- **EICAR Test:** ${readEicarResult('baseline_eicar.txt')}
 - **Verdict:** Secure baseline with full MDE overhead (slowest builds)
 
 **Top 5 Processes Being Scanned:**
@@ -329,7 +363,7 @@ ${formatLiveHotEvents('baseline_(full_scanning)_hot_events.txt')}
 - **Scanning Activity:** ${exclusionsMetrics.events || 'N/A'} hot events (compensating for gaps)
 - **Top Process:** ${exclusionsMetrics.topEvents && exclusionsMetrics.topEvents[0] ? exclusionsMetrics.topEvents[0].process + ' (' + exclusionsMetrics.topEvents[0].count + ' events)' : 'N/A'}
 - **Protection Status:** ⚠️ **Protection Gap** - excluded paths NOT scanned
-- **EICAR Test:** ❌ **NOT detected** (file exists but unscanned)
+- **EICAR Test:** ${readEicarResult('exclusions_eicar.txt')}
 - **Verdict:** Faster builds but creates security blind spot
 
 **Top 5 Processes Being Scanned:**
@@ -348,7 +382,7 @@ ${formatLiveHotEvents('with_exclusions_hot_events.txt')}
 - **Scanning Activity:** ${profilesMetrics.events || 'N/A'} hot events
 - **Top Process:** ${profilesMetrics.topEvents && profilesMetrics.topEvents[0] ? profilesMetrics.topEvents[0].process + ' (' + profilesMetrics.topEvents[0].count + ' events)' : 'N/A'}
 - **Protection Status:** ✅ Full real-time protection maintained
-- **EICAR Test:** ✅ **Detected** (threat detection active)
+- **EICAR Test:** ${readEicarResult('profiles_eicar.txt')}
 - **Verdict:** Fast builds AND full threat detection - optimal for development
 
 **Top 5 Processes Being Scanned:**
