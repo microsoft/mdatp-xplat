@@ -334,6 +334,19 @@ function num(v) {
     return n.toLocaleString('en-US');
 }
 
+// Format a scan-count delta (files scanned / scan time). These are aggregate
+// deltas of per-process cumulative counters; when a process with a large counter
+// exits between the before/after snapshots its counter drops out of the sum, so a
+// heavily-suppressed phase can produce a meaningless negative delta. Render those
+// as "≈0" with a footnote marker rather than a confusing negative number.
+function scanNum(v) {
+    if (v === null || v === undefined) return 'N/A';
+    const n = Number(v);
+    if (Number.isNaN(n)) return 'N/A';
+    if (n < 0) return '≈0 \\*';
+    return n.toLocaleString('en-US');
+}
+
 // Function to extract total files scanned from a snapshot
 function extractTotalFilesScanned(filePath) {
     try {
@@ -429,8 +442,8 @@ const report = `# MDE Performance Profile Demo Report
 |---|---:|---:|---:|
 | Median build time (s) | ${baselinePhase.median || 'N/A'} | ${exclusionsPhase.median || 'N/A'} | ${profilesPhase.median || 'N/A'} |
 | Average build time (s) | ${baselinePhase.avg || 'N/A'} | ${exclusionsPhase.avg || 'N/A'} | ${profilesPhase.avg || 'N/A'} |
-| MDE files scanned | ${num(baselinePhase.filesScanned)} | ${num(exclusionsPhase.filesScanned)} | ${num(profilesPhase.filesScanned)} |
-| MDE scan time (ms) | ${num(baselinePhase.scanTimeMs)} | ${num(exclusionsPhase.scanTimeMs)} | ${num(profilesPhase.scanTimeMs)} |
+| MDE files scanned | ${scanNum(baselinePhase.filesScanned)} | ${scanNum(exclusionsPhase.filesScanned)} | ${scanNum(profilesPhase.filesScanned)} |
+| MDE scan time (ms) | ${scanNum(baselinePhase.scanTimeMs)} | ${scanNum(exclusionsPhase.scanTimeMs)} | ${scanNum(profilesPhase.scanTimeMs)} |
 | AV (unpriv) avg CPU (%) | ${baselinePhase.avCpu || 'N/A'} | ${exclusionsPhase.avCpu || 'N/A'} | ${profilesPhase.avCpu || 'N/A'} |
 | Enterprise EDR avg CPU (%) | ${baselinePhase.entCpu || 'N/A'} | ${exclusionsPhase.entCpu || 'N/A'} | ${profilesPhase.entCpu || 'N/A'} |
 | All-daemons avg CPU (%) | ${baselinePhase.allCpu || 'N/A'} | ${exclusionsPhase.allCpu || 'N/A'} | ${profilesPhase.allCpu || 'N/A'} |
@@ -439,7 +452,14 @@ const report = `# MDE Performance Profile Demo Report
 | All-daemons peak RSS (MB) | ${baselinePhase.allPeakRss || 'N/A'} | ${exclusionsPhase.allPeakRss || 'N/A'} | ${profilesPhase.allPeakRss || 'N/A'} |
 | EICAR | ${eicarBadge('baseline_eicar.txt')} | ${eicarBadge('exclusions_eicar.txt')} | ${eicarBadge('profiles_eicar.txt')} |
 
-Exclusions phase excluded folders: \`out\`, \`node_modules\`, \`.build\`. Negative "files scanned"/"scan time" in the exclusions phase is a per-PID counter artifact — trust AV CPU as the signal.
+Exclusions phase excluded folders: \`out\`, \`node_modules\`, \`.build\`.
+
+\\* **"≈0" / negative scan deltas:** *MDE files scanned* and *scan time* are aggregate
+deltas of per-process cumulative counters. When a process with a large counter (e.g. a
+compiler or helper) exits between the before/after snapshots, its counter drops out of
+the sum, so a heavily-suppressed phase can yield a negative delta. That reflects
+suppressed scanning, not negative work — treat it as ≈0 and trust **AV (unpriv) avg CPU %**
+as the reliable signal.
 
 Profiles applied in Phase 3: ${appliedProfiles.length ? appliedProfiles.map(p => '\`' + p + '\`').join(', ') : '_N/A_'}
 
