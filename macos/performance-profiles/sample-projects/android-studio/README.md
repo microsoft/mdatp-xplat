@@ -135,6 +135,58 @@ can't drive Android Studio's internal build engine from a script.
 > Note: there is no Android emulator/AVD performance profile, so this demo is scoped to
 > the **build**, not to installing/launching the app on an emulator.
 
+## In-build report card (verify the profile live, in the Build console)
+
+`mde-profile-report.gradle` is a Gradle **init script** that prints an MDE "report card"
+in the Build console at the end of *any* Gradle build — terminal or Android Studio. It
+reads (never changes) MDE state — `mdatp performance-profiles list-applied` and
+`mdatp diagnostic real-time-protection-statistics` — and reports, for that single build:
+
+- Gradle's own build duration (config + execution)
+- which performance profiles are applied, and whether one covers this build
+- **MDE files scanned / scan time during the build** — the empirical proof: with a
+  covering profile applied this drops toward ≈0
+
+```
+  ┌─ MDE performance-profile report ─────────────────────────────
+  │ Build finished in 18.5 s (Gradle config+exec)
+  │ Launched inside Android Studio process tree: no / can't tell (daemon or terminal)
+  │ Applied performance profiles: node, vscode, ...
+  │ ⚠  No profile covers this build — apply 'openjdk-javac' to suppress scan load.
+  │ MDE files scanned during build: 1,224
+  │ MDE scan time during build:     11,528.6 ms
+  │    → scanning active — a covering profile would drive this toward ≈0.
+  └──────────────────────────────────────────────────────────────
+```
+
+**Terminal (one-off):** pass it directly —
+
+```bash
+( cd workload.noindex && JAVA_HOME=/opt/homebrew/opt/openjdk@17 \
+  ./gradlew :fluentui_core:assembleDebug --no-daemon --offline \
+  --init-script ../mde-profile-report.gradle )
+```
+
+**Android Studio:** the IDE has no per-build init-script flag, so install it into the
+Gradle user init dir (auto-applied to every build, including IDE builds):
+
+```bash
+./ide-report.sh on        # copies the script into ~/.gradle/init.d/
+# build in Android Studio → the report prints in the Build tool window
+./ide-report.sh off       # remove it when done
+```
+
+**Demo flow that proves the profile is correct:** build once (report shows scanning
+active) → apply the profile (`sudo mdatp performance-profiles apply --name openjdk-javac`,
+or `--name android-studio-tree` for the in-IDE path) → build again (report shows files
+scanned collapse toward ≈0). The before/after report card *is* the proof.
+
+> The toolchain profile (`openjdk-javac`) is a definitive coverage signal — it matches by
+> JDK install location regardless of the Gradle daemon. `android-studio-tree` only covers
+> processes inside the IDE tree; because Android Studio may reuse a detached Gradle daemon,
+> the "inside IDE tree" line can read "can't tell" even for IDE builds — so trust the scan
+> delta, not the tree line, as the ground truth.
+
 ## Build Details
 
 - **Workload:** `microsoft/fluentui-android` (MIT), pinned commit, cloned into `workload.noindex/`
@@ -164,6 +216,8 @@ Environment variables honored by the scripts:
 - `setup-project.sh` — clones the pinned workload and warms the Gradle cache
 - `run-demo.sh` — the measured three-phase terminal demo (generates `REPORT.md`)
 - `open-demo.sh` — opens the workload in Android Studio for the `android-studio-tree` path
+- `mde-profile-report.gradle` — Gradle init script; prints an MDE profile report card per build
+- `ide-report.sh` — installs/removes the report card into `~/.gradle/init.d/` for Android Studio builds
 - The report is rendered by the shared `../lib/generate-report.js`
 
 ## Cleanup
