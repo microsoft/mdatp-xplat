@@ -166,21 +166,44 @@ stop_hot_event_capture() {
     kill "$pid" 2>/dev/null || true
 }
 
-# Extract the final cumulative "Top N Hot Event Sources" table (plus its summary
-# line) from a raw capture into a compact, readable per-phase file. Each streamed
-# snapshot is cumulative since capture start, so the last complete Sources block
-# reflects the entire window.
+# Extract the final cumulative "Top N Hot Event Sources" AND "Top N Hot Event
+# Targets" tables (plus the summary line) from a raw capture into a compact,
+# readable per-phase file. Sources = the processes driving scans; Targets = the
+# actual files/paths being scanned. Each streamed snapshot is cumulative since
+# capture start, so the last complete Sources/Targets pair reflects the whole
+# window. Output is normalized with stable "=== Hot Event Sources/Targets ==="
+# delimiters so generate-report.js can split the two tables reliably.
 summarize_hot_events() {
     local raw=$1 out=$2
     sed 's/\x1b\[[0-9;]*m//g' "$raw" 2>/dev/null | awk '
-        /^Total Events:/ { summary=$0 }
-        /Top .* Hot Event Sources ===/ { cap=1; buf=""; hdr=summary; next }
-        cap && /Hot Event Targets ===/ { cap=0; last_hdr=hdr; last=buf; next }
+        # A new snapshot summary closes any in-progress Targets block.
+        /^Total Events:/ {
+            summary=$0
+            if (cap=="tgt") { last_tgt=buf; cap="" }
+        }
+        # Start of a Sources table: closes any in-progress Targets block first.
+        /Top .* Hot Event Sources ===/ {
+            if (cap=="tgt") { last_tgt=buf }
+            cap="src"; buf=""; cur_hdr=summary; next
+        }
+        # Sources table ends where the Targets table begins.
+        cap=="src" && /Hot Event Targets ===/ {
+            last_src=buf; last_hdr=cur_hdr
+            cap="tgt"; buf=""; next
+        }
         cap { buf=buf $0 "\n" }
         END {
-            if (last == "") { print "(no hot-event sources captured during window)"; exit }
+            # Flush a trailing (final) Targets block if the stream ended inside one.
+            if (cap=="tgt") { last_tgt=buf }
+            if (last_src == "" && last_tgt == "") {
+                print "(no hot-event sources captured during window)"; exit
+            }
             print last_hdr
-            printf "%s", last
+            print "=========== Hot Event Sources ==========="
+            printf "%s", last_src
+            print "=========== Hot Event Targets ==========="
+            if (last_tgt == "") print "(no hot-event targets captured during window)"
+            else printf "%s", last_tgt
         }
     ' > "$out"
 }
