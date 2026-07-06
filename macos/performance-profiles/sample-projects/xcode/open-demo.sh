@@ -74,7 +74,7 @@ Demo ready. Once Xcode finishes resolving packages:
 Want an MDE "report card" after an IDE build?
 
     - The automatic hook (`./xcode-report.sh on`) is attached to the iOS demo
-        scheme file (`Demo.Dogfood.xcscheme`). It does not fire when building the
+        scheme file (`Demo.Development.xcscheme`). It does not fire when building the
         package-only `FluentUI` scheme.
 
     - For the package/My Mac path, run this manual bracket around your IDE build:

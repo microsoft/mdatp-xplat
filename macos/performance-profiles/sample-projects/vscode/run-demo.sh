@@ -306,6 +306,15 @@ process_ancestry() {
 # suppressed by the vscode-tree profile when the build runs inside VSCode's subtree
 # (e.g. launched from VSCode's integrated terminal or task runner).
 under_vscode() {
+    # VS Code tasks and integrated terminals usually export stable environment
+    # markers even when the direct process ancestry is obscured by an extra shell hop.
+    case "${TERM_PROGRAM:-}" in
+        vscode) return 0 ;;
+    esac
+    [ -n "${VSCODE_GIT_IPC_HANDLE:-}" ] && return 0
+    [ -n "${VSCODE_IPC_HOOK_CLI:-}" ] && return 0
+    [ -n "${VSCODE_INJECTION:-}" ] && return 0
+
     local pid=$1
     while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null; do
         local line

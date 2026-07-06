@@ -85,6 +85,168 @@ There are two related profiles, and they cover different things:
 > Note: the earlier version of this demo referenced a profile named `xcode-tree`. That
 > profile does not exist — the real names are `xcode` and `xcode-ide-tree`.
 
+## Detailed IDE Flow
+
+Use this when you want the interactive Xcode demonstration rather than the automated
+terminal `run-demo.sh` flow.
+
+### Option A: Recommended My Mac flow
+
+This is the most reliable IDE path on machines where the iOS demo project may require
+extra SDK, signing, or AppCenter setup.
+
+1. Open the workload:
+
+  ```bash
+  cd sample-projects/xcode
+  ./open-demo.sh
+  ```
+
+2. Wait for Xcode to finish loading the package and auto-creating the `FluentUI` scheme.
+
+3. In Xcode, select:
+  - **Scheme:** `FluentUI`
+  - **Destination:** `My Mac`
+
+4. Run a baseline IDE build with **Cmd+B**.
+
+5. Capture a manual MDE report around the next build:
+
+  ```bash
+  ./mde-profile-report.sh before
+  # switch back to Xcode and press Cmd+B once
+  ./mde-profile-report.sh after
+  ```
+
+6. Apply the IDE-tree profile:
+
+  ```bash
+  sudo mdatp performance-profiles apply --name xcode-ide-tree
+  ```
+
+7. Run the same manual bracket again around another **Cmd+B** build:
+
+  ```bash
+  ./mde-profile-report.sh before
+  # switch back to Xcode and press Cmd+B once
+  ./mde-profile-report.sh after
+  ```
+
+8. Compare the before/after output. The key signal is that **MDE files scanned during build**
+  drops toward ≈0 when the profile is taking effect.
+
+9. Remove the profile when done:
+
+  ```bash
+  sudo mdatp performance-profiles remove --name xcode-ide-tree
+  ```
+
+### Option B: iOS Simulator flow
+
+Use this if you want the in-Xcode automatic pre/post-action report card.
+
+1. Open the iOS demo project:
+
+  ```bash
+  cd sample-projects/xcode
+  ./open-demo.sh --ios-demo
+  ```
+
+2. In Xcode, select:
+  - **Scheme:** `Demo.Development`
+  - **Destination:** any **iOS Simulator**
+
+3. Install the automatic report hook:
+
+  ```bash
+  ./xcode-report.sh on
+  ```
+
+4. Fully quit and reopen Xcode if the scheme was already open before you installed the hook.
+
+5. Build once with **Cmd+B**.
+
+6. Check the report output in either place:
+  - Xcode **Report navigator**: **Cmd+9** → latest Build → search for `MDE performance-profile report`
+  - temp file: `$TMPDIR/mde-xcode-report.txt`
+
+7. Apply the IDE-tree profile and build again:
+
+  ```bash
+  sudo mdatp performance-profiles apply --name xcode-ide-tree
+  ```
+
+8. Recheck the Report navigator / temp file and compare the scan delta.
+
+9. Clean up when done:
+
+  ```bash
+  sudo mdatp performance-profiles remove --name xcode-ide-tree
+  ./xcode-report.sh off
+  ```
+
+### What to look for
+
+- **Activity Monitor:** sort by `wdavdaemon_unprivileged` CPU to watch live impact.
+- **Report card:** compare `Applied performance profiles`, `Launched inside Xcode process tree`,
+  and `MDE files scanned during build`.
+- **Ground truth:** trust the scan delta more than wall-clock time.
+
+### Where the Xcode report appears
+
+When the automatic hook is installed, the report is shown in the Xcode build log under:
+
+- **Report navigator** (`Cmd+9`)
+- latest **Build** entry for the `Demo.Development` run
+- **Run post-actions**
+
+In practice, the path looks like:
+
+- `Demo.Development` → `Run` → `Build` → `Run post-actions`
+
+Example from Xcode:
+
+![Xcode Report Navigator showing the MDE report block](docs/xcode-report-navigator.png)
+
+Direct image link: [docs/xcode-report-navigator.png](docs/xcode-report-navigator.png)
+
+If you do not see the report block there, search the build log for:
+
+- `MDE performance-profile report`
+- `MDE files scanned during build`
+
+The same output is also written to:
+
+- `$TMPDIR/mde-xcode-report.txt`
+
+Example report output:
+
+```text
+┌─ MDE performance-profile report ─────────────────────────────
+│ Build wall time (pre→post action): 19s
+│ Launched inside Xcode process tree: yes
+│ Applied performance profiles: xcode-ide-tree
+│ ℹ  'xcode-ide-tree' is applied — it covers builds run INSIDE Xcode.
+│    (Trust the scan delta below as the real proof it's taking effect.)
+│ MDE files scanned during build: 1926
+│ MDE scan time during build:     32702.5 ms
+│    → scanning active — a covering profile would drive this toward ≈0.
+└──────────────────────────────────────────────────────────────
+```
+
+That example is a **successful report surfacing** case: the hook is working, Xcode is
+recognized as the launch context, and the remaining task is to compare before/after
+profile runs to see whether the scan counts collapse toward ≈0.
+
+### Troubleshooting
+
+- If you do not see `Demo.Development`, open the iOS project with `./open-demo.sh --ios-demo`.
+- If you do not see any `MDE` lines in the Report navigator, rerun `./xcode-report.sh on`,
+  quit Xcode, reopen, and build the `Demo.Development` scheme again.
+- If the iOS demo build fails, fall back to **Option A** (`FluentUI` on `My Mac`), which still
+  demonstrates `xcode-ide-tree` coverage.
+- If the report file looks stale, run a fresh `before` / build / `after` cycle manually.
+
 ## In-build report card (verify the profile live)
 
 The Xcode analog of the Android sample's Gradle report card. `mde-profile-report.sh`
