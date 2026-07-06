@@ -56,17 +56,36 @@ There are two related profiles, and they cover different things:
   open the workload in Xcode and build with Cmd+B:
 
   ```bash
-  ./open-demo.sh   # fetches the workload and opens FluentUI.Demo.xcodeproj in Xcode
+  ./open-demo.sh   # fetches the workload and opens Package.swift in Xcode (recommended)
   ```
 
-  `open-demo.sh` opens the iOS demo project, then prints the exact
-  `mdatp performance-profiles apply --name xcode-ide-tree` steps to run while building
-  the `Demo.Dogfood` scheme from the IDE.
+  `open-demo.sh` opens the Swift package by default so you can build scheme
+  `FluentUI` on destination `My Mac` without iOS signing requirements, then prints
+  the exact `mdatp performance-profiles apply --name xcode-ide-tree` steps.
+
+  If you specifically want the iOS demo project path, use:
+
+  ```bash
+  ./open-demo.sh --ios-demo
+  ```
+
+  Then build `Demo.Development` on an iOS Simulator destination.
+  (`Demo.Dogfood` is optional and requires extra AppCenter/provisioning setup.)
+
+  If `Demo.Dogfood` fails with SDK symbol errors such as `UIGlassEffect`,
+  `UICornerRadius`, or `UINavigationItem.subtitle`, use this fallback IDE path:
+
+  - Scheme: `FluentUI`
+  - Destination: `My Mac`
+  - Build: Cmd+B
+
+  This still runs inside Xcode's process tree, so it is valid for demonstrating
+  `xcode-ide-tree` profile behavior on machines without the newest iOS SDK.
 
 > Note: the earlier version of this demo referenced a profile named `xcode-tree`. That
 > profile does not exist — the real names are `xcode` and `xcode-ide-tree`.
 
-## In-build report card (verify the profile live, in Xcode's build log)
+## In-build report card (verify the profile live)
 
 The Xcode analog of the Android sample's Gradle report card. `mde-profile-report.sh`
 reads (never changes) MDE state — `mdatp performance-profiles list-applied` and
@@ -76,13 +95,25 @@ scan time during the build** (the empirical proof — drops toward ≈0 when cov
 
 Xcode has no global init directory like Gradle's `~/.gradle/init.d`, so the report is
 wired in as Scheme **Build pre/post-actions** (Edit Scheme → Build → Pre-actions /
-Post-actions). `xcode-report.sh` injects/removes them on the `Demo.Dogfood` scheme:
+Post-actions). `xcode-report.sh` injects/removes them on the iOS demo
+`Demo.Development` scheme:
 
 ```bash
-./xcode-report.sh on       # inject pre/post-actions into the scheme
-# open FluentUI.Demo.xcodeproj, select Demo.Dogfood, Build (Cmd+B)
+./xcode-report.sh on       # inject pre/post-actions into Demo.Development
+# open FluentUI.Demo.xcodeproj, select Demo.Development, Build (Cmd+B)
 ./xcode-report.sh off      # remove them when done
 ```
+
+When you use the package-first fallback path (`FluentUI` scheme on `My Mac`), those
+pre/post-actions do not fire. Use a manual bracket instead:
+
+```bash
+./mde-profile-report.sh before
+# build once in Xcode (Cmd+B)
+./mde-profile-report.sh after
+```
+
+The rendered output is also written to `$TMPDIR/mde-xcode-report.txt`.
 
 The pre-action snapshots MDE scan counters; the post-action snapshots again and prints
 the report card. Because Xcode buries pre/post-action output in the build log (Report
@@ -135,7 +166,7 @@ Environment variables honored by the scripts:
 - `run-demo.sh` — the measured three-phase terminal demo (generates `REPORT.md`)
 - `open-demo.sh` — opens FluentUI.Demo.xcodeproj in Xcode for the `xcode-ide-tree` path
 - `mde-profile-report.sh` — MDE report card printed by the scheme Build pre/post-actions
-- `xcode-report.sh` — installs/removes the report-card pre/post-actions on the `Demo.Dogfood` scheme
+- `xcode-report.sh` — installs/removes the report-card pre/post-actions on the `Demo.Development` scheme
 - The report is rendered by the shared `../lib/generate-report.js`
 
 ## Cleanup

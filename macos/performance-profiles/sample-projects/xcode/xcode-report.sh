@@ -22,8 +22,9 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPORT_SCRIPT="$PROJECT_DIR/mde-profile-report.sh"
 WORKLOAD_DIR="$PROJECT_DIR/workload.noindex"
 # The iOS demo app scheme (an .xcodeproj scheme persists pre/post-actions; a SwiftPM
-# Package.swift scheme does not). Override with MDE_XCODE_SCHEME if needed.
-SCHEME="${MDE_XCODE_SCHEME:-$WORKLOAD_DIR/Demos/FluentUIDemo_iOS/FluentUI.Demo.xcodeproj/xcshareddata/xcschemes/Demo.Dogfood.xcscheme}"
+# Package.swift scheme does not). Default to Demo.Development because Demo.Dogfood
+# requires extra AppCenter/provisioning setup. Override with MDE_XCODE_SCHEME if needed.
+SCHEME="${MDE_XCODE_SCHEME:-$WORKLOAD_DIR/Demos/FluentUIDemo_iOS/FluentUI.Demo.xcodeproj/xcshareddata/xcschemes/Demo.Development.xcscheme}"
 
 MARKER="MDE report:"
 
@@ -85,7 +86,7 @@ tree.write(scheme, encoding="UTF-8", xml_declaration=True)
 print("✓ MDE report installed into scheme pre/post-actions")
 PY
         echo "  Scheme: $SCHEME"
-        echo "  Open FluentUI.Demo.xcodeproj in Xcode, select the 'Demo.Dogfood' scheme, and Build (Cmd+B)."
+        echo "  Open FluentUI.Demo.xcodeproj in Xcode, select the 'Demo.Development' scheme, and Build (Cmd+B)."
         echo "  The report prints in the build log (Report navigator) and as a notification."
         echo "  Run './xcode-report.sh off' when you're done."
         ;;

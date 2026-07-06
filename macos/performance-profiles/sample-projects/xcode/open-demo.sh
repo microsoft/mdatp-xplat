@@ -13,6 +13,13 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKLOAD_DIR="$PROJECT_DIR/workload.noindex"
 
+# Default to opening the Swift package because it avoids iOS demo signing/SDK
+# pitfalls and is sufficient for the IDE-tree profile demonstration.
+OPEN_MODE="package"
+if [[ "${1:-}" == "--ios-demo" ]]; then
+    OPEN_MODE="ios-demo"
+fi
+
 echo "🔧 Preparing the MDE Xcode performance-profile demo..."
 echo ""
 
@@ -32,10 +39,14 @@ fi
 echo ""
 echo "🚀 Opening the workload in Xcode..."
 XCODEPROJ="$WORKLOAD_DIR/Demos/FluentUIDemo_iOS/FluentUI.Demo.xcodeproj"
-if [ -d "$XCODEPROJ" ]; then
-    open "$XCODEPROJ"
+if [[ "$OPEN_MODE" == "ios-demo" ]]; then
+    if [ -d "$XCODEPROJ" ]; then
+        open "$XCODEPROJ"
+    else
+        echo "⚠ FluentUI.Demo.xcodeproj not found — opening the Swift package instead."
+        open "$WORKLOAD_DIR/Package.swift"
+    fi
 else
-    echo "⚠ FluentUI.Demo.xcodeproj not found — opening the Swift package instead."
     open "$WORKLOAD_DIR/Package.swift"
 fi
 
@@ -43,21 +54,42 @@ cat <<'EOF'
 
 Demo ready. Once Xcode finishes resolving packages:
 
-  1. Select the "Demo.Dogfood" scheme (top toolbar) and an iOS Simulator destination.
-  2. Build with Cmd+B — this build runs *inside* Xcode's process tree.
-  3. In a terminal, apply the IDE profile so this in-IDE build is muted:
+    1. Select the "FluentUI" scheme (top toolbar) and destination "My Mac".
+    2. Build with Cmd+B — this build runs *inside* Xcode's process tree.
+    3. Optional: if you explicitly want the iOS demo project, run:
+
+             ./open-demo.sh --ios-demo
+
+         Then choose "Demo.Development" + an iOS simulator destination.
+         ("Demo.Dogfood" requires extra AppCenter/provisioning setup.)
+    4. In a terminal, apply the IDE profile so this in-IDE build is muted:
 
        sudo mdatp performance-profiles apply --name xcode-ide-tree
 
-  4. Watch wdavdaemon_unprivileged CPU in Activity Monitor drop on the next build.
-  5. Clean up:
+    5. Watch wdavdaemon_unprivileged CPU in Activity Monitor drop on the next build.
+    6. Clean up:
 
        sudo mdatp performance-profiles remove --name xcode-ide-tree
 
-Want an MDE "report card" printed in Xcode's build log after each build (applied
-profiles + files scanned during the build)? Enable the scheme pre/post-actions:
+Want an MDE "report card" after an IDE build?
 
-    ./xcode-report.sh on      # then build in Xcode; ./xcode-report.sh off when done
+    - The automatic hook (`./xcode-report.sh on`) is attached to the iOS demo
+        scheme file (`Demo.Dogfood.xcscheme`). It does not fire when building the
+        package-only `FluentUI` scheme.
+
+    - For the package/My Mac path, run this manual bracket around your IDE build:
+
+            ./mde-profile-report.sh before
+            # build once in Xcode (Cmd+B)
+            ./mde-profile-report.sh after
+
+        The report is also written to: "$TMPDIR/mde-xcode-report.txt"
+
+    - If you want fully automatic pre/post reporting inside Xcode, open the iOS
+        project path (`./open-demo.sh --ios-demo`), build the `Demo.Development`
+        scheme, and then run:
+
+            ./xcode-report.sh on      # later: ./xcode-report.sh off
 
 For the automated, measured three-phase comparison (Baseline / AV Exclusions /
 Performance Profiles) with a generated REPORT.md, run the terminal demo instead:

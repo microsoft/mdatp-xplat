@@ -19,7 +19,7 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The upstream workload. Pin a specific commit so the demo is reproducible and a
 # surprise upstream change can't break a run. Override with MDE_WORKLOAD_REF.
 WORKLOAD_REPO="${MDE_WORKLOAD_REPO:-https://github.com/microsoft/fluentui-apple.git}"
-WORKLOAD_REF="${MDE_WORKLOAD_REF:-5dfff101531d41f32d2182593ada4dc71b88dd50}"
+WORKLOAD_REF="${MDE_WORKLOAD_REF:-c591a08e27335099e9bc919ab9eb29a88e80fe02}"
 # ".noindex" suffix tells Spotlight not to index the tree, so mdworker/mds_stores
 # don't add scan load that developer profiles can't mute.
 WORKLOAD_DIR="$PROJECT_DIR/workload.noindex"
