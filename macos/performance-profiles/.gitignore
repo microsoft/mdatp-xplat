@@ -1,0 +1,25 @@
+venv/
+
+# Python virtual environments
+.venv/
+
+# Android generated artifacts
+apps/**/.gradle/
+apps/**/build/
+apps/**/.cxx/
+apps/**/.externalNativeBuild/
+apps/**/captures/
+apps/**/local.properties
+
+# iOS/Xcode generated artifacts
+apps/**/DerivedData/
+apps/**/Pods/
+apps/**/xcuserdata/
+apps/**/*.xcuserstate
+
+# IDE/system files
+apps/**/.idea/
+apps/**/.DS_Store
+
+# Hot event source captures
+hot_event_source_*.json

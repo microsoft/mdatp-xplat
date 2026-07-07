@@ -1,0 +1,12 @@
+node_modules/
+out/
+out.noindex/
+.build/
+*.log
+build/
+DerivedData/
+.DS_Store
+.vscode-test/
+run-logs/
+src/generated/
+src/generated.noindex/

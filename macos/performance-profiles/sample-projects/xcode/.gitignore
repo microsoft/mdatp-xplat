@@ -1,0 +1,12 @@
+# Cloned build workload (microsoft/fluentui-apple, fetched by setup-project.sh)
+workload.noindex/
+# Per-run diagnostic logs and generated reports
+run-logs/
+# Build artifacts
+build/
+DerivedData/
+.build/
+*.log
+.DS_Store
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
