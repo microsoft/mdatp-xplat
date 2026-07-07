@@ -640,7 +640,7 @@
                     "description": "Performance profiles",
                     "links": [
                         {
-                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles",    //Verify once link is live
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles", 
                             "rel": "More information"
                         }
                     ],
