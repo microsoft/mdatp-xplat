@@ -217,21 +217,18 @@ function formatLiveHotEvents(fileName) {
 
     const summary = lines.find(l => l.startsWith('Total Events:')) || '';
 
-    // Split the capture into its Sources (processes) and Targets (files/paths)
-    // sections using the delimiters emitted by summarize_hot_events().
+    // Split the capture and render only Sources (processes driving scans).
+    // We intentionally omit Targets (file/path rows) because they are often
+    // interpreted as executable/process entries and add confusion in the report.
     const srcIdx = lines.findIndex(l => l.includes('Hot Event Sources'));
     const tgtIdx = lines.findIndex(l => l.includes('Hot Event Targets'));
 
     const dataRows = (arr) => arr.filter(l => /^\s*\d+\s/.test(l)).slice(0, 10);
 
     let sourceRows = [];
-    let targetRows = [];
     if (srcIdx >= 0) {
         const srcEnd = tgtIdx >= 0 ? tgtIdx : lines.length;
         sourceRows = dataRows(lines.slice(srcIdx + 1, srcEnd));
-    }
-    if (tgtIdx >= 0) {
-        targetRows = dataRows(lines.slice(tgtIdx + 1));
     }
 
     // Backward compatibility: older captures had no delimiters — treat all
@@ -247,8 +244,6 @@ function formatLiveHotEvents(fileName) {
     if (summary) parts.push(`\`${summary}\``);
     parts.push(block('Sources (processes driving scans)', sourceRows,
         '(no hot-event sources captured during the build window)'));
-    parts.push(block('Targets (files / paths scanned)', targetRows,
-        '(no hot-event targets captured during the build window)'));
     return '\n' + parts.join('\n\n');
 }
 
@@ -467,31 +462,18 @@ Profiles applied in Phase 3: ${appliedProfiles.length ? appliedProfiles.map(p =>
 
 ## Scan Activity by Phase
 
-Two views per phase: **Sources** (the processes that trigger scans) and **Targets**
-(the actual files/paths MDE scanned). Targets are the direct signal for whether an
-exclusion is being honored — an excluded path should stop appearing here.
+Per phase we show **Sources** (the processes that trigger scans during the build
+window).
 
 ### Baseline
-
-Top processes scanned:
-${formatHotEventsTable(baselineMetrics.topEvents)}
-
 During the build (live capture):
 ${formatLiveHotEvents('baseline_(full_scanning)_hot_events.txt')}
 
 ### Exclusions
-
-Top processes scanned:
-${formatHotEventsTable(exclusionsMetrics.topEvents)}
-
 During the build (live capture):
 ${formatLiveHotEvents('with_exclusions_hot_events.txt')}
 
 ### Profiles
-
-Top processes scanned:
-${formatHotEventsTable(profilesMetrics.topEvents)}
-
 During the build (live capture):
 ${formatLiveHotEvents('with_performance_profiles_hot_events.txt')}
 
