@@ -1609,9 +1609,7 @@ install_on_fedora()
         esac
 
         if [ "$DISTRO" = "fedora" ]; then
-            # Fedora 43+ uses its own packages.microsoft.com/fedora/<version>
-            # repo. Older Fedora releases are not populated there yet, so they
-            # fall back to the rhel repo (paired with SCALED_VERSION=8).
+            # Fedora 43+ uses its native PMC repo; older Fedora falls back to rhel/8
             if fedora_uses_native_repo; then
                 effective_distro="fedora"
             else
@@ -1637,9 +1635,7 @@ install_on_fedora()
 
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
-                # Fedora 41+ ships dnf5 which dropped --add-repo=<URL> in favor of
-                # `addrepo --from-repofile=<URL>`. Detect the major version up front
-                # so legacy hosts surface real transport errors (DNS, PMC 5xx, GPG)
+                # dnf5 (Fedora 41+) replaced --add-repo with addrepo --from-repofile
                 local repo_url="$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo"
                 local dnf_major
                 dnf_major=$(LC_ALL=C "$PKG_MGR" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+' | head -n1)
@@ -1653,11 +1649,7 @@ install_on_fedora()
             fi
 
             ### Fetch the gpg key ###
-            # Fedora installs from its native PMC repo validate packages against
-            # the 2025-rotated Microsoft signing key; older RPM distros keep the
-            # long-standing key. Gate on fedora_uses_native_repo (VERSION >= 43)
-            # rather than an exact 43 match so the key stays aligned with the
-            # repo-routing threshold as the bound widens.
+            # Fedora native-repo installs use the 2025-rotated key; others keep the old key
             local gpg_key_url="https://packages.microsoft.com/keys/microsoft.asc"
             if [ "$DISTRO" = "fedora" ] && fedora_uses_native_repo; then
                 gpg_key_url="https://packages.microsoft.com/keys/microsoft-2025.asc"
@@ -1666,23 +1658,14 @@ install_on_fedora()
             run_quietly "rpm --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
         fi
 
-        # A prior --clean/--remove can leave the PMC repo present but disabled.
-        # In that case `addrepo`/`--add-repo` above is a no-op and the subsequent
-        # `makecache --refresh` silently skips the repo, so version validation
-        # (a plain `dnf search`, which only looks at enabled repos) cannot find
-        # the package. Force-enable the repo first. dnf4 uses `--set-enabled`;
-        # dnf5 uses `setopt <repo>.enabled=1`. Non-fatal.
+        # Force-enable the repo in case a prior --clean left it present but disabled
         if [ "$PKG_MGR" = "dnf" ]; then
             "$PKG_MGR" config-manager --set-enabled "$repo_name" >/dev/null 2>&1 \
                 || "$PKG_MGR" config-manager setopt "${repo_name}.enabled=1" >/dev/null 2>&1 \
                 || true
         fi
 
-        # On dnf (especially dnf5/Fedora 41+) a plain `makecache` may reuse stale
-        # cached metadata left behind after a previous --clean, so a freshly
-        # (re-)added PMC repo is never actually downloaded and the subsequent
-        # version validation cannot find the package. --refresh forces the
-        # metadata to be re-fetched. yum is left unchanged.
+        # dnf needs --refresh so a freshly (re-)added repo isn't served from stale cache
         if [ "$PKG_MGR" = "dnf" ]; then
             retry_quietly 2 "$PKG_MGR -y makecache --refresh" "[!] unable to refresh the repos properly"
         else
@@ -1836,9 +1819,7 @@ remove_repo()
         if [ $cmd_status -eq 0 ]; then
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
-                # Fedora 41+ ships dnf5 which dropped `config-manager --disable`
-                # in favor of `config-manager setopt <repo>.enabled=0`. Detect the
-                # major version so legacy dnf4 hosts keep using the old syntax.
+                # dnf5 (Fedora 41+) replaced --disable with setopt <repo>.enabled=0
                 local dnf_major
                 dnf_major=$(LC_ALL=C "$PKG_MGR" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+' | head -n1)
                 if [ "${dnf_major:-4}" -ge 5 ]; then
@@ -1950,9 +1931,7 @@ rhel6_supported_version()
     return 1    
 }
 
-# Returns 0 (true) when the current Fedora VERSION has a dedicated
-# packages.microsoft.com/fedora/<version> repo populated in PMC. Older Fedora
-# releases fall back to the rhel/8 repo until their repos are populated.
+# Returns 0 when the current Fedora VERSION has a dedicated PMC fedora/<version> repo
 fedora_uses_native_repo()
 {
     local major="${VERSION%%.*}"
@@ -1964,9 +1943,7 @@ scale_version_id()
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
     if [ "$DISTRO_FAMILY" = "fedora" ]; then
         if [[ "$DISTRO" == "fedora" ]]; then
-            # Fedora 43+ has a dedicated packages.microsoft.com/fedora/<version>
-            # repo. Older Fedora releases are not populated there yet, so keep
-            # the historical rhel/8 mapping until their PMC repos come online.
+            # Fedora 43+ keeps its real version; older Fedora falls back to rhel/8
             if fedora_uses_native_repo; then
                 SCALED_VERSION=$VERSION
             else
