@@ -29,8 +29,6 @@ VERBOSE=
 PMC_URL=https://packages.microsoft.com/config
 SCALED_VERSION=
 VERSION=
-# Lowest Fedora release with a dedicated packages.microsoft.com/fedora/<version> repo
-FEDORA_PMC_REPO_MIN_VERSION=43
 ONBOARDING_SCRIPT=
 OFFBOARDING_SCRIPT=
 PRE_REQ_CHECK=
@@ -612,7 +610,6 @@ verify_supported_distros()
             ( $is_arm && (( VERSION >= 40 && VERSION <= 43 )) ) || ( ! $is_arm && (( VERSION >= 33 && VERSION <= 43 )) ) || log_warning "$os_not_supported_msg"
             ;;
         almalinux)
-            # AlmaLinux 8.4+, 9.2+ and all of 10 support both x86_64 and ARM64
             [[ "$major" == 10 ]] || [[ "$major" == 8 && "$minor" -ge 4 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
             ;;
         rocky)
@@ -1612,7 +1609,6 @@ install_on_fedora()
         esac
 
         if [ "$DISTRO" = "fedora" ]; then
-            # Fedora 43+ uses its native repo; older Fedora falls back to rhel/8
             if fedora_uses_native_repo; then
                 effective_distro="fedora"
             else
@@ -1638,7 +1634,6 @@ install_on_fedora()
 
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
-                # dnf5 (Fedora 41+) replaced --add-repo with addrepo --from-repofile
                 local repo_url="$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo"
                 local dnf_major
                 dnf_major=$(LC_ALL=C "$PKG_MGR" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+' | head -n1)
@@ -1652,7 +1647,6 @@ install_on_fedora()
             fi
 
             ### Fetch the gpg key ###
-            # Fedora native-repo installs use the 2025-rotated key; others keep the old key
             local gpg_key_url="https://packages.microsoft.com/keys/microsoft.asc"
             if [ "$DISTRO" = "fedora" ] && fedora_uses_native_repo; then
                 gpg_key_url="https://packages.microsoft.com/keys/microsoft-2025.asc"
@@ -1661,14 +1655,12 @@ install_on_fedora()
             run_quietly "rpm --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
         fi
 
-        # Force-enable the repo in case a prior --clean left it present but disabled
         if [ "$PKG_MGR" = "dnf" ]; then
             "$PKG_MGR" config-manager --set-enabled "$repo_name" >/dev/null 2>&1 \
                 || "$PKG_MGR" config-manager setopt "${repo_name}.enabled=1" >/dev/null 2>&1 \
                 || true
         fi
 
-        # dnf needs --refresh so a freshly (re-)added repo isn't served from stale cache
         if [ "$PKG_MGR" = "dnf" ]; then
             retry_quietly 2 "$PKG_MGR -y makecache --refresh" "[!] unable to refresh the repos properly"
         else
@@ -1734,7 +1726,6 @@ install_on_sles()
             run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n $repo_name https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
 
             ### Fetch the gpg key ###
-            # SLES 16 uses the 2025-rotated key; older SLES keeps the old key
             if [[ "$DISTRO" =~ ^(sles|sle-hpc|sles_sap)$ ]] && [[ "$VERSION" == 16* ]]; then
                 run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft-2025.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
             else
@@ -1823,7 +1814,6 @@ remove_repo()
         if [ $cmd_status -eq 0 ]; then
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
-                # dnf5 (Fedora 41+) replaced --disable with setopt <repo>.enabled=0
                 local dnf_major
                 dnf_major=$(LC_ALL=C "$PKG_MGR" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+' | head -n1)
                 if [ "${dnf_major:-4}" -ge 5 ]; then
@@ -1935,11 +1925,10 @@ rhel6_supported_version()
     return 1    
 }
 
-# Returns 0 when the current Fedora VERSION has a dedicated PMC fedora/<version> repo
 fedora_uses_native_repo()
 {
     local major="${VERSION%%.*}"
-    [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge "$FEDORA_PMC_REPO_MIN_VERSION" ]
+    [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge 43 ]
 }
 
 scale_version_id()
@@ -1947,7 +1936,6 @@ scale_version_id()
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
     if [ "$DISTRO_FAMILY" = "fedora" ]; then
         if [[ "$DISTRO" == "fedora" ]]; then
-            # Fedora 43+ uses its native repo; older Fedora falls back to rhel/8
             if fedora_uses_native_repo; then
                 SCALED_VERSION=$VERSION
             else
