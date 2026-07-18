@@ -1658,15 +1658,12 @@ install_on_fedora()
             run_quietly "rpm --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
         fi
 
-        # Force-enable the repo in case a prior --clean left it present but disabled
+        # Force-enable the repo (a prior --clean may leave it present but disabled)
+        # and refresh so a freshly (re-)added repo isn't served from stale cache.
         if [ "$PKG_MGR" = "dnf" ]; then
             "$PKG_MGR" config-manager --set-enabled "$repo_name" >/dev/null 2>&1 \
                 || "$PKG_MGR" config-manager setopt "${repo_name}.enabled=1" >/dev/null 2>&1 \
                 || true
-        fi
-
-        # dnf needs --refresh so a freshly (re-)added repo isn't served from stale cache
-        if [ "$PKG_MGR" = "dnf" ]; then
             retry_quietly 2 "$PKG_MGR -y makecache --refresh" "[!] unable to refresh the repos properly"
         else
             retry_quietly 2 "$PKG_MGR -y makecache" "[!] unable to refresh the repos properly"
