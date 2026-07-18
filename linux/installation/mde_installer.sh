@@ -29,10 +29,6 @@ VERBOSE=
 PMC_URL=https://packages.microsoft.com/config
 SCALED_VERSION=
 VERSION=
-# Lowest Fedora release that has a dedicated packages.microsoft.com/fedora/<version>
-# repo populated in PMC. Older Fedora releases fall back to the rhel/8 repo until
-# their fedora/<version> repos come online.
-FEDORA_PMC_REPO_MIN_VERSION=43
 ONBOARDING_SCRIPT=
 OFFBOARDING_SCRIPT=
 PRE_REQ_CHECK=
@@ -1659,9 +1655,9 @@ install_on_fedora()
             ### Fetch the gpg key ###
             # Fedora installs from its native PMC repo validate packages against
             # the 2025-rotated Microsoft signing key; older RPM distros keep the
-            # long-standing key. Gate on fedora_uses_native_repo (VERSION >=
-            # FEDORA_PMC_REPO_MIN_VERSION) rather than an exact 43 match so the
-            # key stays aligned with the repo-routing threshold as the bound widens.
+            # long-standing key. Gate on fedora_uses_native_repo (VERSION >= 43)
+            # rather than an exact 43 match so the key stays aligned with the
+            # repo-routing threshold as the bound widens.
             local gpg_key_url="https://packages.microsoft.com/keys/microsoft.asc"
             if [ "$DISTRO" = "fedora" ] && fedora_uses_native_repo; then
                 gpg_key_url="https://packages.microsoft.com/keys/microsoft-2025.asc"
@@ -1960,7 +1956,7 @@ rhel6_supported_version()
 fedora_uses_native_repo()
 {
     local major="${VERSION%%.*}"
-    [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge "$FEDORA_PMC_REPO_MIN_VERSION" ]
+    [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge 43 ]
 }
 
 scale_version_id()
