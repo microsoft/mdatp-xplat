@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="1.2.2" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="1.2.3" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -29,6 +29,10 @@ VERBOSE=
 PMC_URL=https://packages.microsoft.com/config
 SCALED_VERSION=
 VERSION=
+# Lowest Fedora release that has a dedicated packages.microsoft.com/fedora/<version>
+# repo populated in PMC. Older Fedora releases fall back to the rhel/8 repo until
+# their fedora/<version> repos come online.
+FEDORA_PMC_REPO_MIN_VERSION=43
 ONBOARDING_SCRIPT=
 OFFBOARDING_SCRIPT=
 PRE_REQ_CHECK=
@@ -601,19 +605,20 @@ verify_supported_distros()
             $is_arm && log_warning "$os_not_supported_msg" || [[ "$major" == 8 || ( "$major" == 7 && "$minor" -ge 2 ) ]] || log_warning "$os_not_supported_msg"
             ;;
         sles|sle-hpc|sles_sap)
-            [[ "$major" =~ ^(15)$ ]] || (! $is_arm && [[ "$major" =~ ^(12)$ ]] ) || log_warning "$os_not_supported_msg"
+            [[ "$major" =~ ^(15|16)$ ]] || (! $is_arm && [[ "$major" =~ ^(12)$ ]] ) || log_warning "$os_not_supported_msg"
             ;;
         amzn)
             [[ "$VERSION" == 2 || "$VERSION" == 2023 ]] || log_warning "$os_not_supported_msg"
             ;;
         fedora)
-            $is_arm && log_warning "$os_not_supported_msg" || (( VERSION >= 33 && VERSION <= 38 )) || log_warning "$os_not_supported_msg"
+            ( $is_arm && (( VERSION >= 40 && VERSION <= 43 )) ) || ( ! $is_arm && (( VERSION >= 33 && VERSION <= 43 )) ) || log_warning "$os_not_supported_msg"
             ;;
         almalinux)
-            $is_arm && log_warning "$os_not_supported_msg" || [[ "$major" == 8 && "$minor" -ge 4 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
+            # AlmaLinux 8.4+, 9.2+ and all of 10 support both x86_64 and ARM64
+            [[ "$major" == 10 ]] || [[ "$major" == 8 && "$minor" -ge 4 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
             ;;
         rocky)
-            $is_arm && log_warning "$os_not_supported_msg" || [[ "$major" == 8 && "$minor" -ge 7 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
+            [[ ( "$major" == 8 && "$minor" -ge 7 ) || ( "$major" == 9 && "$minor" -ge 2 ) || "$major" == 10 ]] || log_warning "$os_not_supported_msg"
             ;;
         mariner)
             $is_arm && log_warning "$os_not_supported_msg" || [[ "$VERSION" == 2 ]] || log_warning "$os_not_supported_msg"
@@ -1608,7 +1613,16 @@ install_on_fedora()
                 ;;
         esac
 
-        if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ]; then
+        if [ "$DISTRO" = "fedora" ]; then
+            # Fedora 43+ uses its own packages.microsoft.com/fedora/<version>
+            # repo. Older Fedora releases are not populated there yet, so they
+            # fall back to the rhel repo (paired with SCALED_VERSION=8).
+            if fedora_uses_native_repo; then
+                effective_distro="fedora"
+            else
+                effective_distro="rhel"
+            fi
+        elif [ "$DISTRO" = "ol" ]; then
             effective_distro="rhel"
         elif [ "$DISTRO" = "almalinux" ]; then
             effective_distro="alma"
@@ -1628,17 +1642,57 @@ install_on_fedora()
 
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
-                run_quietly "dnf config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
+                # Fedora 41+ ships dnf5 which dropped --add-repo=<URL> in favor of
+                # `addrepo --from-repofile=<URL>`. Detect the major version up front
+                # so legacy hosts surface real transport errors (DNS, PMC 5xx, GPG)
+                local repo_url="$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo"
+                local dnf_major
+                dnf_major=$(LC_ALL=C "$PKG_MGR" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+' | head -n1)
+                if [ "${dnf_major:-4}" -ge 5 ]; then
+                    run_quietly "$PKG_MGR config-manager addrepo --from-repofile=\"$repo_url\"" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
+                else
+                    run_quietly "$PKG_MGR config-manager --add-repo=\"$repo_url\"" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
+                fi
             else
                 run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
             fi
 
             ### Fetch the gpg key ###
-            run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
+            # Fedora installs from its native PMC repo validate packages against
+            # the 2025-rotated Microsoft signing key; older RPM distros keep the
+            # long-standing key. Gate on fedora_uses_native_repo (VERSION >=
+            # FEDORA_PMC_REPO_MIN_VERSION) rather than an exact 43 match so the
+            # key stays aligned with the repo-routing threshold as the bound widens.
+            local gpg_key_url="https://packages.microsoft.com/keys/microsoft.asc"
+            if [ "$DISTRO" = "fedora" ] && fedora_uses_native_repo; then
+                gpg_key_url="https://packages.microsoft.com/keys/microsoft-2025.asc"
+            fi
+            run_quietly "curl $gpg_key_url > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
             run_quietly "rpm --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
         fi
 
-        run_quietly "$PKG_MGR -y makecache" "[!] unable to refresh the repos properly"
+        # A prior --clean/--remove can leave the PMC repo present but disabled.
+        # In that case `addrepo`/`--add-repo` above is a no-op and the subsequent
+        # `makecache --refresh` silently skips the repo, so version validation
+        # (a plain `dnf search`, which only looks at enabled repos) cannot find
+        # the package. Force-enable the repo first. dnf4 uses `--set-enabled`;
+        # dnf5 uses `setopt <repo>.enabled=1`. Non-fatal.
+        if [ "$PKG_MGR" = "dnf" ]; then
+            "$PKG_MGR" config-manager --set-enabled "$repo_name" >/dev/null 2>&1 \
+                || "$PKG_MGR" config-manager setopt "${repo_name}.enabled=1" >/dev/null 2>&1 \
+                || true
+        fi
+
+        # On dnf (especially dnf5/Fedora 41+) a plain `makecache` may reuse stale
+        # cached metadata left behind after a previous --clean, so a freshly
+        # (re-)added PMC repo is never actually downloaded and the subsequent
+        # version validation cannot find the package. --refresh forces the
+        # metadata to be re-fetched. yum is left unchanged.
+        if [ "$PKG_MGR" = "dnf" ]; then
+            retry_quietly 2 "$PKG_MGR -y makecache --refresh" "[!] unable to refresh the repos properly"
+        else
+            retry_quietly 2 "$PKG_MGR -y makecache" "[!] unable to refresh the repos properly"
+        fi
     else
         # Try to install/find packages, don't exit the script if it fails.
         install_required_pkgs --no-exit "${packages[@]}"
@@ -1699,7 +1753,13 @@ install_on_sles()
             run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n $repo_name https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
 
             ### Fetch the gpg key ###
-            run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
+            # SLES 16 validates packages against the 2025-rotated Microsoft
+            # signing key; older SLES releases keep the long-standing key.
+            if [[ "$DISTRO" =~ ^(sles|sle-hpc|sles_sap)$ ]] && [[ "$VERSION" == 16* ]]; then
+                run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft-2025.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
+            else
+                run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
+            fi
         else
             log_info "[i] repository already configured"
         fi
@@ -1783,7 +1843,16 @@ remove_repo()
         if [ $cmd_status -eq 0 ]; then
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
-                run_quietly "dnf config-manager --disable $repo_name" "Unable to disable the repo" $ERR_FAILED_REPO_CLEANUP
+                # Fedora 41+ ships dnf5 which dropped `config-manager --disable`
+                # in favor of `config-manager setopt <repo>.enabled=0`. Detect the
+                # major version so legacy dnf4 hosts keep using the old syntax.
+                local dnf_major
+                dnf_major=$(LC_ALL=C "$PKG_MGR" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+' | head -n1)
+                if [ "${dnf_major:-4}" -ge 5 ]; then
+                    run_quietly "dnf config-manager setopt $repo_name.enabled=0" "Unable to disable the repo" $ERR_FAILED_REPO_CLEANUP
+                else
+                    run_quietly "dnf config-manager --disable $repo_name" "Unable to disable the repo" $ERR_FAILED_REPO_CLEANUP
+                fi
             else
                 run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo" $ERR_FAILED_REPO_CLEANUP
             fi
@@ -1888,11 +1957,28 @@ rhel6_supported_version()
     return 1    
 }
 
+# Returns 0 (true) when the current Fedora VERSION has a dedicated
+# packages.microsoft.com/fedora/<version> repo populated in PMC. Older Fedora
+# releases fall back to the rhel/8 repo until their repos are populated.
+fedora_uses_native_repo()
+{
+    local major="${VERSION%%.*}"
+    [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge "$FEDORA_PMC_REPO_MIN_VERSION" ]
+}
+
 scale_version_id()
 {
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
     if [ "$DISTRO_FAMILY" = "fedora" ]; then
-        if [[ $VERSION == 6* ]]; then
+        if [[ "$DISTRO" == "fedora" ]]; then
+            # Fedora 43+ has a native packages.microsoft.com/fedora/<version>
+            # repo, so keep the real version; older Fedora falls back to rhel/8.
+            if fedora_uses_native_repo; then
+                SCALED_VERSION=$VERSION
+            else
+                SCALED_VERSION=8
+            fi
+        elif [[ $VERSION == 6* ]]; then
             if rhel6_supported_version $VERSION; then # support versions 6.7+
                 if [ "$DISTRO" = "centos" ] || [ "$DISTRO" = "rhel" ]; then
                     SCALED_VERSION=6
@@ -1905,7 +1991,7 @@ scale_version_id()
 
         elif [[ $VERSION == 7* ]]; then
             SCALED_VERSION=7
-        elif [[ $VERSION == 8* ]] || [[ "$DISTRO" == "fedora" ]]; then
+        elif [[ $VERSION == 8* ]]; then
             SCALED_VERSION=8
         elif [[ $VERSION == 9* ]]; then
             if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" ]]; then
@@ -1913,7 +1999,7 @@ scale_version_id()
             else
                 SCALED_VERSION=9.0
             fi
-        elif [[ "$VERSION" == 10* ]] && [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" || "$DISTRO" == "ol" ]]; then
+        elif [[ "$VERSION" == 10* ]] && [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" || "$DISTRO" == "ol" || "$DISTRO" == "almalinux" || "$DISTRO" == "rocky" ]]; then
             SCALED_VERSION=10
         elif [[ $DISTRO == "amzn" ]] &&  [[ $VERSION == "2" || $VERSION == "2023" ]]; then # For Amazon Linux the scaled version is 2023 or 2
             SCALED_VERSION=$VERSION
@@ -1939,6 +2025,8 @@ scale_version_id()
             SCALED_VERSION=12
         elif [[ $VERSION == 15* ]]; then
             SCALED_VERSION=15
+        elif [[ $VERSION == 16* ]]; then
+            SCALED_VERSION=16
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
