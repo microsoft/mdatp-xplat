@@ -610,10 +610,10 @@ verify_supported_distros()
             ( $is_arm && (( VERSION >= 40 && VERSION <= 43 )) ) || ( ! $is_arm && (( VERSION >= 33 && VERSION <= 43 )) ) || log_warning "$os_not_supported_msg"
             ;;
         almalinux)
-            $is_arm && log_warning "$os_not_supported_msg" || [[ "$major" == 8 && "$minor" -ge 4 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
+            [[ "$major" == 10 ]] || [[ "$major" == 8 && "$minor" -ge 4 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
             ;;
         rocky)
-            $is_arm && log_warning "$os_not_supported_msg" || [[ "$major" == 8 && "$minor" -ge 7 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
+            [[ ( "$major" == 8 && "$minor" -ge 7 ) || ( "$major" == 9 && "$minor" -ge 2 ) || "$major" == 10 ]] || log_warning "$os_not_supported_msg"
             ;;
         mariner)
             $is_arm && log_warning "$os_not_supported_msg" || [[ "$VERSION" == 2 ]] || log_warning "$os_not_supported_msg"
@@ -1962,7 +1962,7 @@ scale_version_id()
             else
                 SCALED_VERSION=9.0
             fi
-        elif [[ "$VERSION" == 10* ]] && [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" || "$DISTRO" == "ol" ]]; then
+        elif [[ "$VERSION" == 10* ]] && [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" || "$DISTRO" == "ol" || "$DISTRO" == "almalinux" || "$DISTRO" == "rocky" ]]; then
             SCALED_VERSION=10
         elif [[ $DISTRO == "amzn" ]] &&  [[ $VERSION == "2" || $VERSION == "2023" ]]; then # For Amazon Linux the scaled version is 2023 or 2
             SCALED_VERSION=$VERSION
