@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="1.2.3" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="1.2.4" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -601,13 +601,13 @@ verify_supported_distros()
             $is_arm && log_warning "$os_not_supported_msg" || [[ "$major" == 8 || ( "$major" == 7 && "$minor" -ge 2 ) ]] || log_warning "$os_not_supported_msg"
             ;;
         sles|sle-hpc|sles_sap)
-            [[ "$major" =~ ^(15)$ ]] || (! $is_arm && [[ "$major" =~ ^(12)$ ]] ) || log_warning "$os_not_supported_msg"
+            [[ "$major" =~ ^(15|16)$ ]] || (! $is_arm && [[ "$major" =~ ^(12)$ ]] ) || log_warning "$os_not_supported_msg"
             ;;
         amzn)
             [[ "$VERSION" == 2 || "$VERSION" == 2023 ]] || log_warning "$os_not_supported_msg"
             ;;
         fedora)
-            $is_arm && log_warning "$os_not_supported_msg" || (( VERSION >= 33 && VERSION <= 38 )) || log_warning "$os_not_supported_msg"
+            ( $is_arm && (( VERSION >= 40 && VERSION <= 43 )) ) || ( ! $is_arm && (( VERSION >= 33 && VERSION <= 43 )) ) || log_warning "$os_not_supported_msg"
             ;;
         almalinux)
             [[ "$major" == 10 ]] || [[ "$major" == 8 && "$minor" -ge 4 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
@@ -1608,7 +1608,13 @@ install_on_fedora()
                 ;;
         esac
 
-        if [ "$DISTRO" = "ol" ] || [ "$DISTRO" = "fedora" ]; then
+        if [ "$DISTRO" = "fedora" ]; then
+            if fedora_uses_native_repo; then
+                effective_distro="fedora"
+            else
+                effective_distro="rhel"
+            fi
+        elif [ "$DISTRO" = "ol" ]; then
             effective_distro="rhel"
         elif [ "$DISTRO" = "almalinux" ]; then
             effective_distro="alma"
@@ -1628,17 +1634,38 @@ install_on_fedora()
 
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
-                run_quietly "dnf config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
+                local repo_url="$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo"
+                local dnf_major
+                dnf_major=$(LC_ALL=C "$PKG_MGR" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+' | head -n1)
+                if [ "${dnf_major:-4}" -ge 5 ]; then
+                    run_quietly "$PKG_MGR config-manager addrepo --from-repofile=\"$repo_url\"" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
+                else
+                    run_quietly "$PKG_MGR config-manager --add-repo=\"$repo_url\"" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
+                fi
             else
                 run_quietly "yum-config-manager --add-repo=$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo" "Unable to fetch the repo" $ERR_FAILED_REPO_SETUP
             fi
 
             ### Fetch the gpg key ###
-            run_quietly "curl https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
+            local gpg_key_url="https://packages.microsoft.com/keys/microsoft.asc"
+            if [ "$DISTRO" = "fedora" ] && fedora_uses_native_repo; then
+                gpg_key_url="https://packages.microsoft.com/keys/microsoft-2025.asc"
+            fi
+            run_quietly "curl $gpg_key_url > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
             run_quietly "rpm --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
         fi
 
-        run_quietly "$PKG_MGR -y makecache" "[!] unable to refresh the repos properly"
+        if [ "$PKG_MGR" = "dnf" ]; then
+            "$PKG_MGR" config-manager --set-enabled "$repo_name" >/dev/null 2>&1 \
+                || "$PKG_MGR" config-manager setopt "${repo_name}.enabled=1" >/dev/null 2>&1 \
+                || true
+        fi
+
+        if [ "$PKG_MGR" = "dnf" ]; then
+            retry_quietly 2 "$PKG_MGR -y makecache --refresh" "[!] unable to refresh the repos properly"
+        else
+            retry_quietly 2 "$PKG_MGR -y makecache" "[!] unable to refresh the repos properly"
+        fi
     else
         # Try to install/find packages, don't exit the script if it fails.
         install_required_pkgs --no-exit "${packages[@]}"
@@ -1699,7 +1726,11 @@ install_on_sles()
             run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n $repo_name https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
 
             ### Fetch the gpg key ###
-            run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
+            if [[ "$DISTRO" =~ ^(sles|sle-hpc|sles_sap)$ ]] && [[ "$VERSION" == 16* ]]; then
+                run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft-2025.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
+            else
+                run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
+            fi
         else
             log_info "[i] repository already configured"
         fi
@@ -1783,7 +1814,13 @@ remove_repo()
         if [ $cmd_status -eq 0 ]; then
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
-                run_quietly "dnf config-manager --disable $repo_name" "Unable to disable the repo" $ERR_FAILED_REPO_CLEANUP
+                local dnf_major
+                dnf_major=$(LC_ALL=C "$PKG_MGR" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+' | head -n1)
+                if [ "${dnf_major:-4}" -ge 5 ]; then
+                    run_quietly "dnf config-manager setopt $repo_name.enabled=0" "Unable to disable the repo" $ERR_FAILED_REPO_CLEANUP
+                else
+                    run_quietly "dnf config-manager --disable $repo_name" "Unable to disable the repo" $ERR_FAILED_REPO_CLEANUP
+                fi
             else
                 run_quietly "yum-config-manager --disable $repo_name" "Unable to disable the repo" $ERR_FAILED_REPO_CLEANUP
             fi
@@ -1888,11 +1925,23 @@ rhel6_supported_version()
     return 1    
 }
 
+fedora_uses_native_repo()
+{
+    local major="${VERSION%%.*}"
+    [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge 43 ]
+}
+
 scale_version_id()
 {
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
     if [ "$DISTRO_FAMILY" = "fedora" ]; then
-        if [[ $VERSION == 6* ]]; then
+        if [[ "$DISTRO" == "fedora" ]]; then
+            if fedora_uses_native_repo; then
+                SCALED_VERSION=$VERSION
+            else
+                SCALED_VERSION=8
+            fi
+        elif [[ $VERSION == 6* ]]; then
             if rhel6_supported_version $VERSION; then # support versions 6.7+
                 if [ "$DISTRO" = "centos" ] || [ "$DISTRO" = "rhel" ]; then
                     SCALED_VERSION=6
@@ -1905,7 +1954,7 @@ scale_version_id()
 
         elif [[ $VERSION == 7* ]]; then
             SCALED_VERSION=7
-        elif [[ $VERSION == 8* ]] || [[ "$DISTRO" == "fedora" ]]; then
+        elif [[ $VERSION == 8* ]]; then
             SCALED_VERSION=8
         elif [[ $VERSION == 9* ]]; then
             if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" ]]; then
@@ -1939,6 +1988,8 @@ scale_version_id()
             SCALED_VERSION=12
         elif [[ $VERSION == 15* ]]; then
             SCALED_VERSION=15
+        elif [[ $VERSION == 16* ]]; then
+            SCALED_VERSION=16
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
