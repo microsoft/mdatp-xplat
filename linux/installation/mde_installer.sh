@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="1.2.4" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="1.2.5" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -302,7 +302,7 @@ detect_distro()
         DISTRO_FAMILY="mariner"
     elif [ "$DISTRO" = "azurelinux" ]; then
         DISTRO_FAMILY="azurelinux"
-    elif [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ] || [ "$DISTRO" = "sles_sap" ]; then
+    elif [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ] || [ "$DISTRO" = "sles_sap" ] || [ "$DISTRO" = "opensuse-leap" ] || [ "$DISTRO" = "opensuse" ]; then
         DISTRO_FAMILY="sles"
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
