@@ -741,7 +741,7 @@
         "dlp": {
             "title": "Data Loss Prevention",
             "propertyOrder": 90,
-            "defaultProperties": [ "exclusions", "features" ],
+            "defaultProperties": [ "exclusions", "features", "accessibility" ],
             "properties": {
                 "exclusions": {
                     "title": "Exclusions",
@@ -801,6 +801,48 @@
                                 "type": "string",
                                 "default": "production",
                                 "enum": ["insiderFast", "external", "production"]
+                            }
+                        }
+                    }
+                },
+                "accessibility": {
+                    "title": "Accessibility",
+                    "description": "Data loss prevention behavior when macOS Accessibility permissions are unavailable.",
+                    "propertyOrder": 30,
+                    "type": "object",
+                    "properties": {
+                        "enforcement": {
+                            "title": "Enforcement",
+                            "propertyOrder": 10,
+                            "type": "object",
+                            "properties": {
+                                "unallowedBrowserMode": {
+                                    "title": "Unallowed browser mode",
+                                    "description": "Enforcement mode for unallowed browsers when macOS Accessibility permissions are unavailable.",
+                                    "propertyOrder": 10,
+                                    "type": "string",
+                                    "enum": ["off", "audit", "enforce"]
+                                },
+                                "pasteToBrowserMode": {
+                                    "title": "Paste to browser mode",
+                                    "description": "Enforcement mode for paste-to-browser operations when macOS Accessibility permissions are unavailable.",
+                                    "propertyOrder": 20,
+                                    "type": "string",
+                                    "enum": ["off", "audit", "enforce"]
+                                }
+                            }
+                        },
+                        "notification": {
+                            "title": "Notification",
+                            "propertyOrder": 20,
+                            "type": "object",
+                            "properties": {
+                                "customMessage": {
+                                    "title": "Custom message",
+                                    "description": "Custom message shown to the user when macOS Accessibility permissions are unavailable.",
+                                    "propertyOrder": 10,
+                                    "type": "string"
+                                }
                             }
                         }
                     }
