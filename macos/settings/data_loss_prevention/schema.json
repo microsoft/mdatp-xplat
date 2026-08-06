@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.24122.0004",
+    "__version": "101.25102.0001",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
@@ -8,17 +8,16 @@
         "remove_empty_properties": true
     },
     "type": "object",
-    "defaultProperties": [ "antivirusEngine", "dlp", "features" ],
     "properties": {
         "antivirusEngine": {
             "title": "Antivirus engine",
             "description": "Properties displayed below will be managed, a user would not be able to override them",
             "propertyOrder": 10,
-            "defaultProperties": [ "passiveMode" ],
+            "defaultProperties": [ "antivirusEngine", "dlp", "features" ],
             "properties": {
                 "enforcementLevel": {
                     "title": "Enforcement level",
-                    "default": "realTime",
+                    "default": "real_time",
                     "type": "string",
                     "propertyOrder": 5,
                     "description": "Antivirus engine enforcement mode",
@@ -287,7 +286,7 @@
                     ]
                 },
                 "maximumOnDemandScanThreads": {
-                    "default": "2",
+                    "default": 2,
                     "title": "Degree of parallelism for on-demand scans",
                     "type": "number",
                     "minimum": 1,
@@ -326,6 +325,46 @@
                             "rel": "More information"
                         }
                     ]
+                },
+                "offlineDefinitionUpdate": {
+                    "default": "disabled",
+                    "title": "Enable offline security intelligence updates",
+                    "type": "string",
+                    "propertyOrder": 160,
+                    "description": "Enables or disables offline security intelligence updates feature. When this feature is enabled Defender will use a local mirror server to update the signatures.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-support-offline-security-intelligence-update",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
+                },
+                "offlineDefinitionUpdateUrl": {
+                    "title": "URL for a security intelligence updates mirror server",
+                    "type": "string",
+                    "propertyOrder": 170,
+                    "description": "Sets the URL for a local offline security intelligence updates mirror server. When the feature is enabled Defender will use it to update the signatures.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-support-offline-security-intelligence-update#configure-the-endpoints",
+                            "rel": "More information"
+                        }
+                    ]
+                },
+                "offlineDefinitionUpdateFallbackToCloud": {
+                    "default": true,
+                    "title": "Fallback to Microsoft cloud updates",
+                    "description": "Determine the Defender for Endpoint security intelligence update approach when offline mirror server fails to serve the update request. If set to true, the update is retried via the Microsoft cloud when offline security intelligence update failed.",
+                    "format": "checkbox",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-support-offline-security-intelligence-update#configure-the-endpoints",
+                            "rel": "More information"
+                        }
+                    ],
+                    "propertyOrder": 180,
+                    "type": "boolean"
                 }
             }
         },
@@ -405,7 +444,6 @@
                     "enum": ["normal", "moderate", "high", "high_plus", "zero_tolerance"]
                 },
                  "definitionUpdateDue": {
-                    "default": "7",
                     "title": "Security intelligence update due (in days)",
                     "type": "number",
                     "propertyOrder": 60,
@@ -419,6 +457,33 @@
                     "default": 7,
                     "minimum": 1,
                     "maximum": 30
+                },
+                "definitionUpdatesInterval": {
+                    "title": "Security intelligence update interval (in seconds)",
+                    "type": "number",
+                    "propertyOrder": 70,
+                    "description": "Specifies the time interval (in seconds) after which security intelligence updates will be checked.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#security-intelligence-update-interval-in-seconds",
+                            "rel": "More information"
+                        }
+                    ],
+                    "default": 28800,
+                    "minimum": 60,
+                    "maximum": 86400
+                },
+                "proxy": {
+                    "title": "Set proxy for MDE communication",
+                    "type": "string",
+                    "propertyOrder": 80,
+                    "description": "Configure proxy for all MDE cloud communication. If not set, the system-wide proxy is used.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-preferences#proxy-for-defender-for-endpoint-communication",
+                            "rel": "More information"
+                        }
+                    ]
                 }
             }
         },
@@ -552,6 +617,34 @@
                         }
                     ],
                     "enum": ["enabled", "disabled"]   
+                },
+                "behaviorMonitoring": {
+                    "default": "disabled",
+                    "title": "Behavior Monitoring",
+                    "type": "string",
+                    "propertyOrder": 40,
+                    "description": "Behavior Monitoring detections with Microsoft Defender for Endpoint.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/behavior-monitor-macos",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
+                },
+                "offlineDefinitionUpdateVerifySig": {
+                    "default": "enabled",
+                    "title": "offline security intelligence updates signature verification",
+                    "type": "string",
+                    "propertyOrder": 60,
+                    "description": "Offline security intelligence updates signature verification with Microsoft Defender for Endpoint. It is recommended to keep this setting enabled when offline updates are enabled.",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-support-offline-security-intelligence-update",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
                 }
             }
         },
