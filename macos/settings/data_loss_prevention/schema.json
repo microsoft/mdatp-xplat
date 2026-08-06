@@ -810,17 +810,20 @@
                     "description": "Data loss prevention behavior when macOS Accessibility permissions are unavailable.",
                     "propertyOrder": 30,
                     "type": "object",
+                    "defaultProperties": ["enforcement", "notification"],
                     "properties": {
                         "enforcement": {
                             "title": "Enforcement",
                             "propertyOrder": 10,
                             "type": "object",
+                            "defaultProperties": ["unallowedBrowserMode", "pasteToBrowserMode"],
                             "properties": {
                                 "unallowedBrowserMode": {
                                     "title": "Unallowed browser mode",
                                     "description": "Enforcement mode for unallowed browsers when macOS Accessibility permissions are unavailable.",
                                     "propertyOrder": 10,
                                     "type": "string",
+                                    "default": "enforce",
                                     "enum": ["off", "audit", "enforce"]
                                 },
                                 "pasteToBrowserMode": {
@@ -828,6 +831,7 @@
                                     "description": "Enforcement mode for paste-to-browser operations when macOS Accessibility permissions are unavailable.",
                                     "propertyOrder": 20,
                                     "type": "string",
+                                    "default": "enforce",
                                     "enum": ["off", "audit", "enforce"]
                                 }
                             }
@@ -836,6 +840,7 @@
                             "title": "Notification",
                             "propertyOrder": 20,
                             "type": "object",
+                            "defaultProperties": ["customMessage"],
                             "properties": {
                                 "customMessage": {
                                     "title": "Custom message",
