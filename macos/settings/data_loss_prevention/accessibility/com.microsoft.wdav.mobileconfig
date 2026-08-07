@@ -58,21 +58,21 @@
                 </dict>
                 <key>dlp</key>
                 <dict>
-                <key>accessibility</key>
-                <dict>
-                <key>enforcement</key>
-                <dict>
-                <key>unallowedBrowserMode</key>
-                <string>audit</string>
-                <key>pasteToBrowserMode</key>
-                <string>enforce</string>
-                </dict>
-                <key>notification</key>
-                <dict>
-                <key>Please enable Accessibility permissions to comply with IT Policy</key>
-                <string/>
-                </dict>
-                </dict>
+                    <key>accessibility</key>
+                    <dict>
+                        <key>enforcement</key>
+                        <dict>
+                            <key>unallowedBrowserMode</key>
+                            <string>audit</string>
+                            <key>pasteToBrowserMode</key>
+                            <string>enforce</string>
+                        </dict>
+                        <key>notification</key>
+                        <dict>
+                            <key>Please enable Accessibility permissions to comply with IT Policy</key>
+                            <string/>
+                        </dict>
+                    </dict>
                 </dict>
             </dict>
         </array>
