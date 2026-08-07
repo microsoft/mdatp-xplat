@@ -1,8 +1,12 @@
 # Accessibility Example
-Adds support for extracting and forwarding DLP accessibility settings from managed configuration to Endpoint DLP for macOS 27 AX-off handling (Golden Gate).
+Adds support for extracting and forwarding DLP accessibility settings from managed configuration to Endpoint DLP for macOS 27 (Golden Gate).
+
+- Unallowed Browser Mode
+- Paste to Browser Mode
+- Notification
 
 ### Intune
-This sample configuration profile sets both the Unallowed Browser Mode and Paste to Browser Mode flags for Accessibility: [com.microsoft.wdav.mobileconfig](./com.microsoft.wdav.mobileconfig).
+This sample configuration profile sets the Unallowed Browser Mode, Paste to Browser Mode flags along with Notification message for asking users' to Enable the Accessibility Permission: [com.microsoft.wdav.mobileconfig](./com.microsoft.wdav.mobileconfig).
 
 
 ### JAMF Pro
