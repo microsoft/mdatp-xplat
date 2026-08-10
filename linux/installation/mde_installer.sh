@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="1.2.4" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="1.2.6" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -162,8 +162,11 @@ run_quietly()
         log_debug "[>] Running command: $1"
     fi
 
-    out=$(eval $1 2>&1; echo "$?")
-    exit_code=$(echo "$out" | tail -n1)
+    if out=$(eval "$1" </dev/null 2>&1); then
+        exit_code=0
+    else
+        exit_code=$?
+    fi
 
     if [ -n "$VERBOSE" ]; then
         log_info "$out"
@@ -189,39 +192,57 @@ run_quietly()
 retry_quietly()
 {
     # retry_quietly <retries> <command> <error_msg> [<error_code>]
-    # use error_code for script_exit
+    # Runs <command> up to <retries> times. Per-attempt failures are silent;
+    # only the FINAL failure emits log_error/script_exit. This avoids
+    # spurious error logs from transient failures that the retry recovers.
 
     if [ $# -lt 3 ] || [ $# -gt 4 ]; then
         log_error "[!] INTERNAL ERROR. retry_quietly requires 3 or 4 arguments"
         exit 1
     fi
 
-    local exit_code=
+    local out exit_code=1
     local retries=$1
 
-    while [ $retries -gt 0 ]
+    while [ "$retries" -gt 0 ]
     do
+        if [ "$DEBUG" != "0" ]; then
+            log_debug "[>] Running command: $2"
+        fi
 
-        if run_quietly "$2" "$3"; then
+        if out=$(eval "$2" </dev/null 2>&1); then
             exit_code=0
         else
-            exit_code=1
+            exit_code=$?
         fi
-        
-        if [ $exit_code -ne 0 ]; then
+
+        if [ -n "$VERBOSE" ]; then
+            log_info "$out"
+        fi
+
+        if [ "$exit_code" = "0" ]; then
+            return 0
+        fi
+
+        if [ "$DEBUG" != "0" ]; then
+            log_debug "[>] Command output: $out"
+            log_debug "[>] Command exit_code: $exit_code"
+        fi
+        retries=$((retries - 1))
+        if [ "$retries" -gt 0 ]; then
             sleep 1
-            ((retries--))
-            log_info "[r] $(($1-$retries))/$1"
-        else
-            retries=0
+            log_info "[!] retrying ($(($1-$retries))/$1): ${2%% *}"
         fi
     done
 
-    if [ $# -eq 4 ] && [ $exit_code -ne 0 ]; then
-        script_exit "$3" "$4"
+    local error_msg="$3 (exit code: $exit_code)"
+    if [ $# -eq 4 ]; then
+        script_exit "$error_msg" "$4"
+    else
+        log_error "$error_msg"
     fi
 
-    return $exit_code
+    return "$exit_code"
 }
 
 get_health_field()
@@ -269,10 +290,17 @@ detect_arch()
     log_info "[v] detected: $ARCHITECTURE architecture"
 }
 
+# Isolated in its own function so the os-release path is always the fixed
+# system file, never an environment- or caller-controlled path.
+load_os_release()
+{
+    . /etc/os-release
+}
+
 detect_distro()
 {
     if [ -f /etc/os-release ] || [ -f /etc/mariner-release ]; then
-        . /etc/os-release
+        load_os_release
         DISTRO=$ID
         VERSION=$VERSION_ID
         VERSION_NAME=$VERSION_CODENAME
@@ -302,7 +330,7 @@ detect_distro()
         DISTRO_FAMILY="mariner"
     elif [ "$DISTRO" = "azurelinux" ]; then
         DISTRO_FAMILY="azurelinux"
-    elif [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ] || [ "$DISTRO" = "sles_sap" ]; then
+    elif [ "$DISTRO" = "sles" ] || [ "$DISTRO" = "sle-hpc" ] || [ "$DISTRO" = "sles_sap" ] || [ "$DISTRO" = "opensuse-leap" ] || [ "$DISTRO" = "opensuse" ]; then
         DISTRO_FAMILY="sles"
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
@@ -506,7 +534,6 @@ verify_kernel_version()
     if [ "$result" -ne 0 ]; then
         local msg="MDE requires kernel version $MINIMUM_REQUIRED_KERNEL or later but found $CURRENT_KERNEL."
         log_warning "[!] Warning: $msg"
-        echo "$msg"
     fi
     return 0
 }
@@ -547,7 +574,6 @@ verify_filesystem_support()
         return 0
     else
         log_warning "[!] Warning: No supported filesystem found"
-        echo "No supported filesystem found"
         return 0
     fi
 }
@@ -610,6 +636,7 @@ verify_supported_distros()
             ( $is_arm && (( VERSION >= 40 && VERSION <= 43 )) ) || ( ! $is_arm && (( VERSION >= 33 && VERSION <= 43 )) ) || log_warning "$os_not_supported_msg"
             ;;
         almalinux)
+            # AlmaLinux 8.4+, 9.2+ and all of 10 support both x86_64 and ARM64
             [[ "$major" == 10 ]] || [[ "$major" == 8 && "$minor" -ge 4 || "$major" == 9 && "$minor" -ge 2 ]] || log_warning "$os_not_supported_msg"
             ;;
         rocky)
@@ -668,7 +695,6 @@ verify_fanotify_kernel_flags()
     # Check for required kernel options
     if [[ "${fanotify_flags[CONFIG_FANOTIFY]}" != "y" ]]; then
         log_warning "[!] Warning: Fanotify(CONFIG_FANOTIFY) is not enabled"
-        echo "Fanotify(CONFIG_FANOTIFY) is not enabled"
         return 0
     fi
 
@@ -804,7 +830,7 @@ verify_mdatp_installed()
     if [ ! -z $op ]; then
         #check if mdatp is onboarded or not
         check_missing_license=$(get_health_field "health_issues" | grep "missing license" -c)
-        onboard_file=/etc/opt/microsoft/mdatp/mdatp_onboard.json
+        onboard_file="${MDATP_ONBOARD_FILE:-/etc/opt/microsoft/mdatp/mdatp_onboard.json}"
         if [ "$check_missing_license" -gt 0 ] || [ ! -f "$onboard_file" ]; then
             log_info "[i] MDE already installed but not onboarded. Please use --onboard command to onboard the product."
         else
@@ -1063,7 +1089,7 @@ get_all_mde_version_from_channel()
     if [ "$PKG_MGR" = "apt" ]; then
         search_command='apt $ASSUMEYES policy mdatp 2>/dev/null'
     elif [ "$PKG_MGR" = "yum" ]; then
-        check_option="yum --help | grep '\-\-showduplicates' &> /dev/null"
+        check_option="yum list --help | grep '\-\-showduplicates' &> /dev/null"
         eval $check_option
         cmd_status=$?
         if [ $cmd_status -eq 0 ]; then
@@ -1240,7 +1266,7 @@ validate_mde_version()
     if [ "$PKG_MGR" = "apt" ]; then
         search_command='apt $ASSUMEYES policy mdatp 2>/dev/null | grep "$version" &> /dev/null'
     elif [ "$PKG_MGR" = "yum" ]; then
-        check_option="yum --help | grep '\-\-showduplicates' &> /dev/null"
+        check_option="yum list --help | grep '\-\-showduplicates' &> /dev/null"
         eval $check_option
         cmd_status=$?
         if [ $cmd_status -eq 0 ]; then
@@ -1339,7 +1365,7 @@ handle_custom_installation()
     local installation_path="$INSTALL_PATH/microsoft_mdatp"
     mkdir -p $installation_path || script_exit "Failed to create directory $installation_path" $ERR_INSTALL_PATH_SETUP
     chmod 755 "$installation_path" || script_exit "Failed to set permissions on $installation_path" $ERR_INSTALL_PATH_PERMISSIONS
-    local mde_config_dir="/etc/opt/microsoft/mdatp"
+    local mde_config_dir="${MDE_CONFIG_DIR:-/etc/opt/microsoft/mdatp}"
     local mde_config_path="$mde_config_dir/mde_path.json"
     mkdir -p $mde_config_dir || script_exit "Failed to create directory mde_config_dir" $ERR_INSTALL_PATH_SETUP
 
@@ -1360,7 +1386,7 @@ install_on_debian()
     local packages=()
     local pkg_version=
 
-    run_quietly "apt-get update" "[!] unable to refresh the repos properly"
+    retry_quietly 2 "apt-get update" "[!] unable to refresh the repos properly"
 
     if [ -z "$SKIP_PMC_SETUP" ]; then 
         packages=(curl apt-transport-https gnupg)
@@ -1378,7 +1404,7 @@ install_on_debian()
         local gpg_key_file="/usr/share/keyrings/microsoft-prod.gpg"
         if { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "24.04" ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "12" ]; }; then
             if [ ! -f "$gpg_key_file" ]; then
-                run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o $gpg_key_file" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+                run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o $gpg_key_file" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
             fi
             if [ -f "$gpg_key_file" ]; then
                 run_quietly "chmod o+r $gpg_key_file" "unable to set read permission on gpg key" $ERR_FAILED_REPO_SETUP
@@ -1387,14 +1413,14 @@ install_on_debian()
             if [ -f "$gpg_key_file" ]; then
                 run_quietly "rm -f $gpg_key_file" "unable to remove existing microsoft-prod.gpg" $ERR_FAILED_REPO_SETUP
             fi
-            run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft-2025.asc | sudo gpg --dearmor -o $gpg_key_file" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
+            run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft-2025.asc | gpg --dearmor -o $gpg_key_file" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
             if [ -f "$gpg_key_file" ]; then
                 run_quietly "chmod o+r $gpg_key_file" "unable to set read permission on gpg key" $ERR_FAILED_REPO_SETUP
             fi        
         else
             run_quietly "curl -s https://packages.microsoft.com/keys/microsoft.asc | apt-key add -" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
         fi
-        run_quietly "apt-get update" "[!] unable to refresh the repos properly"
+        retry_quietly 2 "apt-get update" "[!] unable to refresh the repos properly"
     else
         # Try to install/find curl, don't exit the script if it fails.
         packages=(curl)
@@ -1443,7 +1469,7 @@ install_on_mariner()
     local pkg_version=
     local repo=
 
-    run_quietly "dnf -y makecache" "[!] unable to refresh the repos properly"
+    retry_quietly 2 "dnf -y makecache" "[!] unable to refresh the repos properly"
 
     if [ -z "$SKIP_PMC_SETUP" ]; then 
         # To use config-manager plugin, install dnf-plugins-core package
@@ -1464,7 +1490,7 @@ install_on_mariner()
             # mariner is only supported on prod and insiders-slow channels
             script_exit "Invalid channel: $CHANNEL. Available channels for $DISTRO_FAMILY are prod and insiders-slow channel only." $ERR_INVALID_CHANNEL
         fi
-        run_quietly "dnf -y makecache" "[!] unable to refresh the repos properly"
+        retry_quietly 2 "dnf -y makecache" "[!] unable to refresh the repos properly"
     fi
 
     local version=""
@@ -1498,7 +1524,7 @@ install_on_azurelinux()
     local pkg_version=
     local repo=
 
-    run_quietly "dnf -y makecache" "[!] unable to refresh the repos properly"
+    retry_quietly 2 "dnf -y makecache" "[!] unable to refresh the repos properly"
 
     if [ -z "$SKIP_PMC_SETUP" ]; then 
         # To use config-manager plugin, install dnf-plugins-core package
@@ -1537,7 +1563,7 @@ install_on_azurelinux()
             run_quietly "$PKG_MGR_INVOKER install azurelinux-repos-ms-non-oss-preview" "unable to install azurelinux-repos-ms-non-oss-preview"
             run_quietly "$PKG_MGR_INVOKER config-manager --enable azurelinux-official-ms-non-oss-preview" "unable to enable ms-non-oss-preview repo"
         fi
-        run_quietly "dnf -y makecache" "[!] unable to refresh the repos properly"
+        retry_quietly 2 "dnf -y makecache" "[!] unable to refresh the repos properly"
     fi
 
     local version=""
@@ -1572,7 +1598,7 @@ install_on_fedora()
     local repo=packages-microsoft-com
     local effective_distro=
 
-    run_quietly "$PKG_MGR -y makecache" "[!] unable to refresh the repos properly"
+    retry_quietly 2 "$PKG_MGR -y makecache" "[!] unable to refresh the repos properly"
 
     # curl-minimal results into issues when present and trying to install curl, so skip installing
     # the curl over Amazon Linux 2023
@@ -1609,6 +1635,9 @@ install_on_fedora()
         esac
 
         if [ "$DISTRO" = "fedora" ]; then
+            # Fedora 43+ uses its own packages.microsoft.com/fedora/<version>
+            # repo. Older Fedora releases are not populated there yet, so they
+            # fall back to the rhel repo (paired with SCALED_VERSION=8).
             if fedora_uses_native_repo; then
                 effective_distro="fedora"
             else
@@ -1634,6 +1663,9 @@ install_on_fedora()
 
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
+                # Fedora 41+ ships dnf5 which dropped --add-repo=<URL> in favor of
+                # `addrepo --from-repofile=<URL>`. Detect the major version up front
+                # so legacy hosts surface real transport errors (DNS, PMC 5xx, GPG)
                 local repo_url="$PMC_URL/$effective_distro/$SCALED_VERSION/$CHANNEL.repo"
                 local dnf_major
                 dnf_major=$(LC_ALL=C "$PKG_MGR" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+' | head -n1)
@@ -1647,6 +1679,11 @@ install_on_fedora()
             fi
 
             ### Fetch the gpg key ###
+            # Fedora installs from its native PMC repo validate packages against
+            # the 2025-rotated Microsoft signing key; older RPM distros keep the
+            # long-standing key. Gate on fedora_uses_native_repo (VERSION >= 43)
+            # rather than an exact 43 match so the key stays aligned with the
+            # repo-routing threshold as the bound widens.
             local gpg_key_url="https://packages.microsoft.com/keys/microsoft.asc"
             if [ "$DISTRO" = "fedora" ] && fedora_uses_native_repo; then
                 gpg_key_url="https://packages.microsoft.com/keys/microsoft-2025.asc"
@@ -1655,12 +1692,23 @@ install_on_fedora()
             run_quietly "rpm --import microsoft.asc" "unable to import gpg key" $ERR_FAILED_REPO_SETUP
         fi
 
+        # A prior --clean/--remove can leave the PMC repo present but disabled.
+        # In that case `addrepo`/`--add-repo` above is a no-op and the subsequent
+        # `makecache --refresh` silently skips the repo, so version validation
+        # (a plain `dnf search`, which only looks at enabled repos) cannot find
+        # the package. Force-enable the repo first. dnf4 uses `--set-enabled`;
+        # dnf5 uses `setopt <repo>.enabled=1`. Non-fatal.
         if [ "$PKG_MGR" = "dnf" ]; then
             "$PKG_MGR" config-manager --set-enabled "$repo_name" >/dev/null 2>&1 \
                 || "$PKG_MGR" config-manager setopt "${repo_name}.enabled=1" >/dev/null 2>&1 \
                 || true
         fi
 
+        # On dnf (especially dnf5/Fedora 41+) a plain `makecache` may reuse stale
+        # cached metadata left behind after a previous --clean, so a freshly
+        # (re-)added PMC repo is never actually downloaded and the subsequent
+        # version validation cannot find the package. --refresh forces the
+        # metadata to be re-fetched. yum is left unchanged.
         if [ "$PKG_MGR" = "dnf" ]; then
             retry_quietly 2 "$PKG_MGR -y makecache --refresh" "[!] unable to refresh the repos properly"
         else
@@ -1707,7 +1755,7 @@ install_on_sles()
     local pkg_version=
     local repo=packages-microsoft-com
 
-    run_quietly "zypper --non-interactive refresh" "[!] unable to refresh the repos properly"
+    retry_quietly 2 "zypper --non-interactive --gpg-auto-import-keys refresh" "[!] unable to refresh the repos properly"
 
     packages=(curl)
     if [ -z "$SKIP_PMC_SETUP" ]; then 
@@ -1724,18 +1772,18 @@ install_on_sles()
         if [ $lines -eq 0 ]; then
             log_info "[>] configuring the repository"
             run_quietly "$PKG_MGR_INVOKER addrepo -c -f -n $repo_name https://packages.microsoft.com/config/$DISTRO/$SCALED_VERSION/$CHANNEL.repo" "unable to load repo" $ERR_FAILED_REPO_SETUP
-
-            ### Fetch the gpg key ###
-            if [[ "$DISTRO" =~ ^(sles|sle-hpc|sles_sap)$ ]] && [[ "$VERSION" == 16* ]]; then
-                run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft-2025.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
-            else
-                run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft.asc > microsoft.asc" "unable to fetch gpg key" $ERR_FAILED_REPO_SETUP
-            fi
         else
             log_info "[i] repository already configured"
         fi
 
-        run_quietly "zypper --non-interactive refresh" "[!] unable to refresh the repos properly"
+        ### Best-effort, idempotent import of the Microsoft GPG key (zypper --gpg-auto-import-keys retries as a fallback).
+        if [[ "$DISTRO" =~ ^(sles|sle-hpc|sles_sap)$ ]] && [[ "$VERSION" == 16* ]]; then
+            run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft-2025.asc" "[!] unable to fetch gpg key (continuing; zypper auto-import will retry)"
+        else
+            run_quietly "rpm --import https://packages.microsoft.com/keys/microsoft.asc" "[!] unable to fetch gpg key (continuing; zypper auto-import will retry)"
+        fi
+
+        retry_quietly 2 "zypper --non-interactive --gpg-auto-import-keys refresh" "[!] unable to refresh the repos properly"
     else
         # Try to install/find packages, don't exit the script if it fails.
         install_required_pkgs --no-exit "${packages[@]}"
@@ -1763,9 +1811,9 @@ install_on_sles()
     log_info "[>] installing MDE"
 
     if [ -z "$repo_name" ]; then
-        run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES mdatp$version" "[!] failed to install MDE" $ERR_INSTALLATION_FAILED
+        run_quietly "$PKG_MGR_INVOKER --gpg-auto-import-keys install $ASSUMEYES mdatp$version" "[!] failed to install MDE" $ERR_INSTALLATION_FAILED
     else
-        run_quietly "$PKG_MGR_INVOKER install $ASSUMEYES ${repo_name}:mdatp$version" "[!] failed to install MDE" $ERR_INSTALLATION_FAILED
+        run_quietly "$PKG_MGR_INVOKER --gpg-auto-import-keys install $ASSUMEYES ${repo_name}:mdatp$version" "[!] failed to install MDE" $ERR_INSTALLATION_FAILED
     fi
 
     sleep 5
@@ -1814,6 +1862,9 @@ remove_repo()
         if [ $cmd_status -eq 0 ]; then
             # Use appropriate config manager based on package manager
             if [ "$PKG_MGR" = "dnf" ]; then
+                # Fedora 41+ ships dnf5 which dropped `config-manager --disable`
+                # in favor of `config-manager setopt <repo>.enabled=0`. Detect the
+                # major version so legacy dnf4 hosts keep using the old syntax.
                 local dnf_major
                 dnf_major=$(LC_ALL=C "$PKG_MGR" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+' | head -n1)
                 if [ "${dnf_major:-4}" -ge 5 ]; then
@@ -1925,6 +1976,9 @@ rhel6_supported_version()
     return 1    
 }
 
+# Returns 0 (true) when the current Fedora VERSION has a dedicated
+# packages.microsoft.com/fedora/<version> repo populated in PMC. Older Fedora
+# releases fall back to the rhel/8 repo until their repos are populated.
 fedora_uses_native_repo()
 {
     local major="${VERSION%%.*}"
@@ -1936,6 +1990,9 @@ scale_version_id()
     ### We dont have pmc repos for rhel versions > 7.4. Generalizing all the 7* repos to 7 and 8* repos to 8
     if [ "$DISTRO_FAMILY" = "fedora" ]; then
         if [[ "$DISTRO" == "fedora" ]]; then
+            # Fedora 43+ has a dedicated packages.microsoft.com/fedora/<version>
+            # repo. Older Fedora releases are not populated there yet, so keep
+            # the historical rhel/8 mapping until their PMC repos come online.
             if fedora_uses_native_repo; then
                 SCALED_VERSION=$VERSION
             else
@@ -1957,7 +2014,7 @@ scale_version_id()
         elif [[ $VERSION == 8* ]]; then
             SCALED_VERSION=8
         elif [[ $VERSION == 9* ]]; then
-            if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" ]]; then
+            if [[ $DISTRO == "almalinux" || $DISTRO == "rocky" || $DISTRO == "centos" ]]; then
                 SCALED_VERSION=9
             else
                 SCALED_VERSION=9.0
@@ -1984,7 +2041,15 @@ scale_version_id()
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
     elif [ "$DISTRO_FAMILY" = "sles" ]; then
-        if [[ $VERSION == 12* ]]; then
+        if [[ "$DISTRO" == "opensuse-leap" || "$DISTRO" == "opensuse" ]]; then
+            if [[ $VERSION == 15* ]]; then
+                SCALED_VERSION=15
+            elif [[ $VERSION == 16* ]]; then
+                SCALED_VERSION=16
+            else
+                script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
+            fi
+        elif [[ $VERSION == 12* ]]; then
             SCALED_VERSION=12
         elif [[ $VERSION == 15* ]]; then
             SCALED_VERSION=15
@@ -2017,7 +2082,7 @@ onboard_device()
 
     if [[ $ONBOARDING_SCRIPT == *.py ]]; then
         # Make sure python is installed
-        PYTHON=$(which python 2>/dev/null || which python3 2>/dev/null)
+        PYTHON=$(command -v python 2>/dev/null || command -v python3 2>/dev/null)
 
         if [ $? -ne 0 ]; then
             script_exit "error: cound not locate python." $ERR_FAILED_DEPENDENCY
@@ -2095,7 +2160,7 @@ offboard_device()
     local cmd_status
     if [[ $OFFBOARDING_SCRIPT == *.py ]]; then
         # Make sure python is installed
-        PYTHON=$(which python || which python3)
+        PYTHON=$(command -v python || command -v python3)
 
         cmd_status=$?
         if [ $cmd_status -ne 0 ]; then
@@ -2198,33 +2263,32 @@ usage()
     echo "mde_installer.sh v$SCRIPT_VERSION"
     echo "usage: $1 [OPTIONS]"
     echo "Options:"
-    echo " -c|--channel         specify the channel(insiders-fast / insiders-slow / prod) from which you want to install. Default: prod"
-    echo " -i|--install         install the product"
-    echo " -r|--remove          uninstall the product"
-    echo " -u|--upgrade         upgrade the existing product to a newer version if available"
-    echo " -l|--downgrade       downgrade the existing product to a older version if available"
-    echo " -o|--onboard         onboard the product with <onboarding_script>"
-    echo " -f|--offboard        offboard the product with <offboarding_script>"
-    echo " -p|--passive-mode    set real time protection to passive mode"
-    echo " -a|--rtp-mode        set real time protection to active mode. passive-mode and rtp-mode are mutually exclusive"
-    echo " -t|--tag             set a tag by declaring <name> and <value>, e.g: -t GROUP Coders"
-    echo " -m|--min_req(deprecated) enforce minimum requirements. Its enabled by default. Will be removed in future"
-    echo " -q|--pre-req         enforce prerequisite for MDE like memory, disk, etc."
-    echo " -x|--skip_conflict   skip conflicting application verification"
-    echo " -w|--clean           remove repo from package manager for a specific channel"
-    echo " -y|--yes             assume yes for all mid-process prompts (default, depracated)"
-    echo " -n|--no              remove assume yes sign"
-    echo " -s|--verbose         verbose output"
-    echo " -v|--version         print out script version"
-    echo " -d|--debug           set debug mode"
-    echo " --log-path <PATH>    also log output to PATH"
-    echo " --http-proxy <URL>   set http proxy"
-    echo " --https-proxy <URL>  set https proxy"
-    echo " --ftp-proxy <URL>    set ftp proxy"
-    echo " --mdatp              specific version of mde to be installed. will use the latest if not provided"
-    echo " --use-local-repo     this will skip the MDE repo setup and use the already configured repo instead"
-    echo " -b|--install-path    specify the installation and configuration path for MDE. Default: /"
-    echo " -h|--help            display help"
+    echo "  -c|--channel              specify the channel (insiders-fast / insiders-slow / prod) from which to install. Default: prod"
+    echo "  -i|--install              install the product"
+    echo "  -r|--remove               uninstall the product"
+    echo "  -u|--upgrade              upgrade the existing product to a newer version if available"
+    echo "  -l|--downgrade            downgrade the existing product to an older version if available"
+    echo "  -o|--onboard <script>     onboard MDE with the specified onboarding script"
+    echo "  -f|--offboard <script>    offboard MDE with the specified offboarding script"
+    echo "  -p|--passive-mode         set real-time protection to passive mode"
+    echo "  -a|--rtp-mode             set real-time protection to active mode. Passive-mode and rtp-mode are mutually exclusive"
+    echo "  -t|--tag                  set a tag by declaring <name> and <value>, e.g.: -t GROUP Coders"
+    echo "  -q|--pre-req              check minimum system requirements for MDE (memory, CPU, disk space, supported OS) without installing"
+    echo "  -x|--skip_conflict        skip conflicting application verification"
+    echo "  -w|--clean                remove MDE repository from the package manager for the specified channel"
+    echo "  -y|--yes                  assume yes for all mid-process prompts (default, deprecated)"
+    echo "  -n|--no                   disable the default assume-yes behavior for prompts"
+    echo "  -s|--verbose              enable verbose output"
+    echo "  -v|--version              print the script version"
+    echo "  -d|--debug                enable debug mode"
+    echo "  --log-path <PATH>         also log output to PATH"
+    echo "  --http-proxy <URL>        set http proxy"
+    echo "  --https-proxy <URL>       set https proxy"
+    echo "  --ftp-proxy <URL>         set ftp proxy"
+    echo "  --mdatp <version>         install a specific version of MDE; uses the latest if not provided"
+    echo "  --use-local-repo          skip MDE repository setup and use the locally configured repository"
+    echo "  -b|--install-path <PATH>  specify the installation and configuration path for MDE. Default: /"
+    echo "  -h|--help                 display help"
 }
 
 #__MAIN__
@@ -2280,10 +2344,6 @@ do
             OFFBOARDING_SCRIPT=$2
             verify_privileges "offboard"
             shift 2
-            ;;
-        -m|--min_req) # Making this No-op argument as removing this may break exisiting users
-            echo "[!] Warning: option <-m/--min_req> is deprecated. Use <-q/--pre-req>. Will be removed in future"
-            shift 1
             ;;
         -q|--pre-req)
             PRE_REQ_CHECK=1
@@ -2404,7 +2464,7 @@ if command -v mdatp >/dev/null 2>&1; then
     fi
 fi
 
-if [[ -z "${INSTALL_MODE}" && -z "${ONBOARDING_SCRIPT}" && -z "${OFFBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && -z "${RTP_MODE}" && ${#tags[@]} -eq 0 ]]; then
+if [[ -z "${INSTALL_MODE}" && -z "${PRE_REQ_CHECK}" && -z "${ONBOARDING_SCRIPT}" && -z "${OFFBOARDING_SCRIPT}" && -z "${PASSIVE_MODE}" && -z "${RTP_MODE}" && ${#tags[@]} -eq 0 ]]; then
     script_exit "no installation mode specified. Specify --help for help" $ERR_INVALID_ARGUMENTS
 fi
 
@@ -2467,6 +2527,12 @@ if [ "$INSTALL_MODE" = "i" ] && [ -n "$PRE_REQ_CHECK" ]; then
     verify_min_requirements
 fi
 
+# Run standalone checks when no install mode or other operations are set (supports composability)
+if [[ -z "$INSTALL_MODE" && -z "$RTP_MODE" && -z "$PASSIVE_MODE" && -z "$ONBOARDING_SCRIPT" && -z "$OFFBOARDING_SCRIPT" && ${#tags[@]} -eq 0 ]]; then
+    [[ -n "$PRE_REQ_CHECK" ]] && verify_min_requirements
+    script_exit "Standalone checks completed" $SUCCESS
+fi
+
 # Log proxy configuration if set
 if [[ -n "$http_proxy" || -n "$https_proxy" ]]; then
     log_info "[v] Proxy configuration set"
@@ -2499,15 +2565,15 @@ if [ "$INSTALL_MODE" = "i" ]; then
 elif [ "$INSTALL_MODE" = "u" ]; then
 
     if [ "$DISTRO_FAMILY" = "debian" ]; then
-        upgrade_mdatp "$ASSUMEYES install --only-upgrade"
+        upgrade_mdatp "install --only-upgrade"
     elif [ "$DISTRO_FAMILY" = "fedora" ]; then
-        upgrade_mdatp "$ASSUMEYES update"
+        upgrade_mdatp "update"
     elif [ "$DISTRO_FAMILY" = "mariner" ]; then
-        upgrade_mdatp "$ASSUMEYES update"
+        upgrade_mdatp "update"
     elif [ "$DISTRO_FAMILY" = "azurelinux" ]; then
-        upgrade_mdatp "$ASSUMEYES update"
+        upgrade_mdatp "update"
     elif [ "$DISTRO_FAMILY" = "sles" ]; then
-        upgrade_mdatp "up $ASSUMEYES"
+        upgrade_mdatp "up"
     else    
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
@@ -2515,15 +2581,15 @@ elif [ "$INSTALL_MODE" = "u" ]; then
 elif [ "$INSTALL_MODE" = "d" ]; then
 
     if [ "$DISTRO_FAMILY" = "debian" ]; then
-        upgrade_mdatp "$ASSUMEYES install --allow-downgrades"
+        upgrade_mdatp "install --allow-downgrades"
     elif [ "$DISTRO_FAMILY" = "fedora" ]; then
-        upgrade_mdatp "$ASSUMEYES downgrade"
+        upgrade_mdatp "downgrade"
     elif [ "$DISTRO_FAMILY" = "mariner" ]; then
-        upgrade_mdatp "$ASSUMEYES downgrade"
+        upgrade_mdatp "downgrade"
     elif [ "$DISTRO_FAMILY" = "azurelinux" ]; then
-        upgrade_mdatp "$ASSUMEYES downgrade"
+        upgrade_mdatp "downgrade"
     elif [ "$DISTRO_FAMILY" = "sles" ]; then
-        upgrade_mdatp "install --oldpackage $ASSUMEYES"
+        upgrade_mdatp "install --oldpackage"
     else
         script_exit "unsupported distro $DISTRO $VERSION" $ERR_UNSUPPORTED_DISTRO
     fi
