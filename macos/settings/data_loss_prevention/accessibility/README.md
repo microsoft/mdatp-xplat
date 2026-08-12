@@ -1,12 +1,12 @@
 # Accessibility Example
 Adds support for extracting and forwarding DLP accessibility settings from managed configuration to Endpoint DLP for macOS 27 (Golden Gate).
 
-- Unallowed Browser Mode
-- Paste to Browser Mode
-- Notification
+- Restricted protection mode for cloud egress  
+- Restricted protection mode for paste to browser 
+- Accessibility permission notification 
 
 ### Intune
-This sample configuration profile sets the Unallowed Browser Mode, Paste to Browser Mode flags along with Notification message for asking users' to Enable the Accessibility Permission: [com.microsoft.wdav.mobileconfig](./com.microsoft.wdav.mobileconfig).
+This sample configuration profile sets the restricted protection mode for cloud egress and paste to browser, along with the notification message that prompts users to turn on Accessibility permissions. : [com.microsoft.wdav.mobileconfig](./com.microsoft.wdav.mobileconfig).
 
 
 ### JAMF Pro
@@ -19,5 +19,5 @@ Modify the existing MDE Prefereneces Configuration Profile to use the latest ver
 
 **Using plist**
 
-Example plist file to exclude the com.azul.zulu.java signing ID: [com.microsoft.wdav.plist](./com.microsoft.wdav.plist).
+Example plist file to set enforcement for accessibility: [com.microsoft.wdav.plist](./com.microsoft.wdav.plist).
 

@@ -900,7 +900,7 @@
                 },
                 "accessibility": {
                     "title": "Accessibility",
-                    "description": "Data loss prevention behavior when macOS Accessibility permissions are unavailable.",
+                    "description": "Configure how Data Loss Prevention behaves when macOS Accessibility permissions are unavailable or turned off.",
                     "propertyOrder": 30,
                     "type": "object",
                     "defaultProperties": ["enforcement", "notification"],
@@ -912,16 +912,16 @@
                             "defaultProperties": ["unallowedBrowserMode", "pasteToBrowserMode"],
                             "properties": {
                                 "unallowedBrowserMode": {
-                                    "title": "Unallowed browser mode",
-                                    "description": "Enforcement mode for unallowed browsers when macOS Accessibility permissions are unavailable.",
+                                    "title": "Restricted protection mode for cloud egress",
+                                    "description": "Controls whether uploading sensitive content to non-Edge browsers is enforced or audited when Accessibility is off.",
                                     "propertyOrder": 10,
                                     "type": "string",
                                     "default": "enforce",
                                     "enum": ["off", "audit", "enforce"]
                                 },
                                 "pasteToBrowserMode": {
-                                    "title": "Paste to browser mode",
-                                    "description": "Enforcement mode for paste-to-browser operations when macOS Accessibility permissions are unavailable.",
+                                    "title": "Restricted protection mode for paste to browser",
+                                    "description": "Controls whether pasting sensitive content to non-Edge browsers is enforced or audited when Accessibility is off.",
                                     "propertyOrder": 20,
                                     "type": "string",
                                     "default": "enforce",
@@ -937,7 +937,7 @@
                             "properties": {
                                 "customMessage": {
                                     "title": "Custom message",
-                                    "description": "Custom message shown to the user when macOS Accessibility permissions are unavailable.",
+                                    "description": "Optional message shown to the users in addition to the default notification when Accessibility permissions are unavailable or turned off. Leave blank to use the default message.",
                                     "propertyOrder": 10,
                                     "type": "string"
                                 }
