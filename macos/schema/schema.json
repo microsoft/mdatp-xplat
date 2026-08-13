@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.26072.0004",
+    "__version": "101.26072.0007",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",

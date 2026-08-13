@@ -1,9 +1,9 @@
 # Accessibility Example
 Adds support for extracting and forwarding DLP accessibility settings from managed configuration to Endpoint DLP for macOS 27 (Golden Gate).
 
-- Restricted protection mode for cloud egress  
-- Restricted protection mode for paste to browser 
-- Accessibility permission notification 
+- Restricted protection mode for cloud egress --> unallowedBrowserMode
+- Restricted protection mode for paste to browser --> pasteToBrowserMode
+- Accessibility permission notification --> notification
 
 ### Intune
 This sample configuration profile sets the restricted protection mode for cloud egress and paste to browser, along with the notification message that prompts users to turn on Accessibility permissions. : [com.microsoft.wdav.mobileconfig](./com.microsoft.wdav.mobileconfig).
