@@ -8,12 +8,13 @@
         "remove_empty_properties": true
     },
     "type": "object",
+    "defaultProperties": [ "antivirusEngine", "dlp", "features" ],
     "properties": {
         "antivirusEngine": {
             "title": "Antivirus engine",
             "description": "Properties displayed below will be managed, a user would not be able to override them",
             "propertyOrder": 10,
-            "defaultProperties": [ "antivirusEngine", "dlp", "features" ],
+            "defaultProperties": [ "passiveMode" ],
             "properties": {
                 "enforcementLevel": {
                     "title": "Enforcement level",
