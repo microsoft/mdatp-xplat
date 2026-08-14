@@ -10,3 +10,4 @@
 |------------|-----------|
 |[cloud_egress](cloud_egress)|Information on customizing the behavior of the cloud egress enforcement|
 |[process_exclusions](process_exclusions)|Details on DLP process exclusions based on signing ID|
+|[accessibility](accessibility)| Examples for configuring Endpoint DLP's accessibility permission behavior. (Due to new Accessibility behaviors introduced in macOS 27)
