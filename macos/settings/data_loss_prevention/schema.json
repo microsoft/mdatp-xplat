@@ -921,7 +921,7 @@
                                     "enum": ["off", "audit", "enforce"]
                                 },
                                 "pasteToBrowserMode": {
-                                     "title": "Restricted protection mode for paste to browser",
+                                    "title": "Restricted protection mode for paste to browser",
                                     "description": "Controls whether pasting sensitive content to non-Edge browsers is enforced or audited when Accessibility is off.",
                                     "propertyOrder": 20,
                                     "type": "string",

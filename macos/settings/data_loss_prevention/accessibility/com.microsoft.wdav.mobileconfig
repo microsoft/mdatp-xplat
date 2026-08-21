@@ -63,14 +63,14 @@
                         <key>enforcement</key>
                         <dict>
                             <key>unallowedBrowserMode</key>
-                            <string>audit</string>
+                            <string>enforce</string>
                             <key>pasteToBrowserMode</key>
                             <string>enforce</string>
                         </dict>
                         <key>notification</key>
                         <dict>
-                            <key>Please enable Accessibility permissions to comply with IT Policy</key>
-                            <string/>
+                            <key>customMessage</key>
+                            <string>Please enable Accessibility permissions to comply with IT Policy</string>
                         </dict>
                     </dict>
                 </dict>
@@ -78,4 +78,3 @@
         </array>
     </dict>
 </plist>
-
