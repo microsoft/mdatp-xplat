@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.26072.0007",
+    "__version": "101.26072.0012",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
@@ -645,6 +645,52 @@
                         }
                     ],
                     "enum": ["enabled", "disabled"]
+                },
+                "performanceProfiles": {
+                    "default": "disabled",
+                    "title": "Performance Profiles",
+                    "type": "string",
+                    "propertyOrder": 70,
+                    "description": "Performance profiles",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles", 
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["enabled", "disabled"]
+                }
+            }
+        },
+        "performanceProfiles": {
+            "title": "Performance Profiles Configuration",
+            "description": "Properties for configuring performance profiles",
+            "propertyOrder": 55,
+            "defaultProperties": [],
+            "properties": {
+                "profiles": {
+                    "title": "Performance Profiles",
+                    "type": "array",
+                    "propertyOrder": 10,
+                    "description": "Names of performance profiles to apply.",
+                    "items": {
+                        "title": "Profile name",
+                        "type": "string"
+                    }
+                },
+                "mergePolicy": {
+                    "default": "merge",
+                    "title": "Performance profiles merge policy",
+                    "type": "string",
+                    "propertyOrder": 20,
+                    "description": "Specify the merge policy for performance profiles. This can be a combination of administrator-defined and user-defined profiles (merge) or only administrator-defined profiles (admin_only).",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/performance-profiles",
+                            "rel": "More information"
+                        }
+                    ],
+                    "enum": ["merge", "admin_only"]
                 }
             }
         },
