@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>antivirusEngine</key>
+    <dict>
+      <key>passiveMode</key>
+      <false/>
+    </dict>
+    <key>dlp</key>
+    <dict>
+      <key>accessibility</key>
+      <dict>
+        <key>enforcement</key>
+        <dict>
+          <key>unallowedBrowserMode</key>
+          <string>enforce</string>
+          <key>pasteToBrowserMode</key>
+          <string>enforce</string>
+        </dict>
+        <key>notification</key>
+        <dict>
+          <key>customMessage</key>
+          <string>Please enable Accessibility permissions to comply with IT Policy</string>
+        </dict>
+      </dict>
+    </dict>
+    <key>features</key>
+    <dict>
+      <key>dataLossPrevention</key>
+      <string>disabled</string>
+    </dict>
+  </dict>
+</plist>

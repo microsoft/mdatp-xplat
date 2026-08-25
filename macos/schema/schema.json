@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.25072.0012",
+    "__version": "101.26072.0012",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
@@ -351,7 +351,21 @@
                             "rel": "More information"
                         }
                     ]
-                }        
+                },
+                "offlineDefinitionUpdateFallbackToCloud": {
+                    "default": true,
+                    "title": "Fallback to Microsoft cloud updates",
+                    "description": "Determine the Defender for Endpoint security intelligence update approach when offline mirror server fails to serve the update request. If set to true, the update is retried via the Microsoft cloud when offline security intelligence update failed.",
+                    "format": "checkbox",
+                    "links": [
+                        {
+                            "href": "https://learn.microsoft.com/en-us/defender-endpoint/mac-support-offline-security-intelligence-update#configure-the-endpoints",
+                            "rel": "More information"
+                        }
+                    ],
+                    "propertyOrder": 180,
+                    "type": "boolean"
+                }
             }
         },
         "cloudService": {
@@ -926,6 +940,53 @@
                                 "type": "string",
                                 "default": "production",
                                 "enum": ["insiderFast", "external", "production"]
+                            }
+                        }
+                    }
+                },
+                "accessibility": {
+                    "title": "Accessibility",
+                    "description": "Configure how Data Loss Prevention behaves when macOS Accessibility permissions are unavailable or turned off.",
+                    "propertyOrder": 30,
+                    "type": "object",
+                    "defaultProperties": ["enforcement", "notification"],
+                    "properties": {
+                        "enforcement": {
+                            "title": "Enforcement",
+                            "propertyOrder": 10,
+                            "type": "object",
+                            "defaultProperties": ["unallowedBrowserMode", "pasteToBrowserMode"],
+                            "properties": {
+                                "unallowedBrowserMode": {
+                                    "title": "Restricted protection mode for cloud egress",
+                                    "description": "Controls whether uploading sensitive content to non-Edge browsers is enforced or audited when Accessibility is off.",
+                                    "propertyOrder": 10,
+                                    "type": "string",
+                                    "default": "enforce",
+                                    "enum": ["off", "audit", "enforce"]
+                                },
+                                "pasteToBrowserMode": {
+                                    "title": "Restricted protection mode for paste to browser",
+                                    "description": "Controls whether pasting sensitive content to non-Edge browsers is enforced or audited when Accessibility is off.",
+                                    "propertyOrder": 20,
+                                    "type": "string",
+                                    "default": "enforce",
+                                    "enum": ["off", "audit", "enforce"]
+                                }
+                            }
+                        },
+                        "notification": {
+                            "title": "Notification",
+                            "propertyOrder": 20,
+                            "type": "object",
+                            "defaultProperties": ["customMessage"],
+                            "properties": {
+                                "customMessage": {
+                                    "title": "Custom message",
+                                    "description": "Optional message shown to the users in addition to the default notification when Accessibility permissions are unavailable or turned off. Leave blank to use the default message.",
+                                    "propertyOrder": 10,
+                                    "type": "string"
+                                }
                             }
                         }
                     }
