@@ -70,7 +70,7 @@
                         <key>notification</key>
                         <dict>
                             <key>customMessage</key>
-                            <string>Please enable Accessibility permissions to comply with IT Policy</string>
+                            <string>Microsoft Endpoint DLP will report this device as non-compliant. Additional restrictions will be in effect until Accessibility has been re-enabled for Microsoft Endpoint DLP</string>
                         </dict>
                     </dict>
                 </dict>
