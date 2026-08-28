@@ -1102,6 +1102,29 @@
                     }
                 }
             }
+        },
+        "aiAgentRuntimeProtection": {
+            "title": "AI agent runtime protection",
+            "propertyOrder": 110,
+            "defaultProperties": [],
+            "properties": {
+                "aiAgentNetworkInspection": {
+                    "default": "disabled",
+                    "description": "Controls network inspection of AI agent traffic: disabled, audit, or block.",
+                    "enum": ["disabled", "audit", "block"],
+                    "propertyOrder": 10,
+                    "title": "AI agent network inspection",
+                    "type": "string"
+                },
+                "aiAgentProtection": {
+                    "default": "disabled",
+                    "description": "Controls runtime protection of AI agents: disabled, audit, or block.",
+                    "enum": ["disabled", "audit", "block"],
+                    "propertyOrder": 20,
+                    "title": "AI agent protection",
+                    "type": "string"
+                }
+            }
         }
     }
 }
