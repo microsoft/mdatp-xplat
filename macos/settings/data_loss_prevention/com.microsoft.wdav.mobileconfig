@@ -56,6 +56,23 @@
                     <key>dataLossPrevention</key>
                     <string>enabled</string>
                 </dict>
+                <key>dlp</key>
+                <dict>
+                    <key>accessibility</key>
+                    <dict>
+                        <key>enforcement</key>
+                        <dict>
+                            <key>unallowedBrowserMode</key>
+                            <string>enforce</string>
+                            <key>pasteToBrowserMode</key>
+                            <string>enforce</string>
+                        </dict>
+                        <key>notification</key>
+                        <dict>
+                            <key>customMessage</key>
+                            <string>Please enable Accessibility permissions to comply with IT Policy</string>
+                        </dict>
+                    </dict>
             </dict>
         </array>
     </dict>
