@@ -618,7 +618,7 @@ verify_supported_distros()
             ( $is_arm && [[ "$VERSION" =~ ^(11|12|13)$ ]] ) || (! $is_arm && (( major >= 9 && major <= 13 )) ) || log_warning "$os_not_supported_msg"
             ;;
         ubuntu)
-            [[ "$VERSION" =~ ^(20.04|22.04|24.04)$ ]] || (! $is_arm && [[ "$VERSION" =~ ^(16.04|18.04)$ ]] ) || log_warning "$os_not_supported_msg"
+            [[ "$VERSION" =~ ^(20.04|22.04|24.04|26.04)$ ]] || (! $is_arm && [[ "$VERSION" =~ ^(16.04|18.04)$ ]] ) || log_warning "$os_not_supported_msg"
             ;;
         rhel|ol)
             [[ "$major" =~ ^(8|9|10)$ ]] || ( ! $is_arm && (( major >= 7 && minor >= 2 )) ) || log_warning "$os_not_supported_msg"
@@ -1402,7 +1402,7 @@ install_on_debian()
 
         ### Fetch the gpg key ###
         local gpg_key_file="/usr/share/keyrings/microsoft-prod.gpg"
-        if { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "24.04" ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "12" ]; }; then
+        if { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "24.04" ]; } || { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "26.04" ]; } || { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "12" ]; }; then
             if [ ! -f "$gpg_key_file" ]; then
                 run_quietly "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o $gpg_key_file" "unable to fetch the gpg key" $ERR_FAILED_REPO_SETUP
             fi
@@ -2059,7 +2059,7 @@ scale_version_id()
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
     elif [[ $DISTRO == "ubuntu" ]] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]] && [[ $VERSION != "24.04" ]]; then
-        SCALED_VERSION=18.04
+        SCALED_VERSION=24.04
     else
         # no problems with 
         SCALED_VERSION=$VERSION
