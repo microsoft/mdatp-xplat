@@ -42,7 +42,7 @@
             <key>PayloadEnabled</key>
             <true/>
             <key>ChannelName</key>
-            <string>Production</string>
+            <string>Current</string>
             <key>HowToCheck</key>
             <string>AutomaticDownload</string>
             <key>EnableCheckForUpdatesButton</key>
