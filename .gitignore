@@ -1,11 +1,38 @@
 # Editor backup files
-**/*~
-
-# Python precompiled files
-**/*.pyc
-
-# microsoft.asc
-**/*.asc
+*~
 
 # macOS system files
 .DS_Store
+
+# Python virtual environments and caches
+venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Local environment overrides (keep .env.example, ignore real .env files)
+.env
+.env.local
+.env.*.local
+
+# VS Code workspace files
+*.code-workspace
+
+# Downloaded signing key used in setup workflows
+microsoft.asc
+
+# Xcode local user state
+xcuserdata/
+*.xcuserstate
+
+# Demo-generated local build artifacts
+macos/performance-profiles/apps/hello-defender-ios/DerivedData/
+macos/performance-profiles/apps/hello-defender-ios/.mde-derived*/
+macos/performance-profiles/apps/hello-defender-ios/hot_event_source_*.json
+macos/performance-profiles/apps/hello-defender-android/hot_event_source_*.json
+macos/performance-profiles/hot_event_source_*.json
+macos/performance-profiles/.mde-telemetry/**/*.json
+macos/performance-profiles/apps/hello-defender-android/.gradle/
+macos/performance-profiles/apps/hello-defender-android/app/build/
+macos/performance-profiles/apps/hello-defender-android/local.properties
+
