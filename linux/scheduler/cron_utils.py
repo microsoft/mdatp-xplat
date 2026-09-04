@@ -42,22 +42,28 @@ def write_crontab_backup(backup_path, current_crontab):
     except OSError as error:
         raise CronError(f"Failed to create backup '{backup_path}': {error}") from error
 
-    backup_complete = False
     try:
         with os.fdopen(file_descriptor, "wb") as backup_file:
             os.fchmod(backup_file.fileno(), 0o600)
             backup_file.write(current_crontab)
             backup_file.flush()
             os.fsync(backup_file.fileno())
-        backup_complete = True
     except OSError as error:
-        raise CronError(f"Failed to write backup '{backup_path}': {error}") from error
-    finally:
-        if not backup_complete:
-            try:
-                os.unlink(backup_path)
-            except FileNotFoundError:
-                pass
+        cleanup_error = None
+        try:
+            os.unlink(backup_path)
+        except FileNotFoundError:
+            pass
+        except OSError as unlink_error:
+            cleanup_error = unlink_error
+
+        error_message = f"Failed to write backup '{backup_path}': {error}"
+        if cleanup_error:
+            error_message += (
+                f"; failed to remove incomplete backup '{backup_path}': "
+                f"{cleanup_error}"
+            )
+        raise CronError(error_message) from error
 
 
 def append_cron_entry(current_crontab, cron_expression):
@@ -95,7 +101,7 @@ def install_crontab(crontab_content):
 
 def add_cron_entry(cron_expression, backup_path=None):
     current_crontab = get_current_crontab()
-    if backup_path:
+    if backup_path is not None:
         write_crontab_backup(backup_path, current_crontab)
 
     install_crontab(append_cron_entry(current_crontab, cron_expression))

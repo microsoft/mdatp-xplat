@@ -16,7 +16,8 @@ Use `--backup PATH` to save the previous crontab before installing the new
 entry. The backup is created as a new file with permissions `0600`. For safety,
 the command fails without modifying the crontab if the path already exists or
 the backup cannot be written. Choose a path in a directory trusted by the user
-running the script. Restore a backup manually with `crontab PATH`.
+running the script. Restore a user backup with `crontab PATH`, or restore a
+root backup with `sudo crontab PATH`.
 
 ## schedule_scan.py
 

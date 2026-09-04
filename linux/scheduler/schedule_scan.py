@@ -23,7 +23,7 @@ def create_cron_job(
     if debug:
         print(f"[d] cron_expression: {cron_expression}")
         print("[d] list_command: crontab -l")
-        if backup_path:
+        if backup_path is not None:
             print(f"[d] backup_path: {backup_path}")
         print("[d] install_command: crontab -")
     else:
