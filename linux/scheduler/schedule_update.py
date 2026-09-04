@@ -1,62 +1,34 @@
 #!/usr/bin/env python3
 
-import os
 import argparse
-from datetime import datetime
-    
-def backup_cron_jobs(debug):
-    try:
-        today = datetime.today().date()
-        formatted_date = today.strftime('%Y%m%d')
-        backup_location = f"/tmp/cron_schedule_update_backup_{formatted_date}"
+import sys
 
-        cron_backup = f"(crontab -l > {backup_location})"
-        if debug == True:
-            print(f"[d] cron_backup: {cron_backup}")
-        else:
-            os.system(cron_backup)
-    except Exception as e:
-        print(f"[!] Error performing cron backup: {e}")
-        raise Exception("Error attempting to backup cron jobs.")
+from cron_utils import CronError, add_cron_entry
 
-def create_cron_job(minute="*", 
-                    hour="2", 
-                    day_of_month="*", 
-                    month="*", 
-                    day_of_week="6", 
-                    command="", 
-                    debug=False):
-    
-    today = datetime.today().date()
-    formatted_date = today.strftime('%Y%m%d')
-    export_file = f"/tmp/cron_update_schedule_{formatted_date}"
 
-    # Construct the cron task expression
-    cron_expression = f"{minute} {hour} {day_of_month} {month} {day_of_week} {command}"
-    
-    # pull cron tasks, append cron_expression, and store in tmp file
-    cron_export = f"crontab -l > {export_file}"
-    cron_append_task = f"echo '{cron_expression}' >> {export_file}"
+def create_cron_job(
+    minute="*",
+    hour="2",
+    day_of_month="*",
+    month="*",
+    day_of_week="6",
+    command="",
+    debug=False,
+    backup_path=None,
+):
+    cron_expression = (
+        f"{minute} {hour} {day_of_month} {month} {day_of_week} {command}"
+    )
 
-    # push cron task temp file back to crontab for loading
-    cron_cmd = f"crontab {export_file}"
-
-    if debug == True:
+    if debug:
         print(f"[d] cron_expression: {cron_expression}")
-        print(f"[d] cron_export: {cron_export}")
-        print(f"[d] task_append_cmd: {cron_append_task}")
-        print(f"[d] cron_cmd: {cron_cmd}")
+        print("[d] list_command: crontab -l")
+        if backup_path:
+            print(f"[d] backup_path: {backup_path}")
+        print("[d] install_command: crontab -")
     else:
-        try:
-            # Add the command to the crontab
-            os.system(cron_export)
-            os.system(cron_append_task)
-            os.system(cron_cmd)
-
-            print(f"Cron job added successfully: {cron_expression}")
-        except Exception as e:
-            print(f"[!] Error adding cron job: {e}")
-            raise Exception("Error attempting to create cron job.")
+        add_cron_entry(cron_expression, backup_path)
+        print(f"Cron job added successfully: {cron_expression}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="This script creates a cron job that will perform MDE package updates on the desired schedule.")
@@ -89,22 +61,30 @@ if __name__ == "__main__":
         dest="debug",
         default=False,
         help="dump parameters")
-    
+    parser.add_argument("--backup",
+        action="store",
+        dest="backup_path",
+        help="Save the current crontab to a new file before installing the updated crontab.")
+
     try:
         args = parser.parse_args()
         update_dict = {"RHEL":"yum update mdatp -y",
                        "SLES":"zypper update mdatp",
                        "DEB":"apt install --only-upgrade mdatp"}
-        
+
         cmd_string = f"sudo {update_dict[args.os]} >> {args.log_file}"
-        if args.debug == True:
+        if args.debug:
             print(f"[d] Hour: {args.hour} Day: {args.day} Cmd: {cmd_string}")
 
-        backup_cron_jobs(args.debug)
-        create_cron_job(hour=args.hour, day_of_week=args.day, command=cmd_string, debug=args.debug)
-    
+        create_cron_job(
+            hour=args.hour,
+            day_of_week=args.day,
+            command=cmd_string,
+            debug=args.debug,
+            backup_path=args.backup_path,
+        )
     except KeyboardInterrupt:
-        quit()
-    except Exception as e:
-        print(f"[!] schedule_scan script failed: {e}")
-        quit()
+        sys.exit(130)
+    except CronError as error:
+        print(f"[!] schedule_update script failed: {error}", file=sys.stderr)
+        sys.exit(1)
