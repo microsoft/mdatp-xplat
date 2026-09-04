@@ -77,22 +77,35 @@ def write_crontab_backup(backup_path, current_crontab):
             error_message += "; " + "; ".join(cleanup_errors)
         raise CronError(error_message) from error
 
+    write_error = None
+    cleanup_errors = []
     try:
-        with backup_file:
-            os.fchmod(backup_file.fileno(), 0o600)
-            backup_file.write(current_crontab)
-            backup_file.flush()
-            os.fsync(backup_file.fileno())
+        os.fchmod(backup_file.fileno(), 0o600)
+        backup_file.write(current_crontab)
+        backup_file.flush()
+        os.fsync(backup_file.fileno())
     except OSError as error:
-        cleanup_error = _remove_incomplete_backup(backup_path)
+        write_error = error
 
-        error_message = f"Failed to write backup '{backup_path}': {error}"
+    try:
+        backup_file.close()
+    except OSError as close_error:
+        if write_error is None:
+            write_error = close_error
+        else:
+            cleanup_errors.append(f"failed to close backup: {close_error}")
+
+    if write_error is not None:
+        cleanup_error = _remove_incomplete_backup(backup_path)
         if cleanup_error:
-            error_message += (
-                f"; failed to remove incomplete backup '{backup_path}': "
-                f"{cleanup_error}"
+            cleanup_errors.append(
+                f"failed to remove incomplete backup '{backup_path}': {cleanup_error}"
             )
-        raise CronError(error_message) from error
+
+        error_message = f"Failed to write backup '{backup_path}': {write_error}"
+        if cleanup_errors:
+            error_message += "; " + "; ".join(cleanup_errors)
+        raise CronError(error_message) from write_error
 
 
 def append_cron_entry(current_crontab, cron_expression):
