@@ -43,6 +43,11 @@ This script creates a cron job that will perform virus scans on the desired sche
 
 This script creates a cron job that will perform MDE package updates on the desired schedule.
 
+The generated update command uses `sudo`. When this script is run without sudo,
+the scheduled user must have non-interactive sudo permission for the selected
+package-manager command; cron cannot respond to a password prompt. Running the
+script with sudo installs the entry in root's crontab instead.
+
 ### Usage: 
 
 `$ python3 schedule_update.py [-h] [-H {0-23}] [-D {0-6}] [-O {RHEL,SLES,DEB}] [-L LOG_FILE] [--backup PATH] [-d]`
