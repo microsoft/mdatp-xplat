@@ -8,6 +8,21 @@ class CronError(Exception):
     pass
 
 
+def _remove_incomplete_backup(backup_path):
+    try:
+        os.unlink(backup_path)
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        return error
+    return None
+
+
+def _validate_cron_expression(cron_expression):
+    if "\n" in cron_expression or "\r" in cron_expression:
+        raise CronError("Cron expression must contain exactly one line.")
+
+
 def get_current_crontab():
     env = os.environ.copy()
     env["LC_ALL"] = "C"
@@ -43,19 +58,33 @@ def write_crontab_backup(backup_path, current_crontab):
         raise CronError(f"Failed to create backup '{backup_path}': {error}") from error
 
     try:
-        with os.fdopen(file_descriptor, "wb") as backup_file:
+        backup_file = os.fdopen(file_descriptor, "wb")
+    except OSError as error:
+        cleanup_errors = []
+        try:
+            os.close(file_descriptor)
+        except OSError as close_error:
+            cleanup_errors.append(f"failed to close backup: {close_error}")
+
+        unlink_error = _remove_incomplete_backup(backup_path)
+        if unlink_error:
+            cleanup_errors.append(
+                f"failed to remove incomplete backup '{backup_path}': {unlink_error}"
+            )
+
+        error_message = f"Failed to open backup '{backup_path}': {error}"
+        if cleanup_errors:
+            error_message += "; " + "; ".join(cleanup_errors)
+        raise CronError(error_message) from error
+
+    try:
+        with backup_file:
             os.fchmod(backup_file.fileno(), 0o600)
             backup_file.write(current_crontab)
             backup_file.flush()
             os.fsync(backup_file.fileno())
     except OSError as error:
-        cleanup_error = None
-        try:
-            os.unlink(backup_path)
-        except FileNotFoundError:
-            pass
-        except OSError as unlink_error:
-            cleanup_error = unlink_error
+        cleanup_error = _remove_incomplete_backup(backup_path)
 
         error_message = f"Failed to write backup '{backup_path}': {error}"
         if cleanup_error:
@@ -67,6 +96,8 @@ def write_crontab_backup(backup_path, current_crontab):
 
 
 def append_cron_entry(current_crontab, cron_expression):
+    _validate_cron_expression(cron_expression)
+
     separator = b"" if not current_crontab or current_crontab.endswith(b"\n") else b"\n"
     return (
         current_crontab
@@ -100,8 +131,10 @@ def install_crontab(crontab_content):
 
 
 def add_cron_entry(cron_expression, backup_path=None):
+    _validate_cron_expression(cron_expression)
     current_crontab = get_current_crontab()
+    updated_crontab = append_cron_entry(current_crontab, cron_expression)
     if backup_path is not None:
         write_crontab_backup(backup_path, current_crontab)
 
-    install_crontab(append_cron_entry(current_crontab, cron_expression))
+    install_crontab(updated_crontab)
