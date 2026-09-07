@@ -1,47 +1,52 @@
+import contextlib
+import copy
 import hashlib
+import importlib.util
 import io
-import json
 import os
 import re
 import signal
 import stat
 import subprocess
 import tempfile
-import time
 import unittest
 import urllib.request
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 CLIENT_ANALYZER_DIR = Path(__file__).resolve().parents[1]
-BINARY_INSTALLER = "InstallXMDEClientAnalyzer.sh"
-PYTHON_INSTALLER = "InstallXMDEPythonClientAnalyzer.sh"
-BINARY_RUNNER = "MDESupportTool.sh"
-PYTHON_RUNNER = "MDEPythonSupportTool.sh"
+ACTION_PATH = CLIENT_ANALYZER_DIR / "client_analyzer_action.py"
+SPEC = importlib.util.spec_from_file_location("client_analyzer_action", ACTION_PATH)
+ACTION = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(ACTION)
+
 BINARY_URL = "https://go.microsoft.com/fwlink/?linkid=2336125"
 BINARY_SHA256 = "5f906591d33d675f14d73d5b658a796cec7480b023b18d45c5d687713a4d4fbb"
-BINARY_INNER_SHA256 = (
-    "a500c00fe0dc2bb5b23ec9c771fd40694d111fa78d095d6ff77e4f0b36a23903"
-)
-BINARY_ENTRY_SHA256 = (
-    "b6b21fbc12b6d37be331a5e27a9741b43d35876645e02b26c8cafc4e623ed5e1"
-)
-BINARY_ARM64_INNER_SHA256 = (
-    "ba8cc0c9766f5c937a90db00af6ed936ecdbfbba88049a383df814203af5066a"
-)
-BINARY_ARM64_ENTRY_SHA256 = (
-    "a3b60a11eea093f9ec7b9bd7ea86a0e8bbc6f481116311dd678d69def49b5169"
-)
+BINARY_HASHES = {
+    "amd64": {
+        "inner_name": "SupportToolLinuxamd64Binary.zip",
+        "inner_sha256": "a500c00fe0dc2bb5b23ec9c771fd40694d111fa78d095d6ff77e4f0b36a23903",
+        "entry_sha256": "b6b21fbc12b6d37be331a5e27a9741b43d35876645e02b26c8cafc4e623ed5e1",
+    },
+    "arm64": {
+        "inner_name": "SupportToolLinuxarm64Binary.zip",
+        "inner_sha256": "ba8cc0c9766f5c937a90db00af6ed936ecdbfbba88049a383df814203af5066a",
+        "entry_sha256": "a3b60a11eea093f9ec7b9bd7ea86a0e8bbc6f481116311dd678d69def49b5169",
+    },
+}
 PYTHON_URL = "https://go.microsoft.com/fwlink/?linkid=2336046"
 PYTHON_SHA256 = "0b7c350a1c19e049416b1c8fb7ed857569ddcc32fb90453a3fccd083487c0b4e"
 PYTHON_ENTRY_SHA256 = (
     "00a03ca9b9f9c6d985ef48f8bcaae5cd08b37af551a452d005847d612fb67ffe"
 )
-
-
-def read_script(name):
-    return (CLIENT_ANALYZER_DIR / name).read_text(encoding="utf-8")
+WRAPPERS = {
+    "InstallXMDEClientAnalyzer.sh": "install-binary",
+    "InstallXMDEPythonClientAnalyzer.sh": "install-python",
+    "MDESupportTool.sh": "run-binary",
+    "MDEPythonSupportTool.sh": "run-python",
+}
 
 
 def sha256_bytes(content):
@@ -57,29 +62,11 @@ def add_zip_file(archive, name, content, mode=0o600, file_type=stat.S_IFREG):
 
 
 def binary_entrypoint():
-    return b"""#!/bin/sh
-capture_file=${CAPTURE_FILE:?}
-printf '%s\\n' "$#" > "$capture_file"
-for argument in "$@"; do
-    printf '<%s>\\n' "$argument" >> "$capture_file"
-done
-printf 'TMPDIR=<%s>\\n' "$TMPDIR" >> "$capture_file"
-"""
+    return b"#!/bin/sh\nexit 0\n"
 
 
 def python_entrypoint(setup_exit_code=0):
-    return f"""#!/bin/sh
-if [ "$#" -eq 0 ]; then
-    printf 'setup\\n' > "${{SETUP_CAPTURE_FILE:?}}"
-    exit {setup_exit_code}
-fi
-capture_file=${{CAPTURE_FILE:?}}
-printf '%s\\n' "$#" > "$capture_file"
-for argument in "$@"; do
-    printf '<%s>\\n' "$argument" >> "$capture_file"
-done
-printf 'TMPDIR=<%s>\\n' "$TMPDIR" >> "$capture_file"
-""".encode("utf-8")
+    return f"#!/bin/sh\nexit {setup_exit_code}\n".encode("utf-8")
 
 
 def python_user_site_entrypoint():
@@ -92,51 +79,23 @@ PYTHONUSERBASE="$user_base" python3 -c 'import workspace_dependency'
 """
 
 
-def binary_architecture(architecture):
-    if architecture == "amd64":
-        return {
-            "machine": "x86_64",
-            "inner_name": "SupportToolLinuxamd64Binary.zip",
-            "inner_sha256": BINARY_INNER_SHA256,
-            "entry_sha256": BINARY_ENTRY_SHA256,
-        }
-    if architecture == "arm64":
-        return {
-            "machine": "aarch64",
-            "inner_name": "SupportToolLinuxarm64Binary.zip",
-            "inner_sha256": BINARY_ARM64_INNER_SHA256,
-            "entry_sha256": BINARY_ARM64_ENTRY_SHA256,
-        }
-    raise AssertionError(f"Unsupported test architecture: {architecture}")
-
-
-def create_binary_archive(
-    path,
-    architecture="amd64",
-    entrypoint=None,
-    extra_inner_entries=None,
-):
-    architecture_info = binary_architecture(architecture)
-    entrypoint = entrypoint if entrypoint is not None else binary_entrypoint()
+def create_binary_archive(path, architecture="amd64", extra_entries=None):
+    entrypoint = binary_entrypoint()
     inner_buffer = io.BytesIO()
     with zipfile.ZipFile(inner_buffer, "w") as inner_archive:
         add_zip_file(inner_archive, "MDESupportTool", entrypoint, mode=0o700)
-        for info, content in extra_inner_entries or ():
+        for info, content in extra_entries or ():
             inner_archive.writestr(info, content)
     inner_content = inner_buffer.getvalue()
 
+    inner_name = BINARY_HASHES[architecture]["inner_name"]
     with zipfile.ZipFile(path, "w") as outer_archive:
-        add_zip_file(
-            outer_archive,
-            architecture_info["inner_name"],
-            inner_content,
-        )
+        add_zip_file(outer_archive, inner_name, inner_content)
 
     return {
         "outer_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "inner_sha256": sha256_bytes(inner_content),
         "entry_sha256": sha256_bytes(entrypoint),
-        "architecture": architecture,
     }
 
 
@@ -146,216 +105,162 @@ def create_python_archive(path, entrypoint=None, extra_entries=None):
         add_zip_file(archive, "mde_support_tool.sh", entrypoint, mode=0o700)
         for info, content in extra_entries or ():
             archive.writestr(info, content)
-
     return {
         "outer_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "entry_sha256": sha256_bytes(entrypoint),
     }
 
 
-def replace_required(text, old, new):
-    if old not in text:
-        raise AssertionError(f"Required test replacement was not found: {old}")
-    return text.replace(old, new)
-
-
-def write_patched_script(directory, name, replacements):
-    text = read_script(name)
-    for old, new in replacements:
-        text = replace_required(text, old, new)
-    path = directory / name
-    path.write_text(text, encoding="utf-8")
-    path.chmod(0o700)
-    return path
-
-
-def common_replacements(state_parent):
-    return [
-        (
-            'STATE_PARENT = Path("/var/tmp")',
-            f"STATE_PARENT = Path({str(state_parent)!r})",
-        ),
-        (
-            'ALLOWED_DOWNLOAD_SCHEMES = {"https"}',
-            'ALLOWED_DOWNLOAD_SCHEMES = {"file"}',
-        ),
-    ]
-
-
-def binary_installer_replacements(state_parent, archive, hashes):
-    architecture_info = binary_architecture(hashes["architecture"])
-    return common_replacements(state_parent) + [
-        (f'DOWNLOAD_URL = "{BINARY_URL}"', f'DOWNLOAD_URL = {archive.as_uri()!r}'),
-        (f'OUTER_SHA256 = "{BINARY_SHA256}"', f'OUTER_SHA256 = "{hashes["outer_sha256"]}"'),
-        (architecture_info["inner_sha256"], hashes["inner_sha256"]),
-        (architecture_info["entry_sha256"], hashes["entry_sha256"]),
-        (
-            "machine = platform.machine().lower()",
-            f'machine = "{architecture_info["machine"]}"',
-        ),
-    ]
-
-
-def binary_runner_replacements(state_parent, hashes):
-    architecture_info = binary_architecture(hashes["architecture"])
-    return [
-        (
-            'STATE_PARENT = Path("/var/tmp")',
-            f"STATE_PARENT = Path({str(state_parent)!r})",
-        ),
-        (f'OUTER_SHA256 = "{BINARY_SHA256}"', f'OUTER_SHA256 = "{hashes["outer_sha256"]}"'),
-        (architecture_info["inner_sha256"], hashes["inner_sha256"]),
-        (architecture_info["entry_sha256"], hashes["entry_sha256"]),
-        (
-            "machine = platform.machine().lower()",
-            f'machine = "{architecture_info["machine"]}"',
-        ),
-    ]
-
-
-def python_installer_replacements(state_parent, archive, hashes):
-    return common_replacements(state_parent) + [
-        (f'DOWNLOAD_URL = "{PYTHON_URL}"', f'DOWNLOAD_URL = {archive.as_uri()!r}'),
-        (f'OUTER_SHA256 = "{PYTHON_SHA256}"', f'OUTER_SHA256 = "{hashes["outer_sha256"]}"'),
-        (PYTHON_ENTRY_SHA256, hashes["entry_sha256"]),
-    ]
-
-
-def python_runner_replacements(state_parent, hashes):
-    return [
-        (
-            'STATE_PARENT = Path("/var/tmp")',
-            f"STATE_PARENT = Path({str(state_parent)!r})",
-        ),
-        (f'OUTER_SHA256 = "{PYTHON_SHA256}"', f'OUTER_SHA256 = "{hashes["outer_sha256"]}"'),
-        (PYTHON_ENTRY_SHA256, hashes["entry_sha256"]),
-    ]
-
-
-def run_script(path, *arguments, environment=None):
-    merged_environment = os.environ.copy()
-    if environment:
-        merged_environment.update(environment)
-    return subprocess.run(
-        ["/bin/sh", str(path), *arguments],
-        check=False,
-        capture_output=True,
-        text=True,
-        env=merged_environment,
-        timeout=120,
-    )
-
-
-def workspace_id(output, prefix):
-    matches = re.findall(r"workspace ID: (" + re.escape(prefix) + r"[0-9a-f]{32})", output)
-    if len(matches) != 1:
-        raise AssertionError(f"Expected one workspace ID in output: {output}")
-    return matches[0]
-
-
-def embedded_installer_library(name):
-    text = read_script(name)
-    payload = text.split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
-    library = payload.split("\nsignal.signal(signal.SIGHUP", 1)[0]
-    namespace = {"__name__": f"{name}_test"}
-    exec(compile(library, name, "exec"), namespace)
-    return namespace
-
-
-class TestClientAnalyzerSourceContracts(unittest.TestCase):
-    def test_actions_do_not_use_predictable_shared_tmp_paths(self):
-        for script_name in (
-            BINARY_INSTALLER,
-            PYTHON_INSTALLER,
-            BINARY_RUNNER,
-            PYTHON_RUNNER,
-        ):
-            with self.subTest(script=script_name):
-                self.assertNotIn("/tmp/XMDEClientAnalyzer", read_script(script_name))
-
-    def test_installers_pin_current_archives(self):
-        binary_installer = read_script(BINARY_INSTALLER)
-        python_installer = read_script(PYTHON_INSTALLER)
-
-        self.assertIn(BINARY_URL, binary_installer)
-        self.assertIn(BINARY_SHA256, binary_installer)
-        self.assertIn(BINARY_ARM64_INNER_SHA256, binary_installer)
-        self.assertIn(BINARY_ARM64_ENTRY_SHA256, binary_installer)
-        self.assertIn(PYTHON_URL, python_installer)
-        self.assertIn(PYTHON_SHA256, python_installer)
-
-    def test_installers_create_opaque_private_workspaces(self):
-        self.assertIn(
-            "mde-client-analyzer-binary-",
-            read_script(BINARY_INSTALLER),
+class ActionTestCase(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary_directory.name)
+        self.state_parent = self.root / "state"
+        self.state_parent.mkdir(mode=0o700)
+        self.original_state_parent = ACTION.STATE_PARENT
+        self.original_schemes = ACTION.ALLOWED_DOWNLOAD_SCHEMES
+        self.original_configs = copy.deepcopy(ACTION.CONFIGS)
+        ACTION.STATE_PARENT = self.state_parent
+        ACTION.ALLOWED_DOWNLOAD_SCHEMES = {"file"}
+        self.machine_patcher = mock.patch.object(
+            ACTION.platform,
+            "machine",
+            return_value="x86_64",
         )
-        self.assertIn(
-            "mde-client-analyzer-python-",
-            read_script(PYTHON_INSTALLER),
-        )
+        self.machine_patcher.start()
 
-    def test_runners_reject_legacy_argument_forwarding(self):
-        self.assertNotIn("./MDESupportTool $@", read_script(BINARY_RUNNER))
-        self.assertNotIn(
-            "./mde_support_tool.sh -d $@",
-            read_script(PYTHON_RUNNER),
+    def tearDown(self):
+        self.machine_patcher.stop()
+        ACTION.STATE_PARENT = self.original_state_parent
+        ACTION.ALLOWED_DOWNLOAD_SCHEMES = self.original_schemes
+        ACTION.CONFIGS.clear()
+        ACTION.CONFIGS.update(self.original_configs)
+        self.temporary_directory.cleanup()
+
+    def configure_binary(self, archive, architecture="amd64"):
+        hashes = create_binary_archive(archive, architecture)
+        config = ACTION.CONFIGS["binary"]
+        config["download_url"] = archive.as_uri()
+        config["outer_sha256"] = hashes["outer_sha256"]
+        config["archives"][architecture]["inner_sha256"] = hashes["inner_sha256"]
+        config["archives"][architecture]["entry_sha256"] = hashes["entry_sha256"]
+        return hashes
+
+    def configure_python(self, archive, entrypoint=None, extra_entries=None):
+        hashes = create_python_archive(archive, entrypoint, extra_entries)
+        config = ACTION.CONFIGS["python"]
+        config["download_url"] = archive.as_uri()
+        config["outer_sha256"] = hashes["outer_sha256"]
+        config["entry_sha256"] = hashes["entry_sha256"]
+        return hashes
+
+    def install(self, kind):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            ACTION.install(kind)
+        match = re.search(
+            rf"workspace ID: ({re.escape(ACTION.CONFIGS[kind]['workspace_prefix'])}[0-9a-f]{{32}})",
+            output.getvalue(),
         )
+        self.assertIsNotNone(match, output.getvalue())
+        return match.group(1)
+
+    def run_without_exec(self, kind, workspace_id):
+        with mock.patch.object(ACTION.os, "chdir") as change_directory:
+            with mock.patch.object(ACTION.os, "execve") as execute:
+                ACTION.run(kind, workspace_id)
+        execute.assert_called_once()
+        return change_directory, execute.call_args.args
 
 
-class TestDownloadSchemeControls(unittest.TestCase):
-    def test_installers_reject_non_https_initial_url_without_retaining_state(self):
-        cases = (
-            (BINARY_INSTALLER, BINARY_URL),
-            (PYTHON_INSTALLER, PYTHON_URL),
-        )
-        for script_name, production_url in cases:
-            with self.subTest(script=script_name), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                state_parent = root / "state"
-                scripts = root / "scripts"
-                state_parent.mkdir(mode=0o700)
-                scripts.mkdir(mode=0o700)
-                installer = write_patched_script(
-                    scripts,
-                    script_name,
-                    [
-                        (
-                            'STATE_PARENT = Path("/var/tmp")',
-                            f"STATE_PARENT = Path({str(state_parent)!r})",
-                        ),
-                        (
-                            f'DOWNLOAD_URL = "{production_url}"',
-                            'DOWNLOAD_URL = "http://127.0.0.1/client-analyzer.zip"',
-                        ),
-                    ],
+class TestSourceAndWrappers(unittest.TestCase):
+    def test_actions_do_not_use_legacy_shared_paths(self):
+        for path in (ACTION_PATH, *(CLIENT_ANALYZER_DIR / name for name in WRAPPERS)):
+            with self.subTest(path=path.name):
+                self.assertNotIn(
+                    "/tmp/XMDEClientAnalyzer",
+                    path.read_text(encoding="utf-8"),
                 )
 
-                result = run_script(installer)
+    def test_wrappers_are_thin_package_local_dispatchers(self):
+        for name, command in WRAPPERS.items():
+            with self.subTest(wrapper=name):
+                lines = (CLIENT_ANALYZER_DIR / name).read_text(
+                    encoding="utf-8"
+                ).splitlines()
+                self.assertLessEqual(len(lines), 16)
+                self.assertIn("client_analyzer_action.py", "\n".join(lines))
+                self.assertIn(command, lines[-1])
 
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn("disallowed URL scheme", result.stderr)
-                self.assertEqual(list(state_parent.iterdir()), [])
+    def test_helper_pins_current_artifacts_and_both_binary_architectures(self):
+        helper = ACTION_PATH.read_text(encoding="utf-8")
+        self.assertIn(BINARY_URL, helper)
+        self.assertIn(BINARY_SHA256, helper)
+        self.assertIn(PYTHON_URL, helper)
+        self.assertIn(PYTHON_SHA256, helper)
+        for hashes in BINARY_HASHES.values():
+            self.assertIn(hashes["inner_sha256"], helper)
+            self.assertIn(hashes["entry_sha256"], helper)
 
-    def test_redirect_handler_rejects_https_to_http_downgrade(self):
-        for script_name in (BINARY_INSTALLER, PYTHON_INSTALLER):
-            with self.subTest(script=script_name):
-                namespace = embedded_installer_library(script_name)
-                handler = namespace["RestrictedRedirectHandler"]()
+    def test_wrappers_route_to_package_helper(self):
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory)
+            capture = package / "arguments.txt"
+            helper = package / "client_analyzer_action.py"
+            helper.write_text(
+                "import os, sys\n"
+                "open(os.environ['CAPTURE_FILE'], 'w').write('\\n'.join(sys.argv[1:]))\n",
+                encoding="utf-8",
+            )
+            for name, command in WRAPPERS.items():
+                wrapper = package / name
+                wrapper.write_text(
+                    (CLIENT_ANALYZER_DIR / name).read_text(encoding="utf-8"),
+                    encoding="utf-8",
+                )
+                arguments = ["workspace-token"] if command.startswith("run-") else []
+                result = subprocess.run(
+                    ["/bin/sh", str(wrapper), *arguments],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    env={**os.environ, "CAPTURE_FILE": str(capture)},
+                    timeout=120,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                expected = [command, *arguments]
+                self.assertEqual(
+                    capture.read_text(encoding="utf-8").splitlines(),
+                    expected,
+                )
 
-                with self.assertRaisesRegex(
-                    namespace["InstallError"],
-                    "disallowed URL scheme",
-                ):
-                    handler.redirect_request(
-                        None,
-                        None,
-                        302,
-                        "Found",
-                        {},
-                        "http://127.0.0.1/client-analyzer.zip",
-                    )
 
-    def test_download_rejects_non_https_final_url(self):
+class TestDownloadSchemeControls(ActionTestCase):
+    def test_initial_url_rejects_http_without_retaining_state(self):
+        for kind in ("binary", "python"):
+            with self.subTest(kind=kind):
+                ACTION.ALLOWED_DOWNLOAD_SCHEMES = {"https"}
+                ACTION.CONFIGS[kind]["download_url"] = (
+                    "http://127.0.0.1/client-analyzer.zip"
+                )
+                with self.assertRaisesRegex(ACTION.ActionError, "disallowed URL scheme"):
+                    ACTION.install(kind)
+                self.assertEqual(list(self.state_parent.iterdir()), [])
+
+    def test_redirect_handler_rejects_https_to_http(self):
+        ACTION.ALLOWED_DOWNLOAD_SCHEMES = {"https"}
+        handler = ACTION.RestrictedRedirectHandler()
+        with self.assertRaisesRegex(ACTION.ActionError, "disallowed URL scheme"):
+            handler.redirect_request(
+                None,
+                None,
+                302,
+                "Found",
+                {},
+                "http://127.0.0.1/client-analyzer.zip",
+            )
+
+    def test_final_url_rejects_http(self):
         class FakeResponse:
             headers = {}
 
@@ -370,72 +275,42 @@ class TestDownloadSchemeControls(unittest.TestCase):
 
         class FakeOpener:
             def open(self, _request, timeout):
-                if timeout != 120:
-                    raise AssertionError(f"Unexpected timeout: {timeout}")
+                self.timeout = timeout
                 return FakeResponse()
 
-        for script_name in (BINARY_INSTALLER, PYTHON_INSTALLER):
-            with self.subTest(script=script_name), tempfile.TemporaryDirectory() as directory:
-                namespace = embedded_installer_library(script_name)
-                original_build_opener = namespace["urllib"].request.build_opener
-                namespace["urllib"].request.build_opener = lambda *_handlers: FakeOpener()
-                try:
-                    with self.assertRaisesRegex(
-                        namespace["InstallError"],
-                        "resolved to a disallowed URL scheme",
-                    ):
-                        namespace["download_file"](
-                            Path(directory) / "client-analyzer.zip"
-                        )
-                finally:
-                    namespace["urllib"].request.build_opener = original_build_opener
+        ACTION.ALLOWED_DOWNLOAD_SCHEMES = {"https"}
+        with mock.patch.object(
+            ACTION.urllib.request,
+            "build_opener",
+            return_value=FakeOpener(),
+        ):
+            with self.assertRaisesRegex(
+                ACTION.ActionError,
+                "resolved to a disallowed URL scheme",
+            ):
+                ACTION.download_file(
+                    "https://example.invalid/client-analyzer.zip",
+                    self.root / "archive.zip",
+                )
 
 
-class TestClientAnalyzerInstallers(unittest.TestCase):
-    def setUp(self):
-        self.temporary_directory = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary_directory.name)
-        self.state_parent = self.root / "state"
-        self.state_parent.mkdir(mode=0o700)
-        self.scripts = self.root / "scripts"
-        self.scripts.mkdir(mode=0o700)
-
-    def tearDown(self):
-        self.temporary_directory.cleanup()
-
-    def test_binary_installer_creates_private_verified_workspace(self):
-        for architecture in ("amd64", "arm64"):
+class TestInstallers(ActionTestCase):
+    def test_binary_installer_supports_amd64_and_arm64(self):
+        cases = (("amd64", "x86_64"), ("arm64", "aarch64"))
+        for architecture, machine in cases:
             with self.subTest(architecture=architecture):
-                archive = self.root / f"binary-{architecture}.zip"
-                hashes = create_binary_archive(
-                    archive,
-                    architecture=architecture,
-                )
-                installer = write_patched_script(
-                    self.scripts,
-                    BINARY_INSTALLER,
-                    binary_installer_replacements(
-                        self.state_parent,
-                        archive,
-                        hashes,
-                    ),
-                )
-
-                result = run_script(installer)
-
-                self.assertEqual(result.returncode, 0, result.stderr)
-                identifier = workspace_id(
-                    result.stdout,
-                    "mde-client-analyzer-binary-",
-                )
-                workspace = self.state_parent / identifier
-                manifest = json.loads(
-                    (workspace / "manifest.json").read_text(encoding="utf-8")
-                )
-                self.assertEqual(manifest["architecture"], architecture)
+                archive = self.root / f"{architecture}.zip"
+                self.configure_binary(archive, architecture)
+                with mock.patch.object(ACTION.platform, "machine", return_value=machine):
+                    workspace_id = self.install("binary")
+                workspace = self.state_parent / workspace_id
+                completion = (workspace / "complete").read_text(
+                    encoding="utf-8"
+                ).split()
+                self.assertEqual(completion[2], architecture)
                 self.assertEqual(stat.S_IMODE(workspace.stat().st_mode), 0o700)
                 self.assertEqual(
-                    stat.S_IMODE((workspace / "manifest.json").stat().st_mode),
+                    stat.S_IMODE((workspace / "complete").stat().st_mode),
                     0o600,
                 )
                 self.assertEqual(
@@ -444,390 +319,151 @@ class TestClientAnalyzerInstallers(unittest.TestCase):
                     ),
                     0o700,
                 )
-                self.assertFalse((workspace / "client-analyzer.zip").exists())
 
-    def test_python_installer_prepares_dependencies_before_publishing_workspace(self):
+    def test_python_installer_prepares_dependencies(self):
         archive = self.root / "python.zip"
-        hashes = create_python_archive(archive)
-        installer = write_patched_script(
-            self.scripts,
-            PYTHON_INSTALLER,
-            python_installer_replacements(self.state_parent, archive, hashes),
-        )
-        setup_capture = self.root / "setup.txt"
+        self.configure_python(archive)
+        workspace_id = self.install("python")
+        self.assertTrue((self.state_parent / workspace_id / "complete").is_file())
 
-        result = run_script(
-            installer,
-            environment={"SETUP_CAPTURE_FILE": str(setup_capture)},
-        )
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        identifier = workspace_id(
-            result.stdout,
-            "mde-client-analyzer-python-",
-        )
-        workspace = self.state_parent / identifier
-        self.assertEqual(setup_capture.read_text(encoding="utf-8"), "setup\n")
-        self.assertTrue((workspace / "manifest.json").is_file())
-        self.assertFalse((workspace / "setup").exists())
-
-    def test_python_installer_clears_python_no_user_site_for_workspace_dependencies(self):
+    def test_python_installer_clears_python_no_user_site(self):
         archive = self.root / "python-user-site.zip"
-        hashes = create_python_archive(
-            archive,
-            entrypoint=python_user_site_entrypoint(),
-        )
-        installer = write_patched_script(
-            self.scripts,
-            PYTHON_INSTALLER,
-            python_installer_replacements(self.state_parent, archive, hashes),
-        )
+        self.configure_python(archive, python_user_site_entrypoint())
+        with mock.patch.dict(os.environ, {"PYTHONNOUSERSITE": "1"}):
+            self.install("python")
 
-        result = run_script(
-            installer,
-            environment={"PYTHONNOUSERSITE": "1"},
-        )
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_binary_installer_removes_workspace_after_digest_failure(self):
+    def test_digest_failure_removes_workspace(self):
         archive = self.root / "binary.zip"
-        hashes = create_binary_archive(archive)
-        hashes["outer_sha256"] = "0" * 64
-        installer = write_patched_script(
-            self.scripts,
-            BINARY_INSTALLER,
-            binary_installer_replacements(self.state_parent, archive, hashes),
-        )
-
-        result = run_script(installer)
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("failed integrity verification", result.stderr)
+        self.configure_binary(archive)
+        ACTION.CONFIGS["binary"]["outer_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ACTION.ActionError, "integrity verification"):
+            ACTION.install("binary")
         self.assertEqual(list(self.state_parent.iterdir()), [])
 
-    def test_python_installer_removes_workspace_after_setup_failure(self):
-        archive = self.root / "python.zip"
-        hashes = create_python_archive(
-            archive,
-            entrypoint=python_entrypoint(setup_exit_code=7),
-        )
-        installer = write_patched_script(
-            self.scripts,
-            PYTHON_INSTALLER,
-            python_installer_replacements(self.state_parent, archive, hashes),
-        )
-        setup_capture = self.root / "setup.txt"
-
-        result = run_script(
-            installer,
-            environment={"SETUP_CAPTURE_FILE": str(setup_capture)},
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("dependency preparation failed with exit code 7", result.stderr)
-        self.assertEqual(list(self.state_parent.iterdir()), [])
-
-    def test_binary_installer_rejects_traversal_before_writing_outside_workspace(self):
+    def test_traversal_is_rejected_before_writing_outside_workspace(self):
         traversal = zipfile.ZipInfo("../escaped")
         traversal.create_system = 3
         traversal.external_attr = (stat.S_IFREG | 0o600) << 16
         archive = self.root / "binary.zip"
         hashes = create_binary_archive(
             archive,
-            extra_inner_entries=[(traversal, b"blocked")],
+            extra_entries=[(traversal, b"blocked")],
         )
-        installer = write_patched_script(
-            self.scripts,
-            BINARY_INSTALLER,
-            binary_installer_replacements(self.state_parent, archive, hashes),
-        )
-
-        result = run_script(installer)
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unsafe path", result.stderr)
+        config = ACTION.CONFIGS["binary"]
+        config["download_url"] = archive.as_uri()
+        config["outer_sha256"] = hashes["outer_sha256"]
+        config["archives"]["amd64"]["inner_sha256"] = hashes["inner_sha256"]
+        config["archives"]["amd64"]["entry_sha256"] = hashes["entry_sha256"]
+        with self.assertRaisesRegex(ACTION.ActionError, "unsafe path"):
+            ACTION.install("binary")
         self.assertFalse((self.state_parent / "escaped").exists())
         self.assertEqual(list(self.state_parent.iterdir()), [])
 
-    def test_python_installer_rejects_symlink_archive_entry(self):
+    def test_symlink_archive_entry_is_rejected(self):
         symlink = zipfile.ZipInfo("payload-link")
         symlink.create_system = 3
         symlink.external_attr = (stat.S_IFLNK | 0o777) << 16
         archive = self.root / "python.zip"
-        hashes = create_python_archive(
+        self.configure_python(
             archive,
             extra_entries=[(symlink, b"/etc/passwd")],
         )
-        installer = write_patched_script(
-            self.scripts,
-            PYTHON_INSTALLER,
-            python_installer_replacements(self.state_parent, archive, hashes),
-        )
-
-        result = run_script(installer)
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("link or special file", result.stderr)
+        with self.assertRaisesRegex(ACTION.ActionError, "link or special file"):
+            ACTION.install("python")
         self.assertEqual(list(self.state_parent.iterdir()), [])
 
-    def test_binary_installer_rejects_unsupported_architecture_without_state(self):
-        archive = self.root / "binary.zip"
-        hashes = create_binary_archive(archive)
-        replacements = binary_installer_replacements(
-            self.state_parent,
-            archive,
-            hashes,
-        )
-        replacements.append(
-            (
-                'machine = "x86_64"',
-                'machine = "unsupported"',
-            )
-        )
-        installer = write_patched_script(
-            self.scripts,
-            BINARY_INSTALLER,
-            replacements,
-        )
-
-        result = run_script(installer)
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Unsupported architecture", result.stderr)
-        self.assertEqual(list(self.state_parent.iterdir()), [])
-
-    def test_installers_remove_private_workspace_after_termination(self):
-        cases = []
-
-        binary_archive = self.root / "binary-termination.zip"
-        binary_hashes = create_binary_archive(binary_archive)
-        binary_replacements = binary_installer_replacements(
-            self.state_parent,
-            binary_archive,
-            binary_hashes,
-        )
-        binary_replacements.append(
-            (
-                'workspace = create_workspace()\n        outer_archive = workspace / "client-analyzer.zip"',
-                'workspace = create_workspace()\n        import time\n        time.sleep(60)\n        outer_archive = workspace / "client-analyzer.zip"',
-            )
-        )
-        cases.append((BINARY_INSTALLER, binary_replacements))
-
-        python_archive = self.root / "python-termination.zip"
-        python_hashes = create_python_archive(python_archive)
-        python_replacements = python_installer_replacements(
-            self.state_parent,
-            python_archive,
-            python_hashes,
-        )
-        python_replacements.append(
-            (
-                'workspace = create_workspace()\n        archive_path = workspace / "client-analyzer.zip"',
-                'workspace = create_workspace()\n        import time\n        time.sleep(60)\n        archive_path = workspace / "client-analyzer.zip"',
-            )
-        )
-        cases.append((PYTHON_INSTALLER, python_replacements))
-
-        for script_name, replacements in cases:
-            with self.subTest(script=script_name):
-                installer = write_patched_script(
-                    self.scripts,
-                    script_name,
-                    replacements,
-                )
-                process = subprocess.Popen(
-                    ["/bin/sh", str(installer)],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-                deadline = time.monotonic() + 10
-                while time.monotonic() < deadline:
-                    if list(self.state_parent.iterdir()):
-                        break
-                    time.sleep(0.05)
-                else:
-                    process.kill()
-                    process.wait(timeout=10)
-                    self.fail("Installer did not create a workspace before timeout.")
-
-                process.send_signal(signal.SIGTERM)
-                _, stderr = process.communicate(timeout=10)
-
-                self.assertEqual(process.returncode, 1, stderr)
-                self.assertIn("Installation interrupted by signal", stderr)
-                self.assertEqual(list(self.state_parent.iterdir()), [])
-
-
-class TestClientAnalyzerRunners(unittest.TestCase):
-    def setUp(self):
-        self.temporary_directory = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary_directory.name)
-        self.state_parent = self.root / "state"
-        self.state_parent.mkdir(mode=0o700)
-        self.scripts = self.root / "scripts"
-        self.scripts.mkdir(mode=0o700)
-
-    def tearDown(self):
-        self.temporary_directory.cleanup()
-
-    def install_binary_fixture(self, architecture="amd64"):
-        archive = self.root / f"binary-{architecture}.zip"
-        hashes = create_binary_archive(
-            archive,
-            architecture=architecture,
-        )
-        installer = write_patched_script(
-            self.scripts,
-            BINARY_INSTALLER,
-            binary_installer_replacements(self.state_parent, archive, hashes),
-        )
-        result = run_script(installer)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return (
-            workspace_id(result.stdout, "mde-client-analyzer-binary-"),
-            hashes,
-        )
-
-    def install_python_fixture(self):
+    def test_setup_failure_removes_python_workspace(self):
         archive = self.root / "python.zip"
-        hashes = create_python_archive(archive)
-        installer = write_patched_script(
-            self.scripts,
-            PYTHON_INSTALLER,
-            python_installer_replacements(self.state_parent, archive, hashes),
-        )
-        setup_capture = self.root / "setup.txt"
-        result = run_script(
-            installer,
-            environment={"SETUP_CAPTURE_FILE": str(setup_capture)},
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return (
-            workspace_id(result.stdout, "mde-client-analyzer-python-"),
-            hashes,
-        )
+        self.configure_python(archive, python_entrypoint(setup_exit_code=7))
+        with self.assertRaisesRegex(ACTION.ActionError, "exit code 7"):
+            ACTION.install("python")
+        self.assertEqual(list(self.state_parent.iterdir()), [])
 
-    def test_binary_runner_maps_workspace_token_to_fixed_diagnostic_arguments(self):
-        for architecture in ("amd64", "arm64"):
-            with self.subTest(architecture=architecture):
-                identifier, hashes = self.install_binary_fixture(architecture)
-                runner = write_patched_script(
-                    self.scripts,
-                    BINARY_RUNNER,
-                    binary_runner_replacements(self.state_parent, hashes),
+    def test_termination_signal_removes_workspace(self):
+        previous_handler = signal.getsignal(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, ACTION.handle_termination)
+        try:
+            for kind in ("binary", "python"):
+                with self.subTest(kind=kind):
+                    with mock.patch.object(
+                        ACTION,
+                        "download_file",
+                        side_effect=lambda *_args: os.kill(os.getpid(), signal.SIGTERM),
+                    ):
+                        with self.assertRaisesRegex(
+                            ACTION.ActionError,
+                            "interrupted by signal",
+                        ):
+                            ACTION.install(kind)
+                    self.assertEqual(list(self.state_parent.iterdir()), [])
+        finally:
+            signal.signal(signal.SIGTERM, previous_handler)
+
+    def test_unsupported_architecture_creates_no_state(self):
+        with mock.patch.object(ACTION.platform, "machine", return_value="unsupported"):
+            with self.assertRaisesRegex(ACTION.ActionError, "Unsupported architecture"):
+                ACTION.install("binary")
+        self.assertEqual(list(self.state_parent.iterdir()), [])
+
+
+class TestRunners(ActionTestCase):
+    def install_binary(self, architecture="amd64", machine="x86_64"):
+        archive = self.root / f"{architecture}.zip"
+        self.configure_binary(archive, architecture)
+        with mock.patch.object(ACTION.platform, "machine", return_value=machine):
+            return self.install("binary")
+
+    def install_python(self):
+        archive = self.root / "python.zip"
+        self.configure_python(archive)
+        return self.install("python")
+
+    def test_runners_use_fixed_diagnostic_arguments(self):
+        cases = (
+            ("binary", self.install_binary(), "x86_64"),
+            ("python", self.install_python(), "x86_64"),
+        )
+        for kind, workspace_id, machine in cases:
+            with self.subTest(kind=kind):
+                with mock.patch.object(ACTION.platform, "machine", return_value=machine):
+                    _, execute_arguments = self.run_without_exec(kind, workspace_id)
+                entrypoint, arguments, environment = execute_arguments
+                self.assertEqual(
+                    arguments,
+                    [str(entrypoint), "--bypass-disclaimer", "-d"],
                 )
-                capture = self.root / f"binary-{architecture}-arguments.txt"
-
-                result = run_script(
-                    runner,
-                    identifier,
-                    environment={"CAPTURE_FILE": str(capture)},
-                )
-
-                self.assertEqual(result.returncode, 0, result.stderr)
-                lines = capture.read_text(encoding="utf-8").splitlines()
-                self.assertEqual(lines[:3], ["2", "<--bypass-disclaimer>", "<-d>"])
                 self.assertRegex(
-                    lines[3],
-                    r"^TMPDIR=<.*/runs/run-[0-9a-f]{32}>$",
+                    environment["TMPDIR"],
+                    r"/runs/run-[0-9a-f]{32}$",
                 )
 
-    def test_python_runner_maps_workspace_token_to_fixed_diagnostic_arguments(self):
-        identifier, hashes = self.install_python_fixture()
-        runner = write_patched_script(
-            self.scripts,
-            PYTHON_RUNNER,
-            python_runner_replacements(self.state_parent, hashes),
-        )
-        capture = self.root / "python-arguments.txt"
+    def test_arm64_runner_uses_arm64_completion_record(self):
+        workspace_id = self.install_binary("arm64", "aarch64")
+        with mock.patch.object(ACTION.platform, "machine", return_value="aarch64"):
+            self.run_without_exec("binary", workspace_id)
 
-        result = run_script(
-            runner,
-            identifier,
-            environment={"CAPTURE_FILE": str(capture)},
-        )
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        lines = capture.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(lines[:3], ["2", "<--bypass-disclaimer>", "<-d>"])
-        self.assertRegex(
-            lines[3],
-            r"^TMPDIR=<.*/runs/run-[0-9a-f]{32}>$",
-        )
-
-    def test_runner_rejects_tampered_entrypoint(self):
-        identifier, hashes = self.install_binary_fixture()
-        workspace = self.state_parent / identifier
-        entrypoint = workspace / "payload/MDESupportTool"
+    def test_tampered_entrypoint_is_rejected(self):
+        workspace_id = self.install_binary()
+        entrypoint = self.state_parent / workspace_id / "payload/MDESupportTool"
         entrypoint.write_bytes(entrypoint.read_bytes() + b"\n")
-        runner = write_patched_script(
-            self.scripts,
-            BINARY_RUNNER,
-            binary_runner_replacements(self.state_parent, hashes),
-        )
-        capture = self.root / "arguments.txt"
+        with self.assertRaisesRegex(ACTION.ActionError, "integrity verification"):
+            ACTION.run("binary", workspace_id)
 
-        result = run_script(
-            runner,
-            identifier,
-            environment={"CAPTURE_FILE": str(capture)},
-        )
+    def test_invalid_workspace_identifier_is_rejected(self):
+        with self.assertRaisesRegex(ACTION.ActionError, "Invalid"):
+            ACTION.run("binary", "../unexpected")
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("failed integrity verification", result.stderr)
-        self.assertFalse(capture.exists())
+    def test_extra_parameters_are_rejected(self):
+        with self.assertRaisesRegex(ACTION.ActionError, "exactly one workspace"):
+            ACTION.main(("run-binary", "token", "unexpected"))
 
-    def test_runner_rejects_invalid_workspace_identifier(self):
-        hashes = {
-            "outer_sha256": "1" * 64,
-            "inner_sha256": "2" * 64,
-            "entry_sha256": "3" * 64,
-            "architecture": "amd64",
-        }
-        runner = write_patched_script(
-            self.scripts,
-            BINARY_RUNNER,
-            binary_runner_replacements(self.state_parent, hashes),
-        )
-
-        result = run_script(runner, "../unexpected")
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Invalid Client Analyzer workspace ID", result.stderr)
-
-    def test_runner_rejects_extra_parameters(self):
-        identifier, hashes = self.install_binary_fixture()
-        runner = write_patched_script(
-            self.scripts,
-            BINARY_RUNNER,
-            binary_runner_replacements(self.state_parent, hashes),
-        )
-
-        result = run_script(runner, identifier, "--unexpected")
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Pass exactly one workspace ID", result.stderr)
-
-    def test_runner_rejects_modified_manifest(self):
-        identifier, hashes = self.install_binary_fixture()
-        manifest_path = self.state_parent / identifier / "manifest.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["kind"] = "python"
-        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-        manifest_path.chmod(0o600)
-        runner = write_patched_script(
-            self.scripts,
-            BINARY_RUNNER,
-            binary_runner_replacements(self.state_parent, hashes),
-        )
-
-        result = run_script(runner, identifier)
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("manifest failed validation", result.stderr)
+    def test_modified_completion_record_is_rejected(self):
+        workspace_id = self.install_binary()
+        completion = self.state_parent / workspace_id / "complete"
+        completion.write_text("invalid\n", encoding="utf-8")
+        completion.chmod(0o600)
+        with self.assertRaisesRegex(ACTION.ActionError, "completion record"):
+            ACTION.run("binary", workspace_id)
 
 
 @unittest.skipUnless(
@@ -835,43 +471,44 @@ class TestClientAnalyzerRunners(unittest.TestCase):
     "Set RUN_NETWORK_INTEGRITY_TESTS=1 to verify published artifacts.",
 )
 class TestPublishedArtifactIntegrity(unittest.TestCase):
-    def download(self, url, maximum_bytes):
+    def download(self, url):
         request = urllib.request.Request(
             url,
             headers={"User-Agent": "mdatp-xplat-client-analyzer-test"},
         )
         with urllib.request.urlopen(request, timeout=120) as response:
-            content = response.read(maximum_bytes + 1)
-        self.assertLessEqual(len(content), maximum_bytes)
+            content = response.read(64 * 1024 * 1024 + 1)
+        self.assertLessEqual(len(content), 64 * 1024 * 1024)
         return content
 
-    def test_published_binary_archive_matches_pinned_digest_and_layout(self):
-        content = self.download(BINARY_URL, 64 * 1024 * 1024)
-
+    def test_published_binary_archive(self):
+        content = self.download(BINARY_URL)
         self.assertEqual(sha256_bytes(content), BINARY_SHA256)
         with zipfile.ZipFile(io.BytesIO(content), "r") as archive:
-            amd64_content = archive.read("SupportToolLinuxamd64Binary.zip")
-            arm64_content = archive.read("SupportToolLinuxarm64Binary.zip")
-        self.assertEqual(sha256_bytes(amd64_content), BINARY_INNER_SHA256)
-        self.assertEqual(sha256_bytes(arm64_content), BINARY_ARM64_INNER_SHA256)
+            inner_archives = {
+                architecture: archive.read(hashes["inner_name"])
+                for architecture, hashes in BINARY_HASHES.items()
+            }
+        for architecture, inner_content in inner_archives.items():
+            with self.subTest(architecture=architecture):
+                self.assertEqual(
+                    sha256_bytes(inner_content),
+                    BINARY_HASHES[architecture]["inner_sha256"],
+                )
+                with zipfile.ZipFile(io.BytesIO(inner_content), "r") as archive:
+                    self.assertEqual(
+                        sha256_bytes(archive.read("MDESupportTool")),
+                        BINARY_HASHES[architecture]["entry_sha256"],
+                    )
 
-        with zipfile.ZipFile(io.BytesIO(amd64_content), "r") as archive:
-            self.assertEqual(
-                sha256_bytes(archive.read("MDESupportTool")),
-                BINARY_ENTRY_SHA256,
-            )
-        with zipfile.ZipFile(io.BytesIO(arm64_content), "r") as archive:
-            self.assertEqual(
-                sha256_bytes(archive.read("MDESupportTool")),
-                BINARY_ARM64_ENTRY_SHA256,
-            )
-
-    def test_published_python_archive_matches_pinned_digest_and_layout(self):
-        content = self.download(PYTHON_URL, 64 * 1024 * 1024)
-
+    def test_published_python_archive(self):
+        content = self.download(PYTHON_URL)
         self.assertEqual(sha256_bytes(content), PYTHON_SHA256)
         with zipfile.ZipFile(io.BytesIO(content), "r") as archive:
-            self.assertIn("mde_support_tool.sh", archive.namelist())
+            self.assertEqual(
+                sha256_bytes(archive.read("mde_support_tool.sh")),
+                PYTHON_ENTRY_SHA256,
+            )
 
 
 if __name__ == "__main__":

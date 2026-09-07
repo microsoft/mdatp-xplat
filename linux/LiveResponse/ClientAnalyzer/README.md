@@ -5,6 +5,7 @@ These actions install and run the binary and Python Client Analyzer packages dur
 ## Requirements
 
 - Python 3 must be available on the endpoint.
+- The complete `ClientAnalyzer` directory must remain together so every wrapper can load `client_analyzer_action.py` beside it.
 - The installer and matching runner must execute as the same operating-system user.
 - The endpoint must be able to reach the Microsoft download endpoint during installation.
 - Retrieve generated diagnostic archives before removing the private workspace.
@@ -15,6 +16,7 @@ The actions use private random workspaces under `/var/tmp`. The operating system
 
 Upload these actions to the Live Response library:
 
+- `client_analyzer_action.py`
 - `InstallXMDEClientAnalyzer.sh`
 - `MDESupportTool.sh`
 
@@ -36,6 +38,7 @@ The installer selects the amd64 or arm64 package from the endpoint architecture.
 
 Upload these actions to the Live Response library:
 
+- `client_analyzer_action.py`
 - `InstallXMDEPythonClientAnalyzer.sh`
 - `MDEPythonSupportTool.sh`
 
@@ -71,14 +74,14 @@ Each invocation creates a new private `runs/run-<random>` directory beneath the 
 - The current Microsoft artifacts and architecture-specific binary archives are pinned by SHA-256.
 - A checksum, download, setup, or extraction failure removes partial workspace state.
 - ZIP entries with traversal paths, duplicate paths, encryption, links, special files, unsupported compression, or excessive expansion are rejected.
-- Extracted files are created exclusively without following links and are private to the installer user.
-- A manifest binds the workspace type, architecture, artifact, inner archive, and entrypoint digests.
-- Runners validate the workspace token, ownership, permissions, manifest, link count, and entrypoint digest before execution.
+- Validated archives are extracted into a newly created private workspace and normalized to owner-only permissions.
+- A completion record binds the workspace type, architecture, artifact, inner archive, and entrypoint digests.
+- Runners validate the workspace token, ownership, permissions, completion record, link count, and entrypoint digest before execution.
 - Loader and Python environment overrides are removed before the Analyzer starts.
 
 ## Updating Published Artifacts
 
-Artifact rotation requires a reviewed update to the URL or digest constants in both the installer and matching runner. Run the local tests and the opt-in network integrity tests before publishing the new actions:
+Artifact rotation requires a reviewed update to the centralized URL or digest constants in `client_analyzer_action.py`. Run the local tests and the opt-in network integrity tests before publishing the new package:
 
 ```text
 python3 linux/LiveResponse/ClientAnalyzer/tests/test_client_analyzer_actions.py -v
