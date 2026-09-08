@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /Users/joshbregman/mdatp-xplat/macos/performance-profiles && source venv/bin/activate && python -m pytest tests/ -q 2>&1 \\| tail -10$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
