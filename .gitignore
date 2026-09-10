@@ -9,3 +9,23 @@
 
 # macOS system files
 .DS_Store
+
+# Environment / secrets
+**/.env
+
+# Embedded/checked-out doc repos
+/external/
+
+# Local doc workspace
+/mde-docs-crossplat.code-workspace
+
+# Demo run artifacts (hot-event captures dumped to repo root)
+/hot_event_source_*.json
+
+# .NET build output
+**/bin/
+**/obj/
+
+# Flutter / Dart build output
+**/.dart_tool/
+**/macos/Flutter/ephemeral/

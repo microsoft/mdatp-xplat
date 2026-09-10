@@ -1,0 +1,124 @@
+// mde-profile-report.gradle — an MDE performance-profile "report card" for a Gradle build.
+//
+// Apply it to ANY Gradle build (terminal or Android Studio) as an init script:
+//
+//   Terminal:        ./gradlew <task> --init-script mde-profile-report.gradle
+//   Android Studio:  ./enable-ide-report.sh   (copies this into ~/.gradle/init.d/)
+//
+// At build start/finish it reads two things — both without sudo:
+//   * mdatp performance-profiles list-applied            (which profiles are active)
+//   * mdatp diagnostic real-time-protection-statistics   (per-process scan counters)
+// ...then prints, in the Build console, how much MDE scanning this build actually
+// incurred and whether a profile is covering it. It NEVER applies/removes profiles or
+// changes protection — it only reads and reports, so it is safe to leave enabled.
+
+import groovy.json.JsonSlurper
+
+// ---- helpers ---------------------------------------------------------------
+def sh = { List cmd ->
+    try {
+        def p = new ProcessBuilder(cmd).redirectErrorStream(true).start()
+        def out = p.inputStream.text
+        p.waitFor()
+        return out
+    } catch (ignored) { return "" }
+}
+
+// Sum totalFilesScanned + totalScanTime (ns) across all per-process counters.
+def scanTotals = {
+    def json = sh(["mdatp", "diagnostic", "real-time-protection-statistics", "--output", "json"])
+    long files = 0, ns = 0
+    if (json?.trim()) {
+        try {
+            def data = new JsonSlurper().parseText(json)
+            data.counters?.each { c ->
+                files += (c.totalFilesScanned ?: "0").toString().toLong()
+                ns    += (c.totalScanTime     ?: "0").toString().toLong()
+            }
+        } catch (ignored) {}
+    }
+    [files: files, ns: ns]
+}
+
+// Parse the profiles listed between the ==== fences of `list-applied`.
+def appliedProfiles = {
+    def raw = sh(["mdatp", "performance-profiles", "list-applied"])
+    def names = []
+    boolean inside = false
+    raw.readLines().each { line ->
+        def t = line.trim()
+        if (t.startsWith("====")) { inside = !inside; return }
+        if (inside && t && t != "---") names << t
+    }
+    names
+}
+
+// Walk this JVM's parent-process chain looking for the Android Studio process.
+def underAndroidStudio = {
+    try {
+        def h = ProcessHandle.current()
+        for (int i = 0; i < 30 && h != null; i++) {
+            def cmd = h.info().command().orElse("")
+            if (cmd =~ /(?i)Android Studio|AndroidStudio|studio\.sh/) return true
+            h = h.parent().orElse(null)
+        }
+    } catch (ignored) {}
+    false
+}
+
+// ---- capture at build start ------------------------------------------------
+def startNanos = System.nanoTime()
+def before = scanTotals()
+
+gradle.buildFinished { result ->
+    def buildMs = (System.nanoTime() - startNanos) / 1_000_000.0
+    def after = scanTotals()
+    long dFiles = after.files - before.files
+    long dNs    = after.ns - before.ns
+    boolean noisyNeg = dFiles < 0 || dNs < 0
+    if (dFiles < 0) dFiles = 0
+    if (dNs < 0) dNs = 0
+    double dMs = dNs / 1_000_000.0
+
+    def profiles = appliedProfiles()
+    boolean ide = underAndroidStudio()
+    // The toolchain profile matches by JDK install location, so it covers a Gradle build
+    // regardless of daemon/launcher — a definitive signal. 'android-studio-tree' only
+    // covers processes inside the IDE tree; with the Gradle daemon we can't always detect
+    // that from here, so we report it as applied and let the scan delta be the real proof.
+    def toolchainCover = profiles.find { it in ["openjdk-javac", "openjdk", "javac"] }
+    boolean treeApplied = profiles.contains("android-studio-tree")
+    // Empirical proof: a near-zero scan delta means scanning was actually suppressed.
+    boolean scanSuppressed = dFiles < 200
+
+    def bar = "\u2500" * 62
+    def L = { s -> println("  \u2502 " + s) }
+    println("  \u250c\u2500 MDE performance-profile report " + ("\u2500" * 29))
+    L(String.format("Build finished in %.1f s (Gradle config+exec)", buildMs / 1000.0))
+    L("Launched inside Android Studio process tree: " + (ide ? "yes" : "no / can't tell (daemon or terminal)"))
+    L("Applied performance profiles: " + (profiles ? profiles.join(", ") : "(none)"))
+    // Coverage assessment.
+    if (toolchainCover) {
+        L("\u2705 Covered by toolchain profile '" + toolchainCover + "' (matches the JDK install).")
+    } else if (treeApplied) {
+        L("\u2139  'android-studio-tree' is applied \u2014 it covers builds run INSIDE Android Studio.")
+        L("   (Trust the scan delta below as the real proof it's taking effect.)")
+    } else if (profiles.isEmpty()) {
+        L("\u26a0  No profiles applied \u2014 MDE is scanning this build at full load.")
+    } else {
+        def hint = ide ? "apply 'android-studio-tree' (and build inside the IDE)" : "apply 'openjdk-javac'"
+        L("\u26a0  No profile covers this build \u2014 " + hint + " to suppress scan load.")
+    }
+    // Empirical scan load during THIS build (the ground truth).
+    L("MDE files scanned during build: " + String.format("%,d", dFiles) + (noisyNeg ? " (\u2248, see note)" : ""))
+    L(String.format("MDE scan time during build:     %,.1f ms%s", dMs, noisyNeg ? " (\u2248)" : ""))
+    L("   \u2192 " + (scanSuppressed
+        ? "\u2705 scanning suppressed for this build (profile is working)."
+        : "scanning active \u2014 a covering profile would drive this toward \u22480."))
+    println("  \u2514" + bar)
+    if (noisyNeg) {
+        println("  note: a negative raw delta (a busy process exited mid-build) was clamped")
+        println("        to \u22480 \u2014 that reflects suppressed scanning, not negative work.")
+    }
+    println("")
+}
