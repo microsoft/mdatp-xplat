@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="1.2.6" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="1.2.8" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -618,7 +618,7 @@ verify_supported_distros()
             ( $is_arm && [[ "$VERSION" =~ ^(11|12|13)$ ]] ) || (! $is_arm && (( major >= 9 && major <= 13 )) ) || log_warning "$os_not_supported_msg"
             ;;
         ubuntu)
-            [[ "$VERSION" =~ ^(20.04|22.04|24.04)$ ]] || (! $is_arm && [[ "$VERSION" =~ ^(16.04|18.04)$ ]] ) || log_warning "$os_not_supported_msg"
+            [[ "$VERSION" =~ ^(20.04|22.04|24.04|26.04)$ ]] || (! $is_arm && [[ "$VERSION" =~ ^(16.04|18.04)$ ]] ) || log_warning "$os_not_supported_msg"
             ;;
         rhel|ol)
             [[ "$major" =~ ^(8|9|10)$ ]] || ( ! $is_arm && (( major >= 7 && minor >= 2 )) ) || log_warning "$os_not_supported_msg"
@@ -633,7 +633,7 @@ verify_supported_distros()
             [[ "$VERSION" == 2 || "$VERSION" == 2023 ]] || log_warning "$os_not_supported_msg"
             ;;
         fedora)
-            ( $is_arm && (( VERSION >= 40 && VERSION <= 43 )) ) || ( ! $is_arm && (( VERSION >= 33 && VERSION <= 43 )) ) || log_warning "$os_not_supported_msg"
+            ( $is_arm && (( VERSION >= 40 && VERSION <= 44 )) ) || ( ! $is_arm && (( VERSION >= 33 && VERSION <= 44 )) ) || log_warning "$os_not_supported_msg"
             ;;
         almalinux)
             # AlmaLinux 8.4+, 9.2+ and all of 10 support both x86_64 and ARM64
@@ -1409,7 +1409,7 @@ install_on_debian()
             if [ -f "$gpg_key_file" ]; then
                 run_quietly "chmod o+r $gpg_key_file" "unable to set read permission on gpg key" $ERR_FAILED_REPO_SETUP
             fi
-        elif { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "13" ]; }; then
+        elif { [ "$DISTRO" = "debian" ] && [ "$VERSION" = "13" ]; } || { [ "$DISTRO" = "ubuntu" ] && [ "$VERSION" = "26.04" ]; }; then
             if [ -f "$gpg_key_file" ]; then
                 run_quietly "rm -f $gpg_key_file" "unable to remove existing microsoft-prod.gpg" $ERR_FAILED_REPO_SETUP
             fi
@@ -2058,7 +2058,7 @@ scale_version_id()
         else
             script_exit "unsupported version: $DISTRO $VERSION" $ERR_UNSUPPORTED_VERSION
         fi
-    elif [[ $DISTRO == "ubuntu" ]] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]] && [[ $VERSION != "24.04" ]]; then
+    elif [[ $DISTRO == "ubuntu" ]] && [[ $VERSION != "16.04" ]] && [[ $VERSION != "18.04" ]] && [[ $VERSION != "20.04" ]] && [[ $VERSION != "22.04" ]] && [[ $VERSION != "24.04" ]] && [[ $VERSION != "26.04" ]]; then
         SCALED_VERSION=18.04
     else
         # no problems with 
@@ -2536,6 +2536,12 @@ fi
 # Log proxy configuration if set
 if [[ -n "$http_proxy" || -n "$https_proxy" ]]; then
     log_info "[v] Proxy configuration set"
+fi
+
+# Reject the policy violation before repository lookup can mask it as "version not found".
+if [[ "$INSTALL_MODE" == "i" && -n "$INSTALL_PATH" && -n "$MDE_VERSION" ]]; then
+    validate_custom_path_installation_version "$MDE_VERSION" ||
+        script_exit "Custom Path installation is not supported on version $MDE_VERSION, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
 fi
 
 ### Act according to arguments ###
