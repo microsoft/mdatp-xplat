@@ -1,0 +1,533 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1B9864221FEE1517CBC81278 /* HelloDefenderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF1C93EC9A84FEE6D62D6FEC /* HelloDefenderUITests.swift */; };
+		8E2638045FC722C1A8215C4F /* HelloDefenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A03185B9E44DBCD77D26250 /* HelloDefenderTests.swift */; };
+		99C6D4762BE7F15172CDAB60 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB31B0106A8172018F66C0E2 /* Preview Assets.xcassets */; };
+		A4C8449CADAE278B002F4341 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE9D35354AD7F007FECDA57 /* ContentView.swift */; };
+		A6A647876D90539C8B552446 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 37CA45879881F5156424925D /* Assets.xcassets */; };
+		AD42C61AC244DA2D6A3F97BD /* HelloDefenderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7D7587EEA1718D114F05F6 /* HelloDefenderApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		048394B34C1877B9AB4C437C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4A9797EFF4CEDDA99DD31DCA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7ED60DA5201E8F0174634276;
+			remoteInfo = HelloDefender;
+		};
+		3C688B3D62D8A35ADA6F86B1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4A9797EFF4CEDDA99DD31DCA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7ED60DA5201E8F0174634276;
+			remoteInfo = HelloDefender;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		10D94CE5330FE79756EBFF64 /* HelloDefenderUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HelloDefenderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2CE9D35354AD7F007FECDA57 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		37CA45879881F5156424925D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3A7D7587EEA1718D114F05F6 /* HelloDefenderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelloDefenderApp.swift; sourceTree = "<group>"; };
+		5769D2046D6FA4CD8A683242 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7CE93090052642B1AB5A4B71 /* HelloDefenderTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HelloDefenderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8A03185B9E44DBCD77D26250 /* HelloDefenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelloDefenderTests.swift; sourceTree = "<group>"; };
+		8BBBDAC36CADDACF4C3CFBC4 /* HelloDefender.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HelloDefender.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB31B0106A8172018F66C0E2 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		FF1C93EC9A84FEE6D62D6FEC /* HelloDefenderUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelloDefenderUITests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		004E45186F3FA90AFA4893E4 = {
+			isa = PBXGroup;
+			children = (
+				D5634D08B13135C3313AA0E1 /* Resources */,
+				8469A148EDA4DFD01E78F28D /* Sources */,
+				C61FBC3FA5283FDDA7E7EBCD /* Tests */,
+				D80115A8F2BA6ACFFACA4819 /* UITests */,
+				7541026C6AA738715688B5E0 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7541026C6AA738715688B5E0 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8BBBDAC36CADDACF4C3CFBC4 /* HelloDefender.app */,
+				7CE93090052642B1AB5A4B71 /* HelloDefenderTests.xctest */,
+				10D94CE5330FE79756EBFF64 /* HelloDefenderUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		824FF9B69FEC9B7E6BB1C993 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				BB31B0106A8172018F66C0E2 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		8469A148EDA4DFD01E78F28D /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				2CE9D35354AD7F007FECDA57 /* ContentView.swift */,
+				3A7D7587EEA1718D114F05F6 /* HelloDefenderApp.swift */,
+				5769D2046D6FA4CD8A683242 /* Info.plist */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		C61FBC3FA5283FDDA7E7EBCD /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				8A03185B9E44DBCD77D26250 /* HelloDefenderTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		D5634D08B13135C3313AA0E1 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				37CA45879881F5156424925D /* Assets.xcassets */,
+				824FF9B69FEC9B7E6BB1C993 /* Preview Content */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		D80115A8F2BA6ACFFACA4819 /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				FF1C93EC9A84FEE6D62D6FEC /* HelloDefenderUITests.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4C9EF9024393799CC5CEB9C3 /* HelloDefenderUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 14068B6AEFDCDF54379DD3AE /* Build configuration list for PBXNativeTarget "HelloDefenderUITests" */;
+			buildPhases = (
+				182924A13A992DA007C96779 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				070F480485C6947CF1E48C06 /* PBXTargetDependency */,
+			);
+			name = HelloDefenderUITests;
+			packageProductDependencies = (
+			);
+			productName = HelloDefenderUITests;
+			productReference = 10D94CE5330FE79756EBFF64 /* HelloDefenderUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		604430E037A5172276C71D98 /* HelloDefenderTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DAF172D3709780D324FCEB9F /* Build configuration list for PBXNativeTarget "HelloDefenderTests" */;
+			buildPhases = (
+				0523CF12F09FFB50D6B5B1FC /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EB61C3C4E5424E4DA2BFFFE9 /* PBXTargetDependency */,
+			);
+			name = HelloDefenderTests;
+			packageProductDependencies = (
+			);
+			productName = HelloDefenderTests;
+			productReference = 7CE93090052642B1AB5A4B71 /* HelloDefenderTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		7ED60DA5201E8F0174634276 /* HelloDefender */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 83B8DDE04B734770A053D4D1 /* Build configuration list for PBXNativeTarget "HelloDefender" */;
+			buildPhases = (
+				483CFC1365D4AC31F025DD57 /* Sources */,
+				14108F33278E1B663AA0511E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HelloDefender;
+			packageProductDependencies = (
+			);
+			productName = HelloDefender;
+			productReference = 8BBBDAC36CADDACF4C3CFBC4 /* HelloDefender.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4A9797EFF4CEDDA99DD31DCA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					4C9EF9024393799CC5CEB9C3 = {
+						TestTargetID = 7ED60DA5201E8F0174634276;
+					};
+					7ED60DA5201E8F0174634276 = {
+						DevelopmentTeam = "";
+					};
+				};
+			};
+			buildConfigurationList = 0C03496062CA160644E0634E /* Build configuration list for PBXProject "HelloDefender" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 004E45186F3FA90AFA4893E4;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 7541026C6AA738715688B5E0 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				7ED60DA5201E8F0174634276 /* HelloDefender */,
+				604430E037A5172276C71D98 /* HelloDefenderTests */,
+				4C9EF9024393799CC5CEB9C3 /* HelloDefenderUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		14108F33278E1B663AA0511E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A6A647876D90539C8B552446 /* Assets.xcassets in Resources */,
+				99C6D4762BE7F15172CDAB60 /* Preview Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0523CF12F09FFB50D6B5B1FC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8E2638045FC722C1A8215C4F /* HelloDefenderTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		182924A13A992DA007C96779 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1B9864221FEE1517CBC81278 /* HelloDefenderUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		483CFC1365D4AC31F025DD57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A4C8449CADAE278B002F4341 /* ContentView.swift in Sources */,
+				AD42C61AC244DA2D6A3F97BD /* HelloDefenderApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		070F480485C6947CF1E48C06 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7ED60DA5201E8F0174634276 /* HelloDefender */;
+			targetProxy = 3C688B3D62D8A35ADA6F86B1 /* PBXContainerItemProxy */;
+		};
+		EB61C3C4E5424E4DA2BFFFE9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7ED60DA5201E8F0174634276 /* HelloDefender */;
+			targetProxy = 048394B34C1877B9AB4C437C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		00FFA5142F04106F92424E41 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.microsoft.mdatp.xplat.hellodefender;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		0C6B07D91E240A252ADE269A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.microsoft.mdatp.xplat.hellodefender.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HelloDefender.app/HelloDefender";
+			};
+			name = Release;
+		};
+		6D42490C491C6E9A6D3E806A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.microsoft.mdatp.xplat.hellodefender;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A887BD2AEBD32B8BA8914645 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.microsoft.mdatp.xplat.hellodefender.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = HelloDefender;
+			};
+			name = Debug;
+		};
+		AB7429E442BD1B15FC9A1306 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.microsoft.mdatp.xplat.hellodefender.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HelloDefender.app/HelloDefender";
+			};
+			name = Debug;
+		};
+		B2A7094BD65F6EDF7D16E719 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Sources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = HelloDefender;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C09EE9C9D43905F9CC4C6CDA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Sources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = HelloDefender;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E2CB539B7472CC712668DCED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.microsoft.mdatp.xplat.hellodefender.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = HelloDefender;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0C03496062CA160644E0634E /* Build configuration list for PBXProject "HelloDefender" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00FFA5142F04106F92424E41 /* Debug */,
+				6D42490C491C6E9A6D3E806A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		14068B6AEFDCDF54379DD3AE /* Build configuration list for PBXNativeTarget "HelloDefenderUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A887BD2AEBD32B8BA8914645 /* Debug */,
+				E2CB539B7472CC712668DCED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		83B8DDE04B734770A053D4D1 /* Build configuration list for PBXNativeTarget "HelloDefender" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C09EE9C9D43905F9CC4C6CDA /* Debug */,
+				B2A7094BD65F6EDF7D16E719 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DAF172D3709780D324FCEB9F /* Build configuration list for PBXNativeTarget "HelloDefenderTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB7429E442BD1B15FC9A1306 /* Debug */,
+				0C6B07D91E240A252ADE269A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 4A9797EFF4CEDDA99DD31DCA /* Project object */;
+}
