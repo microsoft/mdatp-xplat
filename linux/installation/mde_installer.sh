@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="1.2.8" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="1.2.9" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -958,9 +958,89 @@ check_if_device_is_onboarded()
     return 1
 }
 
+ensure_mdatp_service_ready()
+{
+    if ! command -v systemctl >/dev/null 2>&1; then
+        log_info "[i] systemctl is not available; preserving existing service management"
+        return 0
+    fi
+
+    local dependency
+    for dependency in timeout mdatp; do
+        if ! command -v "$dependency" >/dev/null 2>&1; then
+            log_warning "[!] Cannot prepare MDE service: $dependency is not available"
+            return 1
+        fi
+    done
+
+    local enabled_state enabled_status=0
+    enabled_state=$(systemctl is-enabled mdatp.service 2>&1) || enabled_status=$?
+    case "$enabled_state:$enabled_status" in
+        enabled:0|enabled-runtime:0|disabled:1) ;;
+        masked:*|masked-runtime:*)
+            log_warning "[!] mdatp.service is masked; refusing to unmask it"
+            return 1
+            ;;
+        *)
+            log_warning "[!] Cannot determine mdatp.service enable state: $enabled_state (exit code: $enabled_status)"
+            return 1
+            ;;
+    esac
+
+    if [[ "$enabled_state" != "enabled" ]]; then
+        log_info "[>] Enabling mdatp.service for subsequent boots"
+        if ! systemctl enable mdatp.service; then
+            log_warning "[!] Failed to enable mdatp.service"
+            return 1
+        fi
+        enabled_status=0
+        enabled_state=$(systemctl is-enabled mdatp.service 2>&1) || enabled_status=$?
+        if [[ "$enabled_status" -ne 0 || "$enabled_state" != "enabled" ]]; then
+            log_warning "[!] Unexpected mdatp.service enable state after enabling: $enabled_state (exit code: $enabled_status)"
+            return 1
+        fi
+    fi
+
+    if ! systemctl is-active --quiet mdatp.service; then
+        log_info "[>] Starting mdatp.service"
+        if ! systemctl start mdatp.service; then
+            log_warning "[!] Failed to start mdatp.service"
+            return 1
+        fi
+    fi
+
+    local response availability_status
+    local max_attempts=3
+    local retry_delay_seconds=2
+    local timeout_seconds=5
+    local kill_grace_seconds=0.5
+    if response=$(BASH_ENV='' timeout "--kill-after=${kill_grace_seconds}s" "${timeout_seconds}s" "$BASH" -c '
+        max_attempts=$1
+        retry_delay_seconds=$2
+        for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+            if mdatp health --field healthy; then
+                exit 0
+            fi
+            if ((attempt < max_attempts)); then
+                sleep "$retry_delay_seconds"
+            fi
+        done
+        exit 1
+    ' mdatp-availability "$max_attempts" "$retry_delay_seconds" 2>&1); then
+        log_info "[v] MDE service is available"
+        return 0
+    else
+        availability_status=$?
+    fi
+
+    log_warning "[!] MDE service unavailable after up to $max_attempts attempts (exit code: $availability_status): $response"
+    return 1
+}
+
 skip_if_mde_installed()
 {
     if check_if_pkg_is_installed mdatp; then
+        ensure_mdatp_service_ready || log_warning "[!] MDE service recovery failed; continuing existing installation checks"
         verify_mdatp_installed
         pkg_version=$(get_health_field "app_version") || script_exit "unable to fetch the app version. please upgrade to latest version $?" $ERR_INTERNAL
         log_info "[i] MDE already installed ($pkg_version)"
@@ -1915,6 +1995,9 @@ upgrade_mdatp()
     fi
 
     exit_if_mde_not_installed
+    if [[ "$INSTALL_MODE" == "u" ]]; then
+        ensure_mdatp_service_ready || log_warning "[!] MDE service recovery failed; continuing existing upgrade flow"
+    fi
 
     local VERSION_BEFORE_UPDATE VERSION_AFTER_UPDATE version current_version requested_version
     VERSION_BEFORE_UPDATE=$(get_mdatp_version)
