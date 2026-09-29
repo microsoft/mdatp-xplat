@@ -1,28 +1,38 @@
-#! /usr/bin/bash
-echo "Starting Client Analyzer Script. Running As:"
-whoami
+#!/bin/sh
+set -eu
 
-echo "Getting XMDEClientAnalyzerBinary"
-wget --quiet -O /tmp/XMDEClientAnalyzerBinary.zip https://go.microsoft.com/fwlink/?linkid=2297517
-if [ $? -ne 0 ]; then
-    echo 'ERROR: wget failed to retrieve XMDEClientAnalyzerBinary.zip exiting!'
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+script_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+helper="$script_directory/client_analyzer_binary_handoff.sh"
+helper_sha256=56540d40160df0256b5295837e13c2280c34692dfff1c00484f81322faa3bffb
+workspace=
+
+cleanup() {
+    rm -f "${workspace:-}/helper"
+    rmdir "${workspace:-}" 2>/dev/null || :
+}
+
+trap cleanup EXIT
+trap 'cleanup; exit 1' HUP INT TERM
+workspace=$(mktemp -d /var/tmp/mde-client-analyzer-wrapper-XXXXXXXX)
+helper_copy="$workspace/helper"
+if [ "$(stat -c '%F:%u:%a:%h' "$workspace")" != "directory:$(id -u):700:2" ]; then
+    echo "ERROR: Client Analyzer verification workspace is not private." >&2
     exit 1
-fi  
-echo '9D0552DBBD1693D2E2ED55F36147019CFECFDC009E76BAC4186CF03CD691B469 /tmp/XMDEClientAnalyzerBinary.zip' | sha256sum -c
+fi
+cat "$helper" > "$helper_copy"
+chmod 700 "$helper_copy"
 
-
-echo "Unzipping XMDEClientAnalyzerBinary.zip"
-unzip -q /tmp/XMDEClientAnalyzerBinary.zip -d /tmp/XMDEClientAnalyzerBinary
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to unzip the XMDEClientAnalyzerBinary.zip in /tmp to /tmp/XMDEClientAnalyzerBinary"
-    exit 2
+if [ "$(stat -c '%F:%u:%a:%h' "$helper_copy")" != "regular file:$(id -u):700:1" ]; then
+    echo "ERROR: Client Analyzer helper copy is not private." >&2
+    exit 1
 fi
 
-
-echo "Unzipping SupportToolLinuxBinary.zip"
-unzip -q /tmp/XMDEClientAnalyzerBinary/SupportToolLinuxBinary.zip -d /tmp/XMDEClientAnalyzerBinary/ClientAnalyzer
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to unzip the SupportToolLinuxBinary.zip file in /tmp/XMDEClientAnalyzerBinary to /tmp/XMDEClientAnalyzerBinary/ClientAnalyzer"
-    exit 3
+if [ "$(sha256sum "$helper_copy" | awk '{print $1}')" != "$helper_sha256" ]; then
+    echo "ERROR: Client Analyzer package integrity verification failed." >&2
+    exit 1
 fi
-echo "MDESupportTool installed at /tmp/XMDEClientAnalyzerBinary/ClientAnalyzer"
+
+"$helper_copy" install "$@"
