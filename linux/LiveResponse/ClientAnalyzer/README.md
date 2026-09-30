@@ -5,7 +5,8 @@ These actions install and run the binary or Python Client Analyzer in a private 
 ## Requirements
 
 - The installer and matching runner must execute as the same operating-system user.
-- The complete `ClientAnalyzer` directory must remain together so the wrappers can load their package-local handoff helper.
+- Each action is self-contained. Upload and run only the action named in the
+  selected workflow.
 - `curl`, `find`, `mktemp`, `od`, `sha256sum`, `stat`, `unzip`, and standard POSIX shell utilities must be available.
 - The endpoint must be able to reach the Microsoft download endpoint.
 - Retrieve generated diagnostic archives before the private workspace is removed.
@@ -14,7 +15,8 @@ The workspace is created under `/var/tmp` with a random name and `0700` permissi
 
 ## Binary Client Analyzer
 
-Upload `client_analyzer_binary_handoff.sh`, `InstallXMDEClientAnalyzer.sh`, and `MDESupportTool.sh`. Binary actions do not require `python3`.
+Upload `InstallXMDEClientAnalyzer.sh` and `MDESupportTool.sh` as independent
+Live Response actions. Binary actions do not require `python3`.
 
 Run the installer without parameters:
 
@@ -32,7 +34,8 @@ The installer selects and verifies the amd64 or arm64 package.
 
 ## Python Client Analyzer
 
-Upload `client_analyzer_handoff.py`, `InstallXMDEPythonClientAnalyzer.sh`, and `MDEPythonSupportTool.sh`. Python actions require `python3`.
+Upload `InstallXMDEPythonClientAnalyzer.sh` and `MDEPythonSupportTool.sh` as
+independent Live Response actions. Python actions require `python3`.
 
 Run the installer without parameters:
 
@@ -58,7 +61,7 @@ The installer runs the package's existing dependency preparation before publishi
 - Runners use fixed `--bypass-disclaimer -d` arguments instead of forwarding an unspecified Live Response parameter string.
 - Incomplete workspaces are removed after ordinary failures, HUP, INT, or TERM.
 
-The implementation trusts the internal structure of an artifact after its exact pinned hash matches. Network integrity tests audit the current published ZIP paths, file types, sizes, architecture archives, and entrypoint hashes. The package-local binary shell helper and Python helper preserve the existing action names. Same-UID and root attackers remain outside this protection boundary.
+The implementation trusts the internal structure of an artifact after its exact pinned hash matches. Network integrity tests audit the current published ZIP paths, file types, sizes, architecture archives, and entrypoint hashes. Same-UID and root attackers remain outside this protection boundary.
 
 ## Validation
 

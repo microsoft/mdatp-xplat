@@ -1,6 +1,5 @@
 import contextlib
 import hashlib
-import importlib.util
 import io
 import os
 import re
@@ -17,10 +16,19 @@ from unittest import mock
 
 
 CLIENT_ANALYZER_DIR = Path(__file__).resolve().parents[1]
-ACTION_PATH = CLIENT_ANALYZER_DIR / "client_analyzer_handoff.py"
-SPEC = importlib.util.spec_from_file_location("client_analyzer_handoff", ACTION_PATH)
-ACTION = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(ACTION)
+PYTHON_INSTALLER_PATH = CLIENT_ANALYZER_DIR / "InstallXMDEPythonClientAnalyzer.sh"
+
+
+def embedded_python_source(path=PYTHON_INSTALLER_PATH):
+    source = path.read_text(encoding="utf-8")
+    start = source.index("<<'PYTHON'\n") + len("<<'PYTHON'\n")
+    end = source.rindex("\nPYTHON\n")
+    return source[start:end]
+
+
+ACTION = types.ModuleType("client_analyzer_handoff")
+ACTION.__file__ = str(PYTHON_INSTALLER_PATH)
+exec(compile(embedded_python_source(), str(PYTHON_INSTALLER_PATH), "exec"), ACTION.__dict__)
 
 BINARY_URL = "https://go.microsoft.com/fwlink/?linkid=2336125"
 BINARY_SHA256 = "5f906591d33d675f14d73d5b658a796cec7480b023b18d45c5d687713a4d4fbb"
@@ -42,12 +50,6 @@ PYTHON_URL = "https://go.microsoft.com/fwlink/?linkid=2336046"
 PYTHON_SHA256 = "0b7c350a1c19e049416b1c8fb7ed857569ddcc32fb90453a3fccd083487c0b4e"
 PYTHON_ENTRY_SHA256 = (
     "00a03ca9b9f9c6d985ef48f8bcaae5cd08b37af551a452d005847d612fb67ffe"
-)
-PYTHON_HELPER_SHA256 = (
-    "58b3030bc06e487f938f77b015a18f642a1e55de6fca5a6eae7892f043cb02fb"
-)
-BINARY_HELPER_SHA256 = (
-    "56540d40160df0256b5295837e13c2280c34692dfff1c00484f81322faa3bffb"
 )
 WRAPPERS = {
     "InstallXMDEPythonClientAnalyzer.sh": "install-python",
@@ -185,8 +187,8 @@ def shutil_copy(source, destination):
 class TestSourceAndWrappers(unittest.TestCase):
     def test_scripts_remove_legacy_paths(self):
         paths = [
-            ACTION_PATH,
             *(CLIENT_ANALYZER_DIR / name for name in WRAPPERS),
+            *(CLIENT_ANALYZER_DIR / name for name in BINARY_WRAPPERS),
         ]
         for path in paths:
             with self.subTest(path=path.name):
@@ -195,27 +197,29 @@ class TestSourceAndWrappers(unittest.TestCase):
                     path.read_text(encoding="utf-8"),
                 )
 
-    def test_wrappers_dispatch_to_package_local_helper(self):
+    def test_actions_are_self_contained(self):
         for name, command in WRAPPERS.items():
-            with self.subTest(wrapper=name):
+            with self.subTest(action=name):
                 source = (CLIENT_ANALYZER_DIR / name).read_text(encoding="utf-8")
-                self.assertIn("client_analyzer_handoff.py", source)
-                self.assertIn(command, source)
-                self.assertIn(PYTHON_HELPER_SHA256, source)
+                self.assertIn(f"python3 - {command}", source)
+                self.assertIn("<<'PYTHON'", source)
+                self.assertNotIn("client_analyzer_handoff.py", source)
+                self.assertNotIn('dirname -- "$0"', source)
 
-    def test_binary_wrappers_dispatch_without_python3(self):
         for name, command in BINARY_WRAPPERS.items():
-            with self.subTest(wrapper=name):
+            with self.subTest(action=name):
                 source = (CLIENT_ANALYZER_DIR / name).read_text(encoding="utf-8")
-                self.assertIn("client_analyzer_binary_handoff.sh", source)
+                self.assertIn(f'{command} "$@"', source)
+                self.assertNotIn("client_analyzer_binary_handoff.sh", source)
                 self.assertNotIn("python3", source)
-                self.assertIn(command, source)
-                self.assertIn(BINARY_HELPER_SHA256, source)
+                self.assertNotIn('dirname -- "$0"', source)
 
-    def test_helper_pins_current_artifacts(self):
-        python_source = ACTION_PATH.read_text(encoding="utf-8")
+    def test_actions_embed_current_artifact_pins(self):
+        python_source = (
+            CLIENT_ANALYZER_DIR / "InstallXMDEPythonClientAnalyzer.sh"
+        ).read_text(encoding="utf-8")
         binary_source = (
-            CLIENT_ANALYZER_DIR / "client_analyzer_binary_handoff.sh"
+            CLIENT_ANALYZER_DIR / "InstallXMDEClientAnalyzer.sh"
         ).read_text(encoding="utf-8")
         self.assertIn(PYTHON_URL, python_source)
         self.assertIn(PYTHON_SHA256, python_source)
@@ -225,131 +229,41 @@ class TestSourceAndWrappers(unittest.TestCase):
             self.assertIn(values["inner_sha256"], binary_source)
             self.assertIn(values["entry_sha256"], binary_source)
 
-    def test_wrappers_reject_unverified_helpers(self):
-        with tempfile.TemporaryDirectory() as directory:
-            package = Path(directory)
-            for name in (*WRAPPERS, *BINARY_WRAPPERS):
-                wrapper = package / name
-                wrapper.write_text(
-                    (CLIENT_ANALYZER_DIR / name).read_text(encoding="utf-8"),
-                    encoding="utf-8",
-                )
-                helper_name = (
-                    "client_analyzer_handoff.py"
-                    if name in WRAPPERS
-                    else "client_analyzer_binary_handoff.sh"
-                )
-                helper = package / helper_name
-                helper.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-                helper.chmod(0o700)
+    def test_actions_reject_invalid_workspace_ids_via_stdin(self):
+        installers = (
+            "InstallXMDEClientAnalyzer.sh",
+            "InstallXMDEPythonClientAnalyzer.sh",
+        )
+        for name in installers:
+            with self.subTest(action=name):
+                source = (CLIENT_ANALYZER_DIR / name).read_text(encoding="utf-8")
                 result = subprocess.run(
-                    ["/bin/sh", str(wrapper)],
+                    ["/bin/sh", "-s", "../unexpected"],
+                    input=source,
                     check=False,
                     capture_output=True,
                     text=True,
                     timeout=120,
                 )
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("integrity verification", result.stderr)
+                self.assertIn(
+                    "Install actions do not accept parameters", result.stderr
+                )
 
-    def test_wrappers_run_verified_private_helper_and_cleanup(self):
-        with tempfile.TemporaryDirectory() as directory:
-            package = Path(directory)
-            verification_parent = package / "verification"
-            verification_parent.mkdir(mode=0o700)
-            capture = package / "arguments.txt"
-            for name, command in {**WRAPPERS, **BINARY_WRAPPERS}.items():
-                with self.subTest(wrapper=name):
-                    helper_name = (
-                        "client_analyzer_handoff.py"
-                        if name in WRAPPERS
-                        else "client_analyzer_binary_handoff.sh"
-                    )
-                    helper = package / helper_name
-                    if name in WRAPPERS:
-                        helper.write_text(
-                            "import os, sys\n"
-                            "open(os.environ['CAPTURE_FILE'], 'w', encoding='utf-8').write("
-                            "'\\n'.join(sys.argv[1:]))\n",
-                            encoding="utf-8",
-                        )
-                    else:
-                        helper.write_text(
-                            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_FILE\"\n",
-                            encoding="utf-8",
-                        )
-                    helper.chmod(0o700)
-                    expected_hash = sha256_bytes(helper.read_bytes())
-                    wrapper = package / name
-                    wrapper_source = (
-                        CLIENT_ANALYZER_DIR / name
-                    ).read_text(encoding="utf-8")
-                    pin = (
-                        PYTHON_HELPER_SHA256 if name in WRAPPERS else BINARY_HELPER_SHA256
-                    )
-                    wrapper_source = wrapper_source.replace(pin, expected_hash).replace(
-                        "/var/tmp/mde-client-analyzer-wrapper-XXXXXXXX",
-                        f"{verification_parent}/mde-client-analyzer-wrapper-XXXXXXXX",
-                    )
-                    wrapper.write_text(wrapper_source, encoding="utf-8")
-                    arguments = ["workspace-token"] if command.startswith("run") else []
-                    result = subprocess.run(
-                        ["/bin/sh", str(wrapper), *arguments],
-                        check=False,
-                        capture_output=True,
-                        text=True,
-                        env={**os.environ, "CAPTURE_FILE": str(capture)},
-                        timeout=120,
-                    )
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual(
-                        capture.read_text(encoding="utf-8").splitlines(),
-                        [command, *arguments],
-                    )
-                    self.assertEqual(list(verification_parent.iterdir()), [])
-
-    def test_wrappers_propagate_verified_helper_failure(self):
-        with tempfile.TemporaryDirectory() as directory:
-            package = Path(directory)
-            verification_parent = package / "verification"
-            verification_parent.mkdir(mode=0o700)
-            for name in (*WRAPPERS, *BINARY_WRAPPERS):
-                with self.subTest(wrapper=name):
-                    helper_name = (
-                        "client_analyzer_handoff.py"
-                        if name in WRAPPERS
-                        else "client_analyzer_binary_handoff.sh"
-                    )
-                    helper = package / helper_name
-                    if name in WRAPPERS:
-                        helper.write_text("import sys\nsys.exit(42)\n", encoding="utf-8")
-                    else:
-                        helper.write_text("#!/bin/sh\nexit 42\n", encoding="utf-8")
-                    helper.chmod(0o700)
-                    expected_hash = sha256_bytes(helper.read_bytes())
-                    wrapper_source = (
-                        CLIENT_ANALYZER_DIR / name
-                    ).read_text(encoding="utf-8")
-                    pin = (
-                        PYTHON_HELPER_SHA256 if name in WRAPPERS else BINARY_HELPER_SHA256
-                    )
-                    wrapper = package / name
-                    wrapper.write_text(
-                        wrapper_source.replace(pin, expected_hash).replace(
-                            "/var/tmp/mde-client-analyzer-wrapper-XXXXXXXX",
-                            f"{verification_parent}/mde-client-analyzer-wrapper-XXXXXXXX",
-                        ),
-                        encoding="utf-8",
-                    )
-                    result = subprocess.run(
-                        ["/bin/sh", str(wrapper)],
-                        check=False,
-                        capture_output=True,
-                        text=True,
-                        timeout=120,
-                    )
-                    self.assertEqual(result.returncode, 42, result.stderr)
-                    self.assertEqual(list(verification_parent.iterdir()), [])
+        runners = ("MDESupportTool.sh", "MDEPythonSupportTool.sh")
+        for name in runners:
+            with self.subTest(action=name):
+                source = (CLIENT_ANALYZER_DIR / name).read_text(encoding="utf-8")
+                result = subprocess.run(
+                    ["/bin/sh", "-s", "../unexpected"],
+                    input=source,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Invalid Client Analyzer workspace ID", result.stderr)
 
 
 class TestShellBinaryHandoff(unittest.TestCase):
@@ -409,9 +323,12 @@ class TestShellBinaryHandoff(unittest.TestCase):
         curl.chmod(0o700)
 
     def helper(self, **overrides):
-        source = (
-            CLIENT_ANALYZER_DIR / "client_analyzer_binary_handoff.sh"
-        ).read_text(encoding="utf-8")
+        source = (CLIENT_ANALYZER_DIR / "InstallXMDEClientAnalyzer.sh").read_text(
+            encoding="utf-8"
+        )
+        suffix = '\ninstall "$@"\n'
+        self.assertTrue(source.endswith(suffix))
+        source = source[: -len(suffix)]
         replacements = {
             "state_parent=/var/tmp": f"state_parent={self.state_parent}",
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin": (
@@ -432,6 +349,13 @@ class TestShellBinaryHandoff(unittest.TestCase):
         for old, new in replacements.items():
             self.assertIn(old, source)
             source = source.replace(old, new)
+        source += (
+            '\ncase "${1:-}" in\n'
+            '    install) shift; install "$@" ;;\n'
+            '    run) shift; run "$@" ;;\n'
+            '    *) fail "Unsupported command." ;;\n'
+            "esac\n"
+        )
         helper = self.root / "client_analyzer_binary_handoff.sh"
         helper.write_text(source, encoding="utf-8")
         helper.chmod(0o700)
