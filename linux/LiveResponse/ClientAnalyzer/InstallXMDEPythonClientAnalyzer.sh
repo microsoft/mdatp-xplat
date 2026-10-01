@@ -298,9 +298,12 @@ def install():
             workspace / "complete",
             completion_record(workspace.name),
         )
+        print(
+            f"Client Analyzer Python installed in private workspace: {workspace.name}\n"
+            f"Run the matching support action with workspace ID: {workspace.name}",
+            flush=True,
+        )
         completed = True
-        print(f"Client Analyzer Python installed in private workspace: {workspace.name}")
-        print(f"Run the matching support action with workspace ID: {workspace.name}")
     finally:
         if not completed and workspace is not None and workspace.exists():
             shutil.rmtree(workspace)

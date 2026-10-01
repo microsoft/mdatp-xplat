@@ -1,3 +1,4 @@
+import builtins
 import contextlib
 import hashlib
 import io
@@ -229,6 +230,14 @@ class TestSourceAndWrappers(unittest.TestCase):
             self.assertIn(values["inner_sha256"], binary_source)
             self.assertIn(values["entry_sha256"], binary_source)
 
+    def test_python_actions_embed_identical_lifecycle(self):
+        installer = CLIENT_ANALYZER_DIR / "InstallXMDEPythonClientAnalyzer.sh"
+        runner = CLIENT_ANALYZER_DIR / "MDEPythonSupportTool.sh"
+        self.assertEqual(
+            embedded_python_source(installer),
+            embedded_python_source(runner),
+        )
+
     def test_actions_reject_invalid_workspace_ids_via_stdin(self):
         installers = (
             "InstallXMDEClientAnalyzer.sh",
@@ -338,6 +347,20 @@ class TestShellBinaryHandoff(unittest.TestCase):
         )
         chmod.chmod(0o700)
 
+    def write_member_list_rm_failure_stub(self):
+        rm = self.bin_directory / "rm"
+        rm.write_text(
+            "#!/bin/sh\n"
+            "for argument in \"$@\"; do\n"
+            "    case \"$argument\" in\n"
+            "        */archive-members) exit 1 ;;\n"
+            "    esac\n"
+            "done\n"
+            "exec /bin/rm \"$@\"\n",
+            encoding="utf-8",
+        )
+        rm.chmod(0o700)
+
     def helper(
         self,
         action_name="InstallXMDEClientAnalyzer.sh",
@@ -422,6 +445,32 @@ class TestShellBinaryHandoff(unittest.TestCase):
                     [],
                     [path.name for path in state_parent.rglob("*")],
                 )
+
+    def test_shell_actions_report_workspace_when_member_list_removal_fails(self):
+        self.write_member_list_rm_failure_stub()
+        actions = (
+            ("InstallXMDEClientAnalyzer.sh", "install"),
+            ("MDESupportTool.sh", "run"),
+        )
+        for index, (action_name, action_command) in enumerate(actions):
+            with self.subTest(action=action_name):
+                state_parent = self.root / f"rm-state-{index}"
+                state_parent.mkdir(mode=0o700)
+                helper = self.helper(
+                    action_name,
+                    action_command,
+                    **{"state_parent=/var/tmp": f"state_parent={state_parent}"},
+                )
+                result = self.invoke(helper, "install")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                match = re.search(
+                    r"workspace ID: (mde-client-analyzer-binary-[0-9a-f]{16})",
+                    result.stdout,
+                )
+                self.assertIsNotNone(match, result.stdout)
+                workspace = state_parent / match.group(1)
+                self.assertTrue((workspace / "complete").is_file())
+                self.assertTrue((workspace / "archive-members").is_file())
 
     def test_shell_helper_installs_and_runs_with_fixed_arguments(self):
         helper = self.helper()
@@ -544,6 +593,36 @@ class TestInstallerAndRunner(HandoffTestCase):
         entrypoint, arguments, environment = execute_arguments
         self.assertEqual(arguments, [str(entrypoint), "--bypass-disclaimer", "-d"])
         self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
+
+    def test_output_failure_removes_completed_workspace(self):
+        archive = self.root / "python.zip"
+        self.configure_python(archive)
+        completion_written = False
+        original_write_completion_record = ACTION.write_completion_record
+
+        def write_completion_record(*arguments, **keywords):
+            nonlocal completion_written
+            original_write_completion_record(*arguments, **keywords)
+            completion_written = True
+
+        def fail_after_completion(*arguments, **keywords):
+            if completion_written:
+                raise BrokenPipeError("injected output failure")
+            builtins.print(*arguments, **keywords)
+
+        with mock.patch.object(ACTION, "download_file", side_effect=self.copy_download):
+            with mock.patch.object(
+                ACTION,
+                "write_completion_record",
+                side_effect=write_completion_record,
+            ):
+                with mock.patch.dict(ACTION.__dict__, {"print": fail_after_completion}):
+                    with self.assertRaisesRegex(
+                        BrokenPipeError,
+                        "injected output failure",
+                    ):
+                        ACTION.install()
+        self.assertEqual(list(self.state_parent.iterdir()), [])
 
     def test_python_setup_ignores_python_no_user_site(self):
         archive = self.root / "python-user-site.zip"

@@ -188,7 +188,9 @@ install() {
     validate_private_file "$completion" 600
     completed=1
     trap - 0 HUP INT TERM
-    rm -f "$member_list"
+    if ! rm -f "$member_list"; then
+        echo "WARNING: Completed workspace retained temporary archive metadata: $member_list" >&2
+    fi
     echo "Client Analyzer binary installed in private workspace: $(basename "$workspace")"
     echo "Run the matching support action with workspace ID: $(basename "$workspace")"
 }
