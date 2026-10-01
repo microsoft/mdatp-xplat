@@ -153,8 +153,8 @@ install() {
     select_architecture
     create_workspace
     completed=0
-    trap cleanup_incomplete_workspace 0
-    trap 'cleanup_incomplete_workspace; exit 1' HUP INT TERM
+    trap 'cleanup_incomplete_workspace || :' 0
+    trap 'cleanup_incomplete_workspace || :; exit 1' HUP INT TERM
     archive="$workspace/client-analyzer.zip"
     payload="$workspace/payload"
     inner_archive="$workspace/$inner_name"
@@ -178,7 +178,7 @@ install() {
     chmod 700 "$entrypoint"
     validate_private_file "$entrypoint" 700
     verify_sha256 "$entrypoint" "$entry_sha256" "Client Analyzer entrypoint"
-    rm -f "$archive" "$inner_archive" "$member_list"
+    rm -f "$archive" "$inner_archive"
 
     completion="$workspace/complete"
     (set -C; : > "$completion") 2>/dev/null || fail "Client Analyzer completion record already exists."
@@ -188,6 +188,7 @@ install() {
     validate_private_file "$completion" 600
     completed=1
     trap - 0 HUP INT TERM
+    rm -f "$member_list"
     echo "Client Analyzer binary installed in private workspace: $(basename "$workspace")"
     echo "Run the matching support action with workspace ID: $(basename "$workspace")"
 }

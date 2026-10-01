@@ -322,11 +322,30 @@ class TestShellBinaryHandoff(unittest.TestCase):
         )
         curl.chmod(0o700)
 
-    def helper(self, **overrides):
-        source = (CLIENT_ANALYZER_DIR / "InstallXMDEClientAnalyzer.sh").read_text(
-            encoding="utf-8"
+    def write_completion_chmod_failure_stub(self):
+        chmod = self.bin_directory / "chmod"
+        chmod.write_text(
+            "#!/bin/sh\n"
+            "target=\n"
+            "for argument in \"$@\"; do\n"
+            "    target=$argument\n"
+            "done\n"
+            "case \"$target\" in\n"
+            "    */complete) exit 1 ;;\n"
+            "esac\n"
+            "exec /bin/chmod \"$@\"\n",
+            encoding="utf-8",
         )
-        suffix = '\ninstall "$@"\n'
+        chmod.chmod(0o700)
+
+    def helper(
+        self,
+        action_name="InstallXMDEClientAnalyzer.sh",
+        action_command="install",
+        **overrides,
+    ):
+        source = (CLIENT_ANALYZER_DIR / action_name).read_text(encoding="utf-8")
+        suffix = f'\n{action_command} "$@"\n'
         self.assertTrue(source.endswith(suffix))
         source = source[: -len(suffix)]
         replacements = {
@@ -380,6 +399,29 @@ class TestShellBinaryHandoff(unittest.TestCase):
         )
         self.assertIsNotNone(match, result.stdout)
         return match.group(1)
+
+    def test_shell_actions_clean_workspace_when_completion_finalization_fails(self):
+        self.write_completion_chmod_failure_stub()
+        actions = (
+            ("InstallXMDEClientAnalyzer.sh", "install"),
+            ("MDESupportTool.sh", "run"),
+        )
+        for index, (action_name, action_command) in enumerate(actions):
+            with self.subTest(action=action_name):
+                state_parent = self.root / f"state-{index}"
+                state_parent.mkdir(mode=0o700)
+                helper = self.helper(
+                    action_name,
+                    action_command,
+                    **{"state_parent=/var/tmp": f"state_parent={state_parent}"},
+                )
+                result = self.invoke(helper, "install")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(
+                    list(state_parent.iterdir()),
+                    [],
+                    [path.name for path in state_parent.rglob("*")],
+                )
 
     def test_shell_helper_installs_and_runs_with_fixed_arguments(self):
         helper = self.helper()
