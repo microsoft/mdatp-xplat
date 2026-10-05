@@ -1,0 +1,12 @@
+# Cloned build workload (microsoft/fluentui-android, fetched by setup-project.sh)
+workload.noindex/
+# Per-run diagnostic logs and generated reports
+run-logs/
+# Build artifacts
+build/
+.gradle/
+*.log
+.DS_Store
+local.properties
+# Setup warm-build log (only kept on failure)
+setup-build.log
