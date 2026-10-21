@@ -54,6 +54,8 @@
 </array>
 <key>PayloadType</key>
 <string>com.apple.servicemanagement</string>
+<key>PayloadVersion</key>
+<integer>1</integer>
 <key>PayloadDisplayName</key>
 <string>Background Service Management for Microsoft Defender</string>
 </dict>
