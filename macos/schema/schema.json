@@ -945,12 +945,12 @@
                     }
                 },
                 "enforcedExtensions": {
-                    "title": "Extension Exclusions",
+                    "title": "Extension exclusions",
                     "propertyOrder": 30,
                     "type": "array",
                     "uniqueItems": true,
                     "items": {
-                        "title": "Extension Exclusion",
+                        "title": "Extension exclusion",
                         "format": "grid",
                         "type": "object",
                         "defaultProperties": ["ext", "flag"],
