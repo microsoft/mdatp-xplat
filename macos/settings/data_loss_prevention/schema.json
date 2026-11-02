@@ -901,12 +901,12 @@
                     }
                 },
                 "enforcedExtensions": {
-                    "title": "Enforced extensions",
+                    "title": "Extension Exclusions",
                     "propertyOrder": 30,
                     "type": "array",
                     "uniqueItems": true,
                     "items": {
-                        "title": "Enforced extension",
+                        "title": "Extension Exclusion",
                         "format": "grid",
                         "type": "object",
                         "defaultProperties": ["ext", "flag"],
@@ -914,14 +914,14 @@
                         "properties": {
                             "ext": {
                                 "title": "Extension",
-                                "description": "File extension in the DLP enforced extension list.",
+                                "description": "File extension in the DLP extension exclusion list.",
                                 "propertyOrder": 10,
                                 "type": "string",
                                 "minLength": 1
                             },
                             "flag": {
                                 "title": "Flag",
-                                "description": "Bit flags to control the type of enforced extension behavior.",
+                                "description": "Bit flags to control the type of extension exclusion behavior.",
                                 "propertyOrder": 20,
                                 "type": "number"
                             }

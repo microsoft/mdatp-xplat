@@ -945,12 +945,12 @@
                     }
                 },
                 "enforcedExtensions": {
-                    "title": "Enforced extensions",
+                    "title": "Extension Exclusions",
                     "propertyOrder": 30,
                     "type": "array",
                     "uniqueItems": true,
                     "items": {
-                        "title": "Enforced extension",
+                        "title": "Extension Exclusion",
                         "format": "grid",
                         "type": "object",
                         "defaultProperties": ["ext", "flag"],
@@ -958,14 +958,14 @@
                         "properties": {
                             "ext": {
                                 "title": "Extension",
-                                "description": "File extension for enforced extension list.",
+                                "description": "File extension for extension exclusion list.",
                                 "propertyOrder": 10,
                                 "type": "string",
                                 "minLength": 1
                             },
                             "flag": {
                                 "title": "Flag",
-                                "description": "Bit flags to control the enforced extension scope.",
+                                "description": "Bit flags to control the extension exclusion scope.",
                                 "propertyOrder": 20,
                                 "type": "number"
                             }
