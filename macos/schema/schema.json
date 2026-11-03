@@ -1,6 +1,6 @@
 {
     "__feedback": "jmanifest@microsoft.com",
-    "__version": "101.26072.0012",
+    "__version": "101.26072.0013",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "com.microsoft.wdav",
     "description": "Preference Domain: com.microsoft.wdav, Application: Defender",
@@ -882,10 +882,18 @@
             "propertyOrder": 90,
             "defaultProperties": [],
             "properties": {
+                "status": {
+                    "title": "Status",
+                    "description": "Primary control for enabling/disabling Data Loss Prevention.",
+                    "propertyOrder": 5,
+                    "type": "string",
+                    "enum": ["enabled", "disabled"]
+                },
                 "exclusions": {
                     "title": "Exclusions",
                     "propertyOrder": 10,
                     "type": "array",
+                    "uniqueItems": true,
                     "items": {
                         "title": "Exclusion",
                         "format": "grid",
@@ -901,7 +909,63 @@
                             },
                             "flag": {
                                 "title": "Flag",
-                                "description": "Bit flags to control the type of exclusion(s) to apply.  EPS=0x1, AX=0x2.",
+                                "description": "Bit flags to control the type of exclusion(s) to apply. EPS=0x1, AX=0x2.",
+                                "propertyOrder": 20,
+                                "type": "number"
+                            }
+                        }
+                    }
+                },
+                "pathExclusions": {
+                    "title": "Path exclusions",
+                    "propertyOrder": 20,
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                        "title": "Path exclusion",
+                        "format": "grid",
+                        "type": "object",
+                        "defaultProperties": ["matchRegex", "flag"],
+                        "required": ["matchRegex", "flag"],
+                        "properties": {
+                            "matchRegex": {
+                                "title": "Match regex",
+                                "description": "Regex pattern for path exclusion.",
+                                "propertyOrder": 10,
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "flag": {
+                                "title": "Flag",
+                                "description": "Bit flags to control the path exclusion scope.",
+                                "propertyOrder": 20,
+                                "type": "number"
+                            }
+                        }
+                    }
+                },
+                "enforcedExtensions": {
+                    "title": "Extension exclusions",
+                    "propertyOrder": 30,
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                        "title": "Extension exclusion",
+                        "format": "grid",
+                        "type": "object",
+                        "defaultProperties": ["ext", "flag"],
+                        "required": ["ext", "flag"],
+                        "properties": {
+                            "ext": {
+                                "title": "Extension",
+                                "description": "File extension for extension exclusion list.",
+                                "propertyOrder": 10,
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "flag": {
+                                "title": "Flag",
+                                "description": "Bit flags to control the extension exclusion scope.",
                                 "propertyOrder": 20,
                                 "type": "number"
                             }
@@ -910,7 +974,7 @@
                 },
                 "features": {
                     "title": "Features",
-                    "propertyOrder": 20,
+                    "propertyOrder": 40,
                     "type": "array",
                     "items": {
                         "title": "Feature",
@@ -947,7 +1011,7 @@
                 "accessibility": {
                     "title": "Accessibility",
                     "description": "Configure how Data Loss Prevention behaves when macOS Accessibility permissions are unavailable or turned off.",
-                    "propertyOrder": 30,
+                    "propertyOrder": 50,
                     "type": "object",
                     "defaultProperties": ["enforcement", "notification"],
                     "properties": {
