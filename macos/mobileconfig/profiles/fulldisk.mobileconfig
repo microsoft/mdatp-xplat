@@ -53,9 +53,9 @@
 <key>IdentifierType</key>
 <string>bundleID</string>
 <key>StaticCode</key>
-<integer>0</integer>
+<false/>
 <key>Allowed</key>
-<integer>1</integer>
+<true/>
 </dict>
 <dict>
 <key>Identifier</key>
@@ -65,9 +65,9 @@
 <key>IdentifierType</key>
 <string>bundleID</string>
 <key>StaticCode</key>
-<integer>0</integer>
+<false/>
 <key>Allowed</key>
-<integer>1</integer>
+<true/>
 </dict>
 <dict>
 <key>Identifier</key>
@@ -77,9 +77,9 @@
 <key>IdentifierType</key>
 <string>bundleID</string>
 <key>StaticCode</key>
-<integer>0</integer>
+<false/>
 <key>Allowed</key>
-<integer>1</integer>
+<true/>
 </dict>
 </array>
 </dict>
