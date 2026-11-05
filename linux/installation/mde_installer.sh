@@ -12,7 +12,7 @@
 #
 #============================================================================
 
-SCRIPT_VERSION="1.2.9" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
+SCRIPT_VERSION="1.2.13" # MDE installer version set this to track the changes in the script used by tools like ansible, MDC etc.
 ASSUMEYES=-y
 CHANNEL=
 MDE_VERSION=
@@ -40,6 +40,7 @@ MIN_DISK_SPACE_MB=2048
 MIN_GLIBC_VERSION="2.17"
 MINIMUM_REQUIRED_KERNEL="3.10.0-327"
 CURRENT_KERNEL=
+MDATP_STATE="/var/opt/microsoft/mdatp/wdavstate"
 SUPPORTED_FILESYSTEMS=("btrfs" "ecryptfs" "ext2" "ext3" "ext4" "fuse" "fuseblk" "jfs" "nfs"
     "overlay" "ramfs" "reiserfs" "tmpfs" "udf" "vfat" "xfs" "Efs" "S3fs" "Blobfuse" "Lustr"
     "glustrefs" "Afs" "sshfs" "cifs" "smb" "gcsfuse" "sysfs")
@@ -149,20 +150,35 @@ cleanup()
 run_quietly()
 {
     # run_quietly <command> <error_msg> [<error_code>]
+    # run_quietly <executable> <error_msg> <error_code> -- [<arg>...]
     # use error_code for script_exit
+
+    local -a command_args=()
+    if [[ "${4-}" == "--" ]]; then
+        command_args=("$1" "${@:5}")
+        local display_command
+        printf -v display_command '%q ' "${command_args[@]}"
+        set -- "${display_command% }" "$2" "$3"
+    fi
 
     if [ $# -lt 2 ] || [ $# -gt 3 ]; then
         log_error "[!] INTERNAL ERROR. run_quietly requires 2 or 3 arguments"
         exit 1
     fi
 
-    local out exit_code 
+    local out exit_code
 
     if [ "$DEBUG" != "0" ]; then
         log_debug "[>] Running command: $1"
     fi
 
-    if out=$(eval "$1" </dev/null 2>&1); then
+    if out=$(
+        if [[ ${#command_args[@]} -gt 0 ]]; then
+            "${command_args[@]}"
+        else
+            eval "$1"
+        fi </dev/null 2>&1
+    ); then
         exit_code=0
     else
         exit_code=$?
@@ -1138,23 +1154,44 @@ install_required_pkgs()
     fi
 }
 
+package_manager_is_busy()
+{
+    local lock_pid=
+    local zypp_lock_file="${ZYPP_LOCK_FILE:-/var/run/zypp.pid}"
+
+    if [[ "$PKG_MGR" == "zypper" ]] && [[ -e "$zypp_lock_file" ]]; then
+        if command -v fuser >/dev/null 2>&1 \
+            && fuser "$zypp_lock_file" >/dev/null 2>&1; then
+            return 0
+        fi
+
+        if [[ -r "$zypp_lock_file" ]]; then
+            read -r lock_pid < "$zypp_lock_file"
+            if [[ "$lock_pid" =~ ^[0-9]+$ ]] && kill -0 "$lock_pid" 2>/dev/null; then
+                return 0
+            fi
+        fi
+    fi
+
+    ps axo pid,comm | grep "$PKG_MGR" | grep -v grep -q
+}
+
 wait_for_package_manager_to_complete()
 {
-    local lines=
     local counter=120
 
-    while [ $counter -gt 0 ]
+    while [[ "$counter" -gt 0 ]]
     do
-        lines=$(ps axo pid,comm | grep "$PKG_MGR" | grep -v grep -c)
-        if [ "$lines" -eq 0 ]; then
+        if ! package_manager_is_busy; then
             log_debug "[>] package manager freed, resuming installation"
-            return
+            return 0
         fi
         sleep 1
         ((counter--))
     done
 
     log_warning "[!] pkg_mgr blocked"
+    return 1
 }
 
 get_all_mde_version_from_channel()
@@ -1461,6 +1498,82 @@ handle_custom_installation()
     create_sym_link "$src_path" "$target_path" || script_exit "Failed to create symlink from $src_path to $target_path" $ERR_INSTALL_PATH_SETUP
 }
 
+write_mdc_installation_state()
+{
+    [[ -n "${tags[AzureResourceId]+set}" || -n "${tags[SecurityWorkspaceId]+set}" ]] || return 0
+
+    local state_dir="${MDATP_STATE%/*}"
+    if [[ -n "$INSTALL_PATH" ]]; then
+        state_dir="${INSTALL_PATH%/}/microsoft_mdatp/var/opt/microsoft/mdatp"
+    else
+        local config_file custom_base
+        for config_file in "${MDE_CONFIG_DIR:-/etc/opt/microsoft/mdatp}/mde_path.json" "/opt/microsoft/mdatp/conf/mde_path.json"; do
+            if [[ -f "$config_file" ]]; then
+                custom_base=$(sed -n 's/.*"path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$config_file")
+                if [[ "$custom_base" != /* || "$custom_base" = *$'\n'* ]]; then
+                    log_error "[x] Invalid custom installation state path"
+                    return 1
+                fi
+                state_dir="${custom_base%/}/var/opt/microsoft/mdatp"
+                break
+            fi
+        done
+    fi
+
+    local state_file="$state_dir/wdavstate.ddt"
+    local max_state_bytes=65536
+    if [[ -L "$state_file" || ( -e "$state_file" && ! -f "$state_file" ) ]]; then
+        log_error "[x] MDC provisioning sidecar must be a regular file"
+        return 1
+    fi
+    local temporary_file state_bytes contents='{"is_mdc_installation":true}'
+
+    if [[ -s "$state_file" ]]; then
+        local json_string='"([^"\\[:cntrl:]]|\\(["\\/bfnrt]|u[[:xdigit:]]{4}))*"'
+        local whitespace='[ \t\r\n]*'
+        local member="$json_string$whitespace:$whitespace($json_string|true|false|null)"
+        local object="^$whitespace\{$whitespace($member($whitespace,$whitespace$member)*)?$whitespace\}$whitespace\$"
+        local marker='"is_mdc_installation"[ \t\r\n]*:[ \t\r\n]*'
+        if ! state_bytes=$(wc -c < "$state_file") || (( state_bytes > max_state_bytes )) ||
+            ! contents=$(LC_ALL=C sed -nE "
+                :read_json
+                \$!{N; b read_json;}
+                \\~$object~!q 1
+                \\~$marker.*$marker~q 1
+                \\~$marker~ {
+                    \\~$marker(true|false)~!q 1
+                    s~$marker(true|false)~\"is_mdc_installation\":true~
+                    b complete
+                }
+                s~\}$whitespace\$~,\"is_mdc_installation\":true}~
+                s~^($whitespace\{)$whitespace,~\\1~
+                :complete
+                s~$whitespace\$~~
+                p
+            " "$state_file") || [[ -z "$contents" ]]; then
+            log_error "[x] MDC provisioning sidecar is not a supported flat JSON object or exceeds the size limit"
+            return 1
+        fi
+    fi
+
+    if [[ -s "$state_file" && "$(stat -c '%u:%a' -- "$state_file")" = "${EUID}:600" &&
+        "$(< "$state_file")" = "$contents" ]]; then
+        return 0
+    fi
+    if ! mkdir -p "$state_dir" || ! temporary_file=$(mktemp "$state_file.XXXXXX"); then
+        log_error "[x] Unable to create MDC provisioning temporary file"
+        return 1
+    fi
+    if ! printf '%s\n' "$contents" > "$temporary_file" ||
+        ! state_bytes=$(wc -c < "$temporary_file") || (( state_bytes > max_state_bytes )) ||
+        ! mv -fT -- "$temporary_file" "$state_file"; then
+        rm -f -- "$temporary_file"
+        log_error "[x] Unable to persist MDC provisioning state"
+        return 1
+    fi
+    log_info "[i] Persisted MDC provisioning before MDE installation"
+}
+
 install_on_debian()
 {
     local packages=()
@@ -1477,7 +1590,7 @@ install_on_debian()
         log_info "[>] configuring the repository"
 
         rm -f microsoft.list > /dev/null
-        run_quietly "curl -s -o microsoft.list $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list" "unable to fetch repo list" $ERR_FAILED_REPO_SETUP
+        run_quietly "curl -fsS -o microsoft.list $PMC_URL/$DISTRO/$SCALED_VERSION/$CHANNEL.list" "unable to fetch repo list" $ERR_FAILED_REPO_SETUP
         run_quietly "mv ./microsoft.list /etc/apt/sources.list.d/microsoft-$CHANNEL.list" "unable to copy repo to location" $ERR_FAILED_REPO_SETUP
 
         ### Fetch the gpg key ###
@@ -1523,6 +1636,8 @@ install_on_debian()
         validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
+
+    write_mdc_installation_state || log_warning "[!] Unable to persist MDC provisioning state; continuing installation"
 
     ### Install MDE ###
     log_info "[>] installing MDE"
@@ -1589,6 +1704,8 @@ install_on_mariner()
         validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
+
+    write_mdc_installation_state || log_warning "[!] Unable to persist MDC provisioning state; continuing installation"
 
     ### Install MDE ###
     log_info "[>] installing MDE"
@@ -1662,6 +1779,8 @@ install_on_azurelinux()
         validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
+
+    write_mdc_installation_state || log_warning "[!] Unable to persist MDC provisioning state; continuing installation"
 
     ### Install MDE ###
     log_info "[>] installing MDE"
@@ -1816,6 +1935,8 @@ install_on_fedora()
         handle_custom_installation
     fi
 
+    write_mdc_installation_state || log_warning "[!] Unable to persist MDC provisioning state; continuing installation"
+
     ### Install MDE ###
     log_info "[>] installing MDE"
 
@@ -1834,6 +1955,8 @@ install_on_sles()
     local packages=()
     local pkg_version=
     local repo=packages-microsoft-com
+    local ZYPP_LOCK_TIMEOUT=120
+    export ZYPP_LOCK_TIMEOUT
 
     retry_quietly 2 "zypper --non-interactive --gpg-auto-import-keys refresh" "[!] unable to refresh the repos properly"
 
@@ -1841,7 +1964,10 @@ install_on_sles()
     if [ -z "$SKIP_PMC_SETUP" ]; then 
         install_required_pkgs "${packages[@]}"
 
-        wait_for_package_manager_to_complete
+        if ! wait_for_package_manager_to_complete; then
+            script_exit "Package manager remained busy after 120 seconds" $ERR_INSTALLATION_FAILED
+            return "$ERR_INSTALLATION_FAILED"
+        fi
 
         ### Configure the repository ###
         local repo_name=${repo}-${CHANNEL}
@@ -1867,7 +1993,10 @@ install_on_sles()
     else
         # Try to install/find packages, don't exit the script if it fails.
         install_required_pkgs --no-exit "${packages[@]}"
-        wait_for_package_manager_to_complete
+        if ! wait_for_package_manager_to_complete; then
+            script_exit "Package manager remained busy after 120 seconds" $ERR_INSTALLATION_FAILED
+            return "$ERR_INSTALLATION_FAILED"
+        fi
     fi
 
     local version=""
@@ -1886,6 +2015,8 @@ install_on_sles()
         validate_custom_path_installation_version $version  || script_exit "Custom Path installation is not supported on version $version, Minimum expected version : 101.25062.0003" $ERR_INSTALLATION_FAILED
         handle_custom_installation
     fi
+
+    write_mdc_installation_state || log_warning "[!] Unable to persist MDC provisioning state; continuing installation"
 
     ### Install MDE ###
     log_info "[>] installing MDE"
@@ -2024,6 +2155,7 @@ upgrade_mdatp()
         script_exit "For upgrade the requested version[$MDE_VERSION] should be newer than current version[$VERSION_BEFORE_UPDATE]. If you want to move to an older version instead, retry with --downgrade flag"
     fi
 
+    write_mdc_installation_state || log_warning "[!] Unable to persist MDC provisioning state; continuing installation"
     run_quietly "$PKG_MGR_INVOKER $1 mdatp$version" "Unable to upgrade MDE" $ERR_INSTALLATION_FAILED
 
     VERSION_AFTER_UPDATE=$(get_mdatp_version)
@@ -2150,6 +2282,57 @@ scale_version_id()
     log_info "[v] scaled: $SCALED_VERSION"
 }
 
+parse_interpreter_args()
+{
+    # Fill the caller's local interpreter_args; group quotes without shell expansion.
+    local text="$1" word="" quote="" char next escaped=0 started=0
+    interpreter_args=()
+    while [[ -n "$text" ]]; do
+        char=${text:0:1}
+        text=${text:1}
+        if [[ "$escaped" -eq 1 ]]; then
+            word+="$char"
+            escaped=0
+        elif [[ "$quote" == "'" ]]; then
+            if [[ "$char" == "'" ]]; then quote=""; else word+="$char"; fi
+        elif [[ "$char" == \\ ]]; then
+            next=${text:0:1}
+            if [[ "$quote" == '"' && "$next" != \\ && "$next" != '"' &&
+                  "$next" != '$' && "$next" != '`' ]]; then
+                word+="$char"
+            else
+                escaped=1
+            fi
+        elif [[ "$quote" == '"' ]]; then
+            if [[ "$char" == '"' ]]; then quote=""; else word+="$char"; fi
+        elif [[ "$char" == "'" || "$char" == '"' ]]; then
+            quote="$char"
+        elif [[ "$char" == ' ' || "$char" == $'\t' ]]; then
+            if [[ "$started" -eq 1 ]]; then
+                interpreter_args+=("$word")
+                word=""
+                started=0
+            fi
+            continue
+        else
+            word+="$char"
+        fi
+        started=1
+    done
+    if [[ -n "$quote" || "$escaped" -eq 1 ]]; then
+        interpreter_args=()
+        return 1
+    fi
+    if [[ "$started" -eq 1 ]]; then
+        interpreter_args+=("$word")
+    fi
+    if [[ -z "${interpreter_args[0]-}" ]]; then
+        interpreter_args=()
+        return 1
+    fi
+    return 0
+}
+
 onboard_device()
 {
     exit_if_mde_not_installed
@@ -2159,9 +2342,12 @@ onboard_device()
         return
     fi
 
-    if [ ! -f $ONBOARDING_SCRIPT ]; then
+    if [ ! -f "$ONBOARDING_SCRIPT" ]; then
         script_exit "error: onboarding script not found." $ERR_ONBOARDING_NOT_FOUND
     fi
+
+    local onboarding_arg="$ONBOARDING_SCRIPT"
+    [[ "$onboarding_arg" == -* ]] && onboarding_arg="./$onboarding_arg"
 
     if [[ $ONBOARDING_SCRIPT == *.py ]]; then
         # Make sure python is installed
@@ -2185,21 +2371,25 @@ onboard_device()
 
         # Run onboarding script
         sleep 1
-        run_quietly "$PYTHON $ONBOARDING_SCRIPT" "error: python onboarding failed" $ERR_ONBOARDING_FAILED
+        run_quietly "$PYTHON" "error: python onboarding failed" $ERR_ONBOARDING_FAILED -- "$onboarding_arg"
 
     elif [[ $ONBOARDING_SCRIPT == *.sh ]]; then        
-        shebang_line=$(head -n 1 "$ONBOARDING_SCRIPT")
+        shebang_line=$(head -n 1 -- "$ONBOARDING_SCRIPT")
         if [[ "$shebang_line" == \#!* ]]; then
             interpreter_path=${shebang_line:2}
-            run_quietly "$interpreter_path $ONBOARDING_SCRIPT" "error: $interpreter_path onboarding failed" $ERR_ONBOARDING_FAILED
+            local -a interpreter_args=()
+            if ! parse_interpreter_args "$interpreter_path"; then
+                script_exit "error: invalid onboarding shebang." $ERR_ONBOARDING_FAILED
+            fi
+            run_quietly "${interpreter_args[0]}" "error: $interpreter_path onboarding failed" $ERR_ONBOARDING_FAILED -- "${interpreter_args[@]:1}" "$onboarding_arg"
         else
-            run_quietly "sh $ONBOARDING_SCRIPT" "error: sh onboarding failed" $ERR_ONBOARDING_FAILED
+            run_quietly sh "error: sh onboarding failed" $ERR_ONBOARDING_FAILED -- "$onboarding_arg"
         fi
 
     elif [[ $ONBOARDING_SCRIPT == *.json ]]; then
         local onboarding_dir=/etc/opt/microsoft/mdatp/
         if [ -d "$onboarding_dir" ]; then
-            run_quietly "cp $ONBOARDING_SCRIPT $onboarding_dir/mdatp_onboard.json" "error: JSON onboarding failed" $ERR_ONBOARDING_FAILED
+            run_quietly cp "error: JSON onboarding failed" $ERR_ONBOARDING_FAILED -- "$onboarding_arg" "$onboarding_dir/mdatp_onboard.json"
         else
             script_exit "error: JSON onboarding failed. mdatp is not installed or installation failed." $ERR_ONBOARDING_FAILED
         fi
@@ -2237,9 +2427,13 @@ offboard_device()
         return
     fi
 
-    if [ ! -f $OFFBOARDING_SCRIPT ]; then
+    if [ ! -f "$OFFBOARDING_SCRIPT" ]; then
         script_exit "error: offboarding script not found." $ERR_OFFBOARDING_NOT_FOUND
     fi
+
+    local offboarding_arg="$OFFBOARDING_SCRIPT"
+    [[ "$offboarding_arg" == -* ]] && offboarding_arg="./$offboarding_arg"
+
     local cmd_status
     if [[ $OFFBOARDING_SCRIPT == *.py ]]; then
         # Make sure python is installed
@@ -2252,10 +2446,10 @@ offboard_device()
 
         # Run offboarding script
         sleep 1
-        run_quietly "$PYTHON $OFFBOARDING_SCRIPT" "error: python offboarding failed" $ERR_OFFBOARDING_FAILED
+        run_quietly "$PYTHON" "error: python offboarding failed" $ERR_OFFBOARDING_FAILED -- "$offboarding_arg"
 
     elif [[ $OFFBOARDING_SCRIPT == *.sh ]]; then        
-        run_quietly "sh $OFFBOARDING_SCRIPT" "error: bash offboarding failed" $ERR_OFFBOARDING_FAILED
+        run_quietly sh "error: bash offboarding failed" $ERR_OFFBOARDING_FAILED -- "$offboarding_arg"
 
     else
         script_exit "error: unknown offboarding script type." $ERR_OFFBOARDING_FAILED
@@ -2700,11 +2894,11 @@ elif [ ! -z $RTP_MODE ]; then
     set_epp_to_rtp_mode
 fi
 
-if [ ! -z $ONBOARDING_SCRIPT ]; then
+if [ ! -z "$ONBOARDING_SCRIPT" ]; then
     onboard_device
 fi
 
-if [ ! -z $OFFBOARDING_SCRIPT ]; then
+if [ ! -z "$OFFBOARDING_SCRIPT" ]; then
     offboard_device
 fi
 
